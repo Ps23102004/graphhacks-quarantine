@@ -43,7 +43,7 @@ Demo-script mismatches the reviewer found (wrong `--slow` usage, nodes not appea
 
 ## Not yet verified (do before the video)
 
-- Visual re-check of the page during a live `session1 --slow 0.4` (nodes appearing one by one) and of the red wave on a projector or the recording setup. Tests cover the data, not the pixels.
+- Page, checked by eye in the in-app browser on 2026-10-15: nodes fill in live during `session1 --slow 0.4`; red wave counter climbs 0 -> 6 as nodes turn red; reset (`session1`) clears twins, red state and timers. NOT checked: timing smoothness in a foreground window (the in-app tab throttled timers, so steps arrived in uneven pairs), the red wave on a projector or the recording setup, and the layout at 1920x1080 (checked at 800x955 only).
 - Fresh clone on a second person's laptop (Aashna or Aman), including `docker run` of the pinned image on their architecture (amd64 digest not re-checked).
 - Deployment (VM), MCP beat, README body, LICENSE, AI-use disclosure, blog, submission form: not started.
 - Colour-blind legibility of red vs grey nodes.

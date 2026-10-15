@@ -66,6 +66,8 @@ const net = new vis.Network(document.getElementById("net"), { nodes, edges }, {
 
 let state = { red: new Set(), seen: false, count: 0 };
 let pending = new Map();           // id -> timeout, for the staggered red wave
+let total = null;                  // precise count from the server; the counter climbs to it as the wave lands
+const showPrecise = () => { document.getElementById("c-precise").textContent = total === null ? "-" : Math.min(state.red.size, total); };
 
 function layout(data) {
   const rows = {};
@@ -92,13 +94,22 @@ function look(n, data) {
 }
 
 function render(data) {
+  // a reset (session1 rebuilds the graph) must clear the page too: stale twins, stale red state, pending wave timers
+  const liveNodes = new Set([...data.docs.map(d => d.id), ...data.nodes.map(n => n.id)]);
+  const liveEdges = new Set(data.edges.map(e => `${e.src}|${e.type}|${e.dst}`));
+  nodes.remove(nodes.getIds().filter(id => !liveNodes.has(id)));
+  edges.remove(edges.getIds().filter(id => !liveEdges.has(id)));
+  if (!data.nodes.some(n => n.red)) {
+    pending.forEach(t => clearTimeout(t)); pending.clear(); state.red.clear();
+    nodes.update(data.nodes.map(n => ({ id: n.id, ...look(n, data) })));
+  }
   const pos = layout(data);
   const newlyRed = data.nodes.filter(n => n.red && !state.red.has(n.id) && !pending.has(n.id))
                              .sort((a, b) => a.tick - b.tick);
   // the first poll after load shows existing red at once; later red appears as a wave
   const wave = state.seen;
   newlyRed.forEach((n, i) => {
-    const go = () => { state.red.add(n.id); pending.delete(n.id); nodes.update({ id: n.id, ...look(n, data) }); };
+    const go = () => { state.red.add(n.id); pending.delete(n.id); nodes.update({ id: n.id, ...look(n, data) }); showPrecise(); };
     if (wave) pending.set(n.id, setTimeout(go, 420 * (i + 1))); else state.red.add(n.id);
   });
 
@@ -121,7 +132,7 @@ function render(data) {
   }
 
   const c = data.counters;
-  document.getElementById("c-precise").textContent = c ? c.precise : "-";
+  total = c ? c.precise : null; showPrecise();
   document.getElementById("c-agent").textContent = c ? c.per_agent : "-";
   document.getElementById("c-time").textContent = c ? c.time_based : "-";
 
