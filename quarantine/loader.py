@@ -5,6 +5,7 @@ does afterwards is a named statement in queries.py.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import yaml
@@ -17,8 +18,9 @@ def read_fixture(path: Path = FIXTURE) -> dict:
     return yaml.safe_load(path.read_text())
 
 
-def connect(name: str = "quarantine", host: str = "localhost", port: int = 6379) -> Graph:
-    return FalkorDB(host=host, port=port).select_graph(name)
+def connect(name: str = "quarantine", host: str = "localhost", port: int | None = None) -> Graph:
+    """FALKORDB_PORT lets scripts/validate.sh use a throwaway container without touching the demo one."""
+    return FalkorDB(host=host, port=port or int(os.environ.get("FALKORDB_PORT", 6379))).select_graph(name)
 
 
 def q(g: Graph, cypher: str, **params):
