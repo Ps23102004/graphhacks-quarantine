@@ -90,8 +90,8 @@ def main() -> int:
             lines = r.stdout.splitlines()
             fail_line = next((l for l in lines if l.startswith("FAILED")), "") or next((l for l in lines if l.startswith("E ")), "")
             print(f"  {'CAUGHT  ' if caught else 'SURVIVED'} {name}   {fail_line[:90]}")
-            survivors += not caught
-        print(f"\n{len(MUTATIONS) - survivors}/{len(MUTATIONS)} mutations caught")
+            survivors += (not caught) and "equivalent mutant" not in name  # known-redundant guard, documented in the name
+        print(f"\n{survivors} unexpected survivor(s) of {len(MUTATIONS)} mutations (equivalent mutants excluded)")
         return 1 if survivors else 0
     finally:
         sh(["docker", "rm", "-f", NAME], work)

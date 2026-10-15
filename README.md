@@ -32,7 +32,7 @@ uv run quarantine session2 --kill-planner     # heal + rework to a fixpoint; Pla
 - `quarantine/queries.py` — every Cypher statement, named.
 - `quarantine/loader.py` — fixture loader + the rework write (with the no-re-poisoning guard).
 - `web/` — read-only JSON server + one-page red-wave view (vis-network vendored, works offline).
-- `docs/TEAM.md` — who owns what, checkpoints.
+- `docs/TEAM.md` — who owns what, checkpoints. `docs/TESTING.md` — how to verify everything (tests, `scripts/validate.sh`, `scripts/mutation_check.py`).
 - `spikes/` — Day-1 spike script and raw results against the pinned image.
 
 FalkorDB is source-available (SSPL); the image above is the one every number here was produced on.
