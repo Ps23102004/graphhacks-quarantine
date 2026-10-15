@@ -208,3 +208,26 @@ def test_rework_refuses_to_cite_unreplaced_quarantined_memory(g, fx):
     open_session2(g, fx)
     with pytest.raises(ValueError, match="f_http_client"):
         rework(g, "step_3", "planner", "redo", ["f_http_client", "f_deps"], 60, "s2")
+
+
+# ---------------------------------------------------------------- CLI
+def test_cli_runs_the_three_commands_end_to_end(fx):
+    import subprocess
+    import sys
+
+    def run(*args):
+        r = subprocess.run([sys.executable, "-m", "quarantine.cli", *args, "--graph", "quarantine_cli_test"],
+                           capture_output=True, text=True, timeout=60)
+        assert r.returncode == 0, r.stderr
+        return r.stdout
+
+    ex = fx["expected"]
+    try:
+        assert "session 1 done - 0 processes running" in run("session1")
+        out = run("flag", fx["flag"]["doc"])
+        assert f"precise {ex['precise']} | per-agent {ex['naive_per_agent']} | time-based {ex['naive_time_based']}" in out
+        out = run("session2", "--kill-planner")
+        assert "took over lease from planner" in out
+        assert f"rounds {ex['session2_round_changes']}, {ex['memories_after_session2']} memories" in out
+    finally:
+        connect("quarantine_cli_test").delete()
