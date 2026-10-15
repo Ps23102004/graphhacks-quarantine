@@ -37,6 +37,18 @@ uv run python scripts/mutation_check.py     # expect: "0 unexpected survivor(s)"
 
 Breaks one thing at a time in a throwaway clone (22 mutations: closure edge types and depth, heal threshold and tie rule, episodes healable, blockers, lease expiry and holder, claim ownership, COMPLETE session and replacement checks, rework guard and idempotence, baselines, a fixture read set, page counters, twin detection, receipts). pytest must go red each time. One documented equivalent mutant survives (the heal query's `clean_total >= 2` duplicates the `healable` flag guard).
 
+## 4. Browser regressions (optional, installed Playwright CLI)
+
+Start the page against a graph already seeded with `quarantine session1`. With Playwright CLI and Chrome already installed:
+
+```bash
+playwright-cli -s=quarantine-ui-check open http://localhost:8765 --browser chrome
+playwright-cli -s=quarantine-ui-check run-code --filename scripts/check_browser.js
+playwright-cli -s=quarantine-ui-check close
+```
+
+Expect eleven checks with `passed: true`. This runs the real page and vendored vis-network, substitutes only `/graph` and `/receipt` responses, and never writes to FalkorDB. It covers recording-size resize, non-colour status markers, clicked path highlighting, all three healed twins fitting after insertion and resizing, reset cleanup, and a receipt response arriving after reset. It supplements the live CLI run; it does not prove graph queries or process recovery. The Python suite does not require Playwright.
+
 ## What each claim is tested by
 
 | claim (what the video says) | test | independent of the fixture's tuning? |
@@ -63,8 +75,8 @@ Breaks one thing at a time in a throwaway clone (22 mutations: closure edge type
 ## Manual checks (the human part: do these before recording)
 
 1. `uv run python web/server.py`, open http://localhost:8765, then `uv run quarantine session1 --slow 0.4`: nodes appear grey. `flag doc_7`: six turn red one by one, counters read 6 / 25 / 19. Click `a_requirements`: orange path to doc_7. `session2`: green twins appear.
-2. Projector test: counters readable from 3 m. Known gap: red vs grey differ by colour and brightness only (no pattern or outline), so check it on the real screen and consider a label or outline for colour-blind viewers.
-3. Reset between takes: `uv run quarantine session1` rebuilds the graph from the fixture.
+2. Projector test: counters readable from 3 m. Quarantined memories have `!` labels and dashed borders; healed twins have `+` labels; flagged documents have `!` labels. Check these cues on the actual recording setup; browser emulation is not a physical projector test.
+3. Reset between takes: `uv run quarantine session1` rebuilds the graph from the fixture. Confirm twins, status markers, selected receipt and orange path all clear. A delayed receipt response must not restore the old path.
 4. Say the numbers from the terminal, never from memory.
 
 ## Known limits (say them in the README, do not hide them)

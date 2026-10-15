@@ -41,9 +41,25 @@ Updated Thu 2026-10-15. Re-fill the "status" column after every change; do not r
 
 Demo-script mismatches the reviewer found (wrong `--slow` usage, nodes not appearing live, wording of log lines, GRAPH.LIST, simulated kill) are fixed: `session1` now prints and the page fills as each memory is written, the kill-Planner beat is a real SIGKILL of a separate process, and `docs/DEMO-SCRIPT.md` is captured from real output.
 
+## Demo-verification continuation — 2026-10-15
+
+Working-tree checks on `fix/demo-verification`, based on `26d2f7f`; these changes are not committed. Tests used a separate pinned-image FalkorDB container on loopback port 6391 and a page server on 8766. The existing demo database was not changed.
+
+- Python suite: **18 passed**. JavaScript syntax and diff whitespace checks passed.
+- `scripts/check_browser.js`: **11 passed** through the standalone Playwright CLI, including the fully healed graph's insertion and resize checks. The original eight checks also ran through Playwright MCP. The standalone runner initially lacked a global `URL`; resolving the origin inside the page fixed that test-only compatibility issue.
+- Live CLI replay: precise/per-agent/time-based **6 / 25 / 19**, a four-hop clicked receipt, actual Planner SIGKILL with exit **-9**, refusal while its lease was live, takeover after expiry, rounds **[1, 2, 2, 0]**, and **28 memories** after healing.
+- Visible Chromium tab: the post-fix wave counted **0, 1, 2, 3, 4, 5, 6**, with **418–420 ms** between steps. Document visibility remained `visible`. This verifies that browser session, not an OS-level foreground recording or physical projector.
+- Captured and visually inspected **1920x1080** and **960x1080** views, including achromatopsia emulation. `!` labels and dashed borders identify quarantined memories; `+` labels identify healed twins; flagged sources also have `!` labels. Artifact text uses dark ink on status fills. This is not a full accessibility audit.
+- Fixed reset leaving a stale receipt, orange path and selection. A request token also rejects receipt responses that arrive after reset or a newer click. Browser regressions failed before these fixes and passed afterward.
+- Fixed persistent clipping of the fully healed graph on resize. The library's automatic camera scaling could leave documents or the healed artifact offscreen. The page now refits on the next animation frame after the network's resize event. Tests wait for actual canvas backing-buffer dimensions, not just CSS width; both healed resize cases failed before the fix and passed afterward. Final screenshots show every node at both sizes.
+- Independent read-only Opus review inspected the status/reset UI changes and browser test and found no high-confidence correctness issues. It checked syntax and whitespace but did not execute browser tests. The CLI compatibility correction, stronger geometry checks and final resize handler came afterward. Those were verified through failing-then-passing regressions and the full suite, not a second independent review.
+- Evidence screenshots and CLI logs: `/tmp/quarantine-qa-20261015/`.
+
+The fresh-clone and mutation results above are inherited from the earlier session, not new runs against these uncommitted changes. Graph queries, fixture, loader and CLI were unchanged.
+
 ## Not yet verified (do before the video)
 
-- Page, checked by eye in the in-app browser on 2026-10-15: nodes fill in live during `session1 --slow 0.4`; red wave counter climbs 0 -> 6 as nodes turn red; reset (`session1`) clears twins, red state and timers. NOT checked: timing smoothness in a foreground window (the in-app tab throttled timers, so steps arrived in uneven pairs), the red wave on a projector or the recording setup, and the layout at 1920x1080 (checked at 800x955 only).
+- Physical projector, actual recording setup, and screen-reader/keyboard accessibility.
 - Fresh clone on a second person's laptop (Aashna or Aman), including `docker run` of the pinned image on their architecture (amd64 digest not re-checked).
 - Deployment (VM), MCP beat, README body, LICENSE, AI-use disclosure, blog, submission form: not started.
-- Colour-blind legibility of red vs grey nodes.
+- Colour-blind usability with people: grayscale browser emulation and non-colour cues were checked, but this is not a substitute for user testing.

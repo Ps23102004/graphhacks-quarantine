@@ -24,7 +24,8 @@
   .counter .l { font-size: 12px; color: var(--muted); }
   .counter.precise .n { color: var(--red); }
   #legend { align-self: center; font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
-  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+  .dot { display: inline-block; width: 18px; height: 18px; border-radius: 50%; margin-right: 5px;
+    font-style: normal; font-weight: 700; line-height: 18px; text-align: center; color: var(--bg); }
   #net { min-height: 360px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
   #detail { padding: 10px 20px 14px; font-size: 13px; min-height: 64px; color: var(--muted); }
   #detail code { color: var(--text); }
@@ -41,12 +42,12 @@
   <div class="counter"><div class="n" id="c-time">-</div><div class="l">naive: forget everything after the bad doc</div></div>
   <div id="legend">
     <span><i class="dot" style="background:var(--clean)"></i>clean</span>
-    <span><i class="dot" style="background:var(--red)"></i>quarantined</span>
-    <span><i class="dot" style="background:var(--green)"></i>healed twin (SUPERSEDES)</span>
+    <span><i class="dot" style="background:var(--red)">!</i>quarantined</span>
+    <span><i class="dot" style="background:var(--green)">+</i>healed twin (SUPERSEDES)</span>
   </div>
 </section>
 <div id="net"></div>
-<footer id="detail">Click a red memory to see why it is red.</footer>
+<footer id="detail">Click a quarantined (!) memory to see its source path.</footer>
 
 <script>
 const C = { clean: "#5b6675", red: "#e5484d", green: "#30a46c", orange: "#f5a524", text: "#e6e9ee", edge: "#3b4552" };
@@ -64,6 +65,11 @@ const net = new vis.Network(document.getElementById("net"), { nodes, edges }, {
   edges: { arrows: { to: { enabled: true, scaleFactor: 0.45 } }, color: { color: C.edge }, width: 1, smooth: false },
 });
 
+// vis-network adjusts zoom during resize; fit after that camera update finishes.
+net.on("resize", () => requestAnimationFrame(() => net.fit({ animation: false })));
+
+const DETAIL_HINT = "Click a quarantined (!) memory to see its source path.";
+let detailRequest = 0;             // invalidates in-flight receipts on a new click or reset
 let state = { red: new Set(), seen: false, count: 0 };
 let pending = new Map();           // id -> timeout, for the staggered red wave
 let total = null;                  // precise count from the server; the counter climbs to it as the wave lands
@@ -87,10 +93,13 @@ function layout(data) {
 }
 
 function look(n, data) {
-  if (n.twin_of) return { color: { background: C.green, border: C.green }, shapeProperties: { borderDashes: false } };
-  if (n.red && !state.red.has(n.id)) return { color: { background: C.clean, border: "#0f1216" } }; // waiting its turn
-  if (n.red) return { color: { background: C.red, border: C.red } };
-  return { color: { background: C.clean, border: "#0f1216" } };
+  const red = n.red && state.red.has(n.id);
+  const twin = n.twin_of && !red;
+  const color = red ? C.red : twin ? C.green : C.clean;
+  return { label: `${red ? "! " : twin ? "+ " : ""}${n.id}`,
+    color: { background: color, border: red || twin ? color : "#0f1216" },
+    borderWidth: red || twin ? 3 : 2, shapeProperties: { borderDashes: red ? [4, 3] : false },
+    font: { color: n.kind === "Artifact" && (red || twin) ? "#0f1216" : C.text } };
 }
 
 function render(data) {
@@ -100,6 +109,11 @@ function render(data) {
   nodes.remove(nodes.getIds().filter(id => !liveNodes.has(id)));
   edges.remove(edges.getIds().filter(id => !liveEdges.has(id)));
   if (!data.nodes.some(n => n.red)) {
+    if (state.red.size || pending.size) {
+      detailRequest++;
+      highlight(null); net.unselectAll();
+      document.getElementById("detail").textContent = DETAIL_HINT;
+    }
     pending.forEach(t => clearTimeout(t)); pending.clear(); state.red.clear();
     nodes.update(data.nodes.map(n => ({ id: n.id, ...look(n, data) })));
   }
@@ -114,7 +128,7 @@ function render(data) {
   });
 
   for (const d of data.docs) {
-    nodes.update({ id: d.id, label: d.id, shape: "square", size: 15, title: tip(d.title), ...pos[d.id],
+    nodes.update({ id: d.id, label: `${d.flagged ? "! " : ""}${d.id}`, shape: "square", size: 15, title: tip(d.title), ...pos[d.id],
       color: { background: d.flagged ? "#7a1d22" : "#2a313b", border: d.flagged ? C.red : "#566070" },
       borderWidth: d.flagged ? 3 : 2 });
   }
@@ -167,17 +181,19 @@ function highlight(hops) {
 }
 
 net.on("click", async p => {
+  const request = ++detailRequest;
   const detail = document.getElementById("detail");
   const id = p.nodes[0];
-  if (!id) { highlight(null); detail.textContent = "Click a red memory to see why it is red."; return; }
+  if (!id) { highlight(null); detail.textContent = DETAIL_HINT; return; }
   const n = nodes.get(id);
-  const isRed = n && n.color && n.color.background === C.red;
+  const isRed = state.red.has(id);
   if (!isRed) { highlight(null); detail.innerHTML = `<code>${esc(id)}</code> - ${esc(n.note || "")}`; return; }
   const rc = await (await fetch("/receipt?id=" + encodeURIComponent(id))).json();
+  if (request !== detailRequest) return;
   if (!rc) { detail.innerHTML = `<code>${esc(id)}</code> has no path to the flagged document.`; return; }
   highlight(rc.hops);
   const chain = rc.hops.map((h, i) => i ? ` <span class="path">-${esc(rc.via[i - 1])}-&gt;</span> ${esc(h)}` : esc(h)).join("");
-  detail.innerHTML = `<code>${esc(id)}</code> is red: ${esc(rc.len)} hops (shortestPath)<br><code>${chain}</code>`;
+  detail.innerHTML = `<code>${esc(id)}</code> is quarantined: ${esc(rc.len)} hops (shortestPath)<br><code>${chain}</code>`;
 });
 
 poll();
