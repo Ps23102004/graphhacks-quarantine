@@ -16,7 +16,7 @@ uv sync
 ## 1. Unit and integration tests (about 5 s)
 
 ```bash
-uv run pytest -q          # expect: 14 passed
+uv run pytest -q          # expect: 18 passed
 ```
 
 Tests use their own graphs (`quarantine_test`, `quarantine_cli_test`, `quarantine_web_test`) and delete them afterwards. They never touch the demo graph named `quarantine`.
@@ -24,18 +24,18 @@ Tests use their own graphs (`quarantine_test`, `quarantine_cli_test`, `quarantin
 ## 2. Fresh-clone validation (about 1 min): what a stranger would see
 
 ```bash
-scripts/validate.sh       # expect: "validation: 21 passed, 0 failed"
+scripts/validate.sh       # expect: "validation: 22 passed, 0 failed"
 ```
 
 Clones the committed HEAD into a temp dir, starts a throwaway FalkorDB on :6390, installs from the lockfile, runs pytest, then runs the real CLI and checks the exact lines the video says (6 vs 25 vs 19, the receipt, the heal, the kill-Planner takeover, the control closure for doc_5, the page JSON and its Host check). Uncommitted work is not validated: commit first.
 
-## 3. Mutation check (about 2 min): do the tests actually catch breakage?
+## 3. Mutation check (about 3 min): do the tests actually catch breakage?
 
 ```bash
 uv run python scripts/mutation_check.py     # expect: "0 unexpected survivor(s)"
 ```
 
-Breaks one thing at a time in a throwaway clone (closure edge types, depth cap, heal threshold, episodes healable, blockers, lease expiry, lease holder check, rework guard, baselines, a fixture read set, page counters, page twin detection). pytest must go red each time. One documented equivalent mutant survives (the heal query's `clean_total >= 2` duplicates the `healable` flag guard).
+Breaks one thing at a time in a throwaway clone (22 mutations: closure edge types and depth, heal threshold and tie rule, episodes healable, blockers, lease expiry and holder, claim ownership, COMPLETE session and replacement checks, rework guard and idempotence, baselines, a fixture read set, page counters, twin detection, receipts). pytest must go red each time. One documented equivalent mutant survives (the heal query's `clean_total >= 2` duplicates the `healable` flag guard).
 
 ## What each claim is tested by
 
@@ -55,6 +55,10 @@ Breaks one thing at a time in a throwaway clone (closure edge types, depth cap, 
 | A fact heals only with >= 2 clean episodes (boundary: exactly 1 does not), and takes the clean majority claim | `test_heal_needs_two_clean_episodes_and_takes_the_clean_majority` | yes (flags doc_2, hand-derived: f_http_usage 1 clean, f_http_client 3 clean -> `requests`) |
 | The page shows 6 / 25 / 19 before and after healing; twins are detected by SUPERSEDES | `test_page_numbers_match_the_demo_before_and_after_healing` | via the page data |
 | The page server refuses non-loopback Host headers | `test_server_refuses_non_loopback_host_header` | yes |
+| Rework refuses any quarantined or nonexistent read, even after a heal | `test_rework_refuses_any_quarantined_or_missing_read_even_after_a_heal` | yes |
+| Heal takes a strict plurality (>= 2) and counts only agreeing episodes; ties and lone sources stay red | `test_heal_takes_a_strict_plurality_and_counts_only_agreeing_episodes` | yes (synthetic facts) |
+| A dead process cannot close a task; only the author can claim; a retried rework does not duplicate | `test_zombie_complete_cannot_close_a_task_and_rework_is_idempotent` | yes |
+| Two advisories and unscripted docs do not crash the CLI or page; receipts go to the doc a memory reaches | `test_two_advisories_and_unscripted_docs_do_not_crash_the_cli_or_page` | yes |
 
 ## Manual checks (the human part: do these before recording)
 
@@ -66,7 +70,9 @@ Breaks one thing at a time in a throwaway clone (closure edge types, depth cap, 
 ## Known limits (say them in the README, do not hide them)
 
 - Agents are scripted: outputs are fixture text, read sets are real captured edges. No LLM on the hero path.
-- Read-set capture is conservative: any earlier read in the session counts as influence. Precision depends on short scripted steps.
+- Read sets are the per-write lists in `fixture.yaml`, not an agent's whole accumulated context. The independent review reported that counting accumulated context would give a closure of 9, not 6. Say "read set of the write", not "everything the agent ever saw".
+- The read set is written as edges right after the memory node, in separate queries, and checked by audit queries; it is not one atomic transaction.
+- The kill-Planner beat is a real `kill -9` of a separate process; the "new Planner" is the CLI process itself in session s2b.
 - Healing is a majority vote over clean episodes, not semantic reasoning.
 - One graph per crew; variable-length traversals are bounded at depth 10.
 - FalkorDB 6.0.2 limits we hit (see DAY1-SPIKES.md): no `EXISTS {}`, `shortestPath` only in WITH/RETURN, no `CREATE (n $props)`.
