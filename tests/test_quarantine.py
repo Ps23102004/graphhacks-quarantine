@@ -247,3 +247,18 @@ def test_flagging_a_doc_nothing_read_quarantines_nothing(g, fx):
     q(g, Q.FLAG_DOC, doc="doc_unused", reason="control", tick=40)
     precise, ids_ = q(g, Q.TAINT_CLOSURE, doc="doc_unused", tick=40)[0]
     assert precise == 0 and ids_ == [] and quarantined(g) == set()
+
+
+def test_heal_needs_two_clean_episodes_and_takes_the_clean_majority(g, fx):
+    """Boundary of the >= 2 rule, hand-derived. Flag doc_2 (a *good* doc) instead of doc_7:
+    f_http_usage is supported by ep_2 (now red) and ep_8 -> exactly 1 clean -> must not heal.
+    f_http_client is supported by ep_2 (red), ep_5, ep_7a, ep_8 -> 3 clean -> heals, and the
+    clean majority claim is `requests` (ep_5, ep_8) over `reqeusts` (ep_7a)."""
+    flag = fx["flag"]
+    q(g, Q.FLAG_DOC, doc="doc_2", reason="control", tick=flag["tick"])
+    q(g, Q.TAINT_CLOSURE, doc="doc_2", tick=flag["tick"])
+    rows = {r[0]: r for r in q(g, Q.SUPPORT_AND_HEALABLE)}
+    assert (rows["f_http_usage"][1], rows["f_http_usage"][2]) == (1, False)
+    assert (rows["f_http_client"][1], rows["f_http_client"][2]) == (3, True)
+    healed = {r[0]: r[1] for r in q(g, Q.HEAL_FACTS, session="s2", tick=41)}
+    assert healed == {"f_http_client_v2": "requests"}

@@ -24,7 +24,7 @@ MUTATIONS = [
     ("closure ignores read-set edges",        "quarantine/queries.py", "EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..10]-(m:Memory)\nSET m.quarantined", "EXTRACTED_FROM|CONSOLIDATED_FROM*1..10]-(m:Memory)\nSET m.quarantined"),
     ("closure depth capped at 1 hop",         "quarantine/queries.py", "INFLUENCED_BY*1..10]-(m:Memory)\nSET m.quarantined", "INFLUENCED_BY*1..1]-(m:Memory)\nSET m.quarantined"),
     ("heal threshold 2 -> 1 clean episode",   "quarantine/queries.py", "WHEN m:Fact THEN clean >= 2", "WHEN m:Fact THEN clean >= 1"),
-    ("heal rule ignores clean_total",         "quarantine/queries.py", "WHERE clean_total >= 2\nMATCH (f)<-[:AUTHORED]", "WHERE clean_total >= 0\nMATCH (f)<-[:AUTHORED]"),
+    ("heal rule ignores clean_total (equivalent mutant: the healable flag already guards it)",         "quarantine/queries.py", "WHERE clean_total >= 2\nMATCH (f)<-[:AUTHORED]", "WHERE clean_total >= 0\nMATCH (f)<-[:AUTHORED]"),
     ("episodes become healable",              "quarantine/queries.py", "WHEN m:Episode THEN false", "WHEN m:Episode THEN true"),
     ("rework not blocked by healable inputs", "quarantine/queries.py", "x:Memory {quarantined: true, healable: true})\nMERGE (t)-[:BLOCKED_BY]", "x:Memory {quarantined: true, healable: false})\nMERGE (t)-[:BLOCKED_BY]"),
     ("lease never expires",                   "quarantine/queries.py", "(c IS NULL OR c.lease_until < $now)", "(c IS NULL)"),
@@ -87,7 +87,8 @@ def main() -> int:
             r = pytest()
             path.write_text(orig)
             caught = r.returncode != 0
-            fail_line = next((l for l in r.stdout.splitlines() if l.startswith("FAILED")), "")
+            lines = r.stdout.splitlines()
+            fail_line = next((l for l in lines if l.startswith("FAILED")), "") or next((l for l in lines if l.startswith("E ")), "")
             print(f"  {'CAUGHT  ' if caught else 'SURVIVED'} {name}   {fail_line[:90]}")
             survivors += not caught
         print(f"\n{len(MUTATIONS) - survivors}/{len(MUTATIONS)} mutations caught")
