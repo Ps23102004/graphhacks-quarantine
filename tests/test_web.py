@@ -38,3 +38,24 @@ def test_page_numbers_match_the_demo_before_and_after_healing():
             "a_requirements_v2", "f_http_client_v2", "step_3_v2"]
     finally:
         connect(GRAPH).delete()
+
+
+def test_server_refuses_non_loopback_host_header():
+    import threading
+    from http.server import ThreadingHTTPServer
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+
+    from web.server import make_handler
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(GRAPH))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        req = Request(f"http://127.0.0.1:{srv.server_port}/graph", headers={"Host": "evil.example"})
+        try:
+            urlopen(req)
+            raise AssertionError("expected 403")
+        except HTTPError as e:
+            assert e.code == 403
+    finally:
+        srv.shutdown()

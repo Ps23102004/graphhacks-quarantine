@@ -73,6 +73,9 @@ def make_handler(graph: str):
             self.wfile.write(body)
 
         def do_GET(self):  # noqa: N802
+            # DNS-rebinding guard: only answer requests addressed to a loopback name
+            if self.headers.get("Host", "").rsplit(":", 1)[0] not in ("localhost", "127.0.0.1"):
+                return self._send(b"forbidden host", "text/plain", 403)
             u = urlparse(self.path)
             try:
                 if u.path in ("/", "/index.html"):
