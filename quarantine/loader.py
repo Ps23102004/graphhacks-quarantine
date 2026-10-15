@@ -47,8 +47,10 @@ def _influenced_by(g: Graph, mid: str, reads: list[str], tick: int, session: str
           mid=mid, rid=rid, tick=tick, session=session)
 
 
-def load(g: Graph, fx: dict) -> None:
-    """Session 1, exactly as the fixture says. Idempotent only on an empty graph."""
+def load(g: Graph, fx: dict, after_write=None) -> None:
+    """Session 1, exactly as the fixture says. Idempotent only on an empty graph.
+    after_write(memory_id) is called once each memory and its edges exist (the CLI prints from it)."""
+    done = after_write or (lambda mid: None)
     for sid, s in fx["sessions"].items():
         _node(g, "Session", {"id": sid, **s})
     for name, a in fx["agents"].items():
@@ -60,6 +62,7 @@ def load(g: Graph, fx: dict) -> None:
         _memory(g, "Episode", eid, "research", "s1", {"tick": e["tick"], "text": e["text"]})
         q(g, "MATCH (m:Episode {id: $eid}), (d:Doc {id: $doc}) CREATE (m)-[:EXTRACTED_FROM]->(d)",
           eid=eid, doc=e["doc"])
+        done(eid)
 
     for fid, f in fx["facts"].items():
         _memory(g, "Fact", fid, "research", "s1",
@@ -69,26 +72,31 @@ def load(g: Graph, fx: dict) -> None:
             q(g, "MATCH (f:Fact {id: $fid}), (e:Episode {id: $ep}) "
                  "CREATE (f)-[:CONSOLIDATED_FROM {claim: $claim}]->(e)",
               fid=fid, ep=s["ep"], claim=s["claim"])
+        done(fid)
 
     for sid, s in fx["steps"].items():
         _memory(g, "PlanStep", sid, "planner", "s1", {"order": s["order"], "tick": s["tick"], "text": s["text"]})
         _influenced_by(g, sid, s["reads"], s["tick"], "s1")
+        done(sid)
 
     for aid, a in fx["artifacts"].items():
         _memory(g, "Artifact", aid, "coder", "s1", {"path": a["path"], "tick": a["tick"], "text": a["text"]})
         _influenced_by(g, aid, a["reads"], a["tick"], "s1")
+        done(aid)
 
 
 def rework(g: Graph, old_id: str, by: str, text: str, reads: list[str], tick: int, session: str) -> str:
     """An agent's rework write: a new memory of the same kind that SUPERSEDES the
     quarantined one, with its own read set. Refuses a read set that still cites
     quarantined, unreplaced memory (the harness guard that stops re-poisoning)."""
-    bad = q(g, "UNWIND $reads AS rid MATCH (x:Memory {id: rid, quarantined: true}) "
-               "WHERE NOT (x)<-[:SUPERSEDES]-() RETURN collect(x.id)", reads=reads)[0][0]
-    if bad:
-        raise ValueError(f"read set cites unreplaced quarantined memory: {bad}")
-    kind, = q(g, "MATCH (m:Memory {id: $id}) RETURN labels(m)[1]", id=old_id)[0]
     new_id = f"{old_id}_v2"
+    if q(g, "MATCH (m:Memory {id: $id}) RETURN count(m)", id=new_id)[0][0]:
+        return new_id                                                   # idempotent: a retried rework does not duplicate
+    rows = q(g, "UNWIND $reads AS rid OPTIONAL MATCH (x:Memory {id: rid}) RETURN rid, x.quarantined", reads=reads)
+    bad = [rid for rid, quarantined in rows if quarantined is None or quarantined]   # missing, or still tainted
+    if bad:
+        raise ValueError(f"read set cites missing or quarantined memory: {bad}")
+    kind, = q(g, "MATCH (m:Memory {id: $id}) RETURN labels(m)[1]", id=old_id)[0]
     q(g, f"MATCH (old:Memory {{id: $old}}), (a:Agent {{name: $by}}) "
          f"MERGE (s:Session {{id: $session}}) "   # a restarted process registers its own session
          f"CREATE (m:Memory:{kind} {{id: $new, tick: $tick, text: $text, quarantined: false, reworked_from: $old}}) "

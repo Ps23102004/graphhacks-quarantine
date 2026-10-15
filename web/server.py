@@ -30,37 +30,29 @@ RETURN a.id, type(r), b.id
 """
 
 
-# The baselines as they stood at flag time: healed twins are not part of the world the naive wipe would hit.
-PER_AGENT_AT_FLAG = Q.NAIVE_PER_AGENT.replace("MATCH (a)-[:AUTHORED]->(all:Memory)",
-                                              "MATCH (a)-[:AUTHORED]->(all:Memory) WHERE NOT (all)-[:SUPERSEDES]->()")
-TIME_AT_FLAG = Q.NAIVE_TIME_BASED.replace("WHERE m.tick >= t0", "WHERE m.tick >= t0 AND NOT (m)-[:SUPERSEDES]->()")
-assert PER_AGENT_AT_FLAG != Q.NAIVE_PER_AGENT and TIME_AT_FLAG != Q.NAIVE_TIME_BASED
-
-
 def snapshot(g) -> dict:
     nodes = [dict(id=i, kind=k, tick=t, red=bool(r), agent=a, text=tx, twin_of=tw, value=v, path=p)
              for i, k, t, r, a, tx, tw, v, p in q(g, NODES)]
     docs = [dict(id=i, title=t, flagged=bool(f), reason=r) for i, t, f, r in q(g, DOCS)]
     edges = [dict(src=a, type=t, dst=b) for a, t, b in q(g, EDGES)]
-    flagged = next((d["id"] for d in docs if d["flagged"]), None)
+    flagged_docs = [d["id"] for d in docs if d["flagged"]]
+    flagged = flagged_docs[0] if flagged_docs else None
     counters = None
-    if flagged:
+    if len(flagged_docs) == 1:                                          # the counters tell one advisory's story
         precise = sum(1 for n in nodes if n["red"])
         counters = dict(precise=precise,
-                        per_agent=q(g, PER_AGENT_AT_FLAG, doc=flagged)[0][0],
-                        time_based=q(g, TIME_AT_FLAG, doc=flagged)[0][0])
+                        per_agent=q(g, Q.NAIVE_PER_AGENT, doc=flagged)[0][0],
+                        time_based=q(g, Q.NAIVE_TIME_BASED, doc=flagged)[0][0])
     return dict(nodes=nodes, docs=docs, edges=edges, flagged=flagged, counters=counters)
 
 
 def receipt(g, mid: str) -> dict | None:
-    flagged = q(g, "MATCH (d:Doc {flagged: true}) RETURN d.id LIMIT 1")
-    if not flagged:
-        return None
-    rows = q(g, Q.RECEIPT, **{"from": mid, "doc": flagged[0][0]})
-    if not rows or rows[0][0] is None:
-        return None
-    hops, length, via = rows[0]
-    return dict(hops=hops, len=length, via=via)
+    for (doc,) in q(g, "MATCH (d:Doc {flagged: true}) RETURN d.id ORDER BY d.id"):
+        rows = q(g, Q.RECEIPT, **{"from": mid, "doc": doc})
+        if rows and rows[0][0]:                                         # first flagged doc this memory actually reaches
+            hops, length, via = rows[0]
+            return dict(hops=hops, len=length, via=via)
+    return None
 
 
 def make_handler(graph: str):

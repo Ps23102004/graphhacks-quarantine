@@ -77,7 +77,7 @@ def session2_rounds(g, fx, tick: int = 41, lease: int = 5) -> list[int]:
                 spec = fx["rework"][memory]
                 assert q(g, Q.CLAIM, task=task, me=agent, now=tick, lease=lease, session="s2")
                 rework(g, memory, agent, spec["text"], spec["reads"], tick, "s2")
-                q(g, Q.COMPLETE, task=task, me=agent, tick=tick)
+                q(g, Q.COMPLETE, task=task, me=agent, tick=tick, now=tick, session="s2")
                 tick += 1
                 n += 1
         changes.append(n)
@@ -117,6 +117,8 @@ def test_receipt_is_a_shortest_path_through_the_planner(g, fx):
     hops, length, via = q(g, Q.RECEIPT, **{"from": ex["from"], "doc": ex["to"]})[0]
     assert length == ex["hops"] and hops[0] == ex["from"] and hops[-1] == ex["to"]
     assert hops[1] in ex["via"]                                       # the Coder never read doc_7 itself
+    # two shortest paths tie (via the package fact or via the version pin); both are valid receipts
+    assert (hops[2], hops[3]) in {("f_http_client", "ep_7a"), ("f_http_pin", "ep_7b")}
     assert set(hops[1:-1]) <= set(fx["expected"]["closure_ids"])        # every hop on the receipt is red
     assert via == ["INFLUENCED_BY", "INFLUENCED_BY", "CONSOLIDATED_FROM", "EXTRACTED_FROM"]
 
@@ -199,7 +201,7 @@ def test_kill_planner_mid_rework_coder_stays_blocked(g, fx):
 
     spec = fx["rework"]["step_3"]
     rework(g, "step_3", "planner", spec["text"], spec["reads"], 57, "s2b")
-    q(g, Q.COMPLETE, task="rework_step_3", me="planner", tick=57)
+    q(g, Q.COMPLETE, task="rework_step_3", me="planner", tick=57, now=57, session="s2b")
     assert q(g, Q.PROMOTE_READY)[0][0] == 1                             # now the Coder unblocks, in order
     assert q(g, Q.CLAIM, task="rework_a_requirements", me="coder", now=58, lease=5, session="s2") == [["rework_a_requirements", None]]
 
@@ -247,6 +249,8 @@ def test_flagging_a_doc_nothing_read_quarantines_nothing(g, fx):
     q(g, Q.FLAG_DOC, doc="doc_unused", reason="control", tick=40)
     precise, ids_ = q(g, Q.TAINT_CLOSURE, doc="doc_unused", tick=40)[0]
     assert precise == 0 and ids_ == [] and quarantined(g) == set()
+    assert q(g, Q.NAIVE_PER_AGENT, doc="doc_unused")[0][0] == 0         # baselines must return a row, not crash the CLI/page
+    assert q(g, Q.NAIVE_TIME_BASED, doc="doc_unused")[0][0] == 0
 
 
 def test_heal_needs_two_clean_episodes_and_takes_the_clean_majority(g, fx):
@@ -262,3 +266,93 @@ def test_heal_needs_two_clean_episodes_and_takes_the_clean_majority(g, fx):
     assert (rows["f_http_client"][1], rows["f_http_client"][2]) == (3, True)
     healed = {r[0]: r[1] for r in q(g, Q.HEAL_FACTS, session="s2", tick=41)}
     assert healed == {"f_http_client_v2": "requests"}
+
+
+# ---------------------------------------------------------------- findings from the independent review
+def test_rework_refuses_any_quarantined_or_missing_read_even_after_a_heal(g, fx):
+    """The guard used to allow citing poisoned memory once it had a replacement, and nonexistent ids."""
+    open_session2(g, fx)
+    q(g, Q.HEAL_FACTS, session="s2", tick=41)                          # f_http_client now has a clean twin
+    for reads in (["f_http_client", "f_deps"], ["f_http_clinet_v2", "f_deps"]):
+        with pytest.raises(ValueError):
+            rework(g, "step_3", "planner", "redo", reads, 60, "s2")
+    assert q(g, "MATCH (m:Memory {id: 'step_3_v2'}) RETURN count(m)")[0][0] == 0
+    assert audits_clean(g) == [0, 0, 0]
+
+
+def _synthetic_fact(g, fid: str, clean_claims: list[str]):
+    """A quarantined Fact (its own poisoned episode is red) plus clean episodes with the given claims."""
+    q(g, "MATCH (a:Agent {name: 'research'}) "
+         "CREATE (f:Memory:Fact {id: $fid, tick: 90, subject: 's', slot: $fid, value: 'bad', quarantined: true})"
+         "<-[:AUTHORED]-(a)", fid=fid)
+    q(g, "MATCH (f:Fact {id: $fid}) CREATE (e:Memory:Episode {id: $fid + '_bad', tick: 80, quarantined: true}) "
+         "CREATE (f)-[:CONSOLIDATED_FROM {claim: 'bad'}]->(e)", fid=fid)
+    for i, claim in enumerate(clean_claims):
+        q(g, "MATCH (f:Fact {id: $fid}) CREATE (e:Memory:Episode {id: $eid, tick: 81, quarantined: false}) "
+             "CREATE (f)-[:CONSOLIDATED_FROM {claim: $claim}]->(e)", fid=fid, eid=f"{fid}_{i}", claim=claim)
+
+
+def test_heal_takes_a_strict_plurality_and_counts_only_agreeing_episodes(g, fx):
+    _synthetic_fact(g, "f_plural", ["zzz", "zzz", "aaa"])
+    _synthetic_fact(g, "f_tie", ["zzz", "aaa"])
+    _synthetic_fact(g, "f_lone", ["zzz"])
+    rows = {r[0]: r for r in q(g, Q.SUPPORT_AND_HEALABLE)}
+    assert [rows[f][2] for f in ("f_plural", "f_tie", "f_lone")] == [True, False, False]
+    healed = q(g, Q.HEAL_FACTS, session="s2", tick=41)
+    assert healed == [["f_plural_v2", "zzz", 2]]                        # support is the two that agree, not all three
+    assert q(g, "MATCH (:Fact {id: 'f_plural_v2'})-[c:CONSOLIDATED_FROM]->() RETURN count(c)")[0][0] == 2
+    assert q(g, "MATCH (m:Memory {id: 'f_tie_v2'}) RETURN count(m)")[0][0] == 0
+
+
+def test_zombie_complete_cannot_close_a_task_and_rework_is_idempotent(g, fx):
+    open_session2(g, fx)
+    q(g, Q.HEAL_FACTS, session="s2", tick=41)
+    q(g, Q.PROMOTE_READY)
+    assert q(g, Q.CLAIM, task="rework_step_3", me="planner", now=50, lease=5, session="s2")
+    assert q(g, Q.CLAIM, task="rework_step_3", me="coder", now=60, lease=5, session="s2c") == []   # not its author
+    assert q(g, Q.CLAIM, task="rework_step_3", me="planner", now=56, lease=5, session="s2b")      # takeover
+    # the dead process wakes up: wrong session, and no replacement written yet
+    assert q(g, Q.COMPLETE, task="rework_step_3", me="planner", tick=57, now=57, session="s2") == []
+    # the live holder cannot close it without writing the replacement first
+    assert q(g, Q.COMPLETE, task="rework_step_3", me="planner", tick=57, now=57, session="s2b") == []
+    assert q(g, "MATCH (t:Task {id: 'rework_step_3'}) RETURN t.state")[0][0] == "claimed"
+    spec = fx["rework"]["step_3"]
+    rework(g, "step_3", "planner", spec["text"], spec["reads"], 57, "s2b")
+    rework(g, "step_3", "planner", spec["text"], spec["reads"], 58, "s2b")                         # retried write
+    assert q(g, "MATCH (m:Memory {id: 'step_3_v2'}) RETURN count(m)")[0][0] == 1
+    assert read_set(g, "step_3_v2") == set(spec["reads"])
+    assert q(g, "MATCH (:Memory {id: 'step_3_v2'})-[r:INFLUENCED_BY]->() RETURN count(r)")[0][0] == len(spec["reads"])
+    assert q(g, Q.COMPLETE, task="rework_step_3", me="planner", tick=58, now=58, session="s2b")
+    assert q(g, Q.PROMOTE_READY)[0][0] == 1                                                        # Coder unblocks
+
+
+def test_two_advisories_and_unscripted_docs_do_not_crash_the_cli_or_page(fx):
+    import subprocess
+    import sys
+
+    from web.server import receipt, snapshot
+
+    graph = "quarantine_two_flags_test"
+
+    def run(*args, ok=True):
+        r = subprocess.run([sys.executable, "-m", "quarantine.cli", *args, "--graph", graph],
+                           capture_output=True, text=True, timeout=60)
+        assert (r.returncode == 0) == ok, r.stderr + r.stdout
+        return r.stdout
+
+    try:
+        run("session1")
+        run("flag", "doc_7")
+        out = run("flag", "doc_4")                                       # used to IndexError on the second advisory
+        g = connect(graph)
+        assert ids(q(g, "MATCH (m:Memory {quarantined: true}) RETURN m.id")) == set(fx["expected"]["closure_ids"]) | {
+            "ep_4", "f_api", "step_4", "step_5", "a_fetch_py"}
+        assert "receipt a_fetch_py" in out and "receipt a_requirements" not in out   # only this advisory's receipts
+        snap = snapshot(g)
+        assert snap["counters"] is None                                  # two advisories: no single story to count
+        assert receipt(g, "a_requirements")["hops"][-1] == "doc_7"       # receipt goes to the doc it actually reaches
+        assert receipt(g, "a_fetch_py")["hops"][-1] == "doc_4"
+        assert receipt(g, "a_scaffold") is None                          # clean memory: no path, not "null hops"
+        run("session2", ok=False)                                        # step_4 has no scripted rework: clear exit, no traceback
+    finally:
+        connect(graph).delete()

@@ -50,24 +50,27 @@ def session1(args) -> None:
     except Exception:  # noqa: BLE001  (graph did not exist yet)
         pass
     g = connect(args.graph)
-    load(g, fx)
-
-    # what each memory did, from the fixture; which memories exist and in what order, from the graph
-    did: dict[str, tuple[str, str]] = {}
+    # what each memory did, from the fixture; printed the moment the loader has written it
+    did: dict[str, tuple[str, str, str, int]] = {}
     for k, e in fx["episodes"].items():
-        did[k] = (f"extracted {e['doc']}", e["text"])
+        did[k] = ("research", f"extracted {e['doc']}", e["text"], e["tick"])
     for k, f in fx["facts"].items():
-        did[k] = (f"consolidated {ids(s['ep'] for s in f['support'])}", f["value"])
-    for kind in ("steps", "artifacts"):
-        for k, s in fx[kind].items():
-            did[k] = (f"read {ids(s['reads'])}", s["text"])
+        did[k] = ("research", f"consolidated {ids(s['ep'] for s in f['support'])}", f["value"], f["tick"])
+    for kind, agent in (("steps", "planner"), ("artifacts", "coder")):
+        for k, s_ in fx[kind].items():
+            did[k] = (agent, f"read {ids(s_['reads'])}", s_["text"], s_["tick"])
 
-    rows = q(g, "MATCH (a:Agent)-[:AUTHORED]->(m:Memory) RETURN m.tick, a.name, m.id ORDER BY m.tick")
-    for tick, agent, mid in rows:
-        action, text = did[mid]
+    written = []
+
+    def show(mid: str) -> None:
+        agent, action, text, tick = did[mid]
+        written.append(mid)
         say(f'tick {tick:>2}  {agent:<8}  {action} -> wrote {mid}  "{short(text)}"')
         if args.slow:
             time.sleep(args.slow)
+
+    load(g, fx, after_write=show)
+    rows = written
     say(f"{len(rows)} memories written")
     say("session 1 done - 0 processes running")
 
@@ -82,7 +85,7 @@ def flag(args) -> None:
          f"no doc {args.doc!r} in graph {args.graph!r} (run `quarantine session1` first)")
     say(f"flagged {args.doc}: {reason}")
 
-    precise, _ = q(g, Q.TAINT_CLOSURE, doc=args.doc, tick=f["tick"])[0]
+    precise, closure_ids = q(g, Q.TAINT_CLOSURE, doc=args.doc, tick=f["tick"])[0]
     q(g, Q.SUPPORT_AND_HEALABLE)
     q(g, Q.CREATE_REWORK_TASKS, tick=f["tick"])
     blocked = q(g, Q.CREATE_BLOCKED_BY)
@@ -95,6 +98,8 @@ def flag(args) -> None:
     for task, waiting in blocked:
         say(f"task {task}  blocked_by {ids(waiting)}")
     for (aid,) in q(g, "MATCH (m:Artifact {quarantined: true}) RETURN m.id ORDER BY m.tick"):
+        if aid not in closure_ids:
+            continue                                                    # red from an earlier advisory
         hops, length, via = q(g, Q.RECEIPT, **{"from": aid, "doc": args.doc})[0]
         chain = hops[0] + "".join(f" -{t}-> {h}" for t, h in zip(via, hops[1:]))
         say(f"receipt {aid} ({length} hops): {chain}")
@@ -155,9 +160,11 @@ def session2(args) -> None:
                     must(q(g, Q.CLAIM, task=task, me=agent, now=tick, lease=LEASE, session="s2"),
                          f"{agent} could not claim {task}")
                     say(f"  {agent}: claimed {task}")
-                spec = fx["rework"][memory]
+                spec = fx["rework"].get(memory)
+                if spec is None:
+                    sys.exit(f"error: no scripted rework for {memory} (the demo scripts only {ids(fx['rework'])}; flag {fx['flag']['doc']})")
                 new_id = rework(g, memory, agent, spec["text"], spec["reads"], tick, session)
-                q(g, Q.COMPLETE, task=task, me=agent, tick=tick)
+                q(g, Q.COMPLETE, task=task, me=agent, tick=tick, now=tick, session=session)
                 say(f"  {agent}: wrote {new_id} reads {ids(spec['reads'])}; COMPLETE {task}")
                 tick += 1
                 n += 1

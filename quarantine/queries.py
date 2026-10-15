@@ -28,7 +28,7 @@ RETURN count(DISTINCT m) AS precise, collect(DISTINCT m.id) AS ids
 NAIVE_PER_AGENT = """
 MATCH (d:Doc {id: $doc})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..10]-(:Memory)<-[:AUTHORED]-(a:Agent)
 WITH DISTINCT a
-MATCH (a)-[:AUTHORED]->(all:Memory)
+MATCH (a)-[:AUTHORED]->(all:Memory) WHERE NOT (all)-[:SUPERSEDES]->()
 RETURN count(DISTINCT all) AS naive, collect(DISTINCT a.name) AS agents_wiped
 """
 
@@ -37,8 +37,8 @@ RETURN count(DISTINCT all) AS naive, collect(DISTINCT a.name) AS agents_wiped
 NAIVE_TIME_BASED = """
 MATCH (d:Doc {id: $doc})<-[:EXTRACTED_FROM]-(e:Episode)
 WITH min(e.tick) AS t0
-MATCH (m:Memory) WHERE m.tick >= t0
-RETURN count(m) AS naive_time, t0
+MATCH (m:Memory) WHERE m.tick >= t0 AND NOT (m)-[:SUPERSEDES]->()
+RETURN count(m) AS naive_time, max(t0) AS t0
 """
 
 # Q3 hero: the receipt. Why is THIS artifact red? FalkorDB only allows
@@ -65,12 +65,15 @@ RETURN [n IN nodes(path) | n.id] AS hops, pathWeight AS len
 # are reworked by their author once their healable inputs are superseded.
 SUPPORT_AND_HEALABLE = """
 MATCH (m:Memory)
-OPTIONAL MATCH (m)-[:CONSOLIDATED_FROM]->(e:Episode) WHERE NOT e.quarantined
-WITH m, count(e) AS clean
+OPTIONAL MATCH (m)-[c:CONSOLIDATED_FROM]->(e:Episode) WHERE NOT e.quarantined
+WITH m, c.claim AS claim, count(e) AS n ORDER BY n DESC
+WITH m, collect(n) AS ns
+WITH m, reduce(t = 0, x IN ns | t + x) AS clean, head(ns) AS best,
+     CASE WHEN size(ns) > 1 THEN ns[1] ELSE 0 END AS second
 SET m.support_clean = CASE WHEN m:Fact THEN clean ELSE null END,
     m.healable = CASE WHEN NOT m.quarantined THEN null
                       WHEN m:Episode THEN false
-                      WHEN m:Fact THEN clean >= 2
+                      WHEN m:Fact THEN best >= 2 AND best > second
                       ELSE true END
 RETURN m.id, m.support_clean, m.healable
 ORDER BY m.tick
@@ -101,17 +104,17 @@ MATCH (f:Fact {quarantined: true, healable: true})-[c:CONSOLIDATED_FROM]->(e:Epi
 WHERE NOT (f)<-[:SUPERSEDES]-() AND NOT e.quarantined
 WITH f, c.claim AS claim, collect(e) AS eps ORDER BY size(eps) DESC, claim
 WITH f, collect({claim: claim, eps: eps}) AS groups
-WITH f, groups[0].claim AS best, reduce(n = 0, g IN groups | n + size(g.eps)) AS clean_total
-WHERE clean_total >= 2
+WITH f, groups[0].claim AS best, groups[0].eps AS agree
+WHERE size(agree) >= 2
 MATCH (f)<-[:AUTHORED]-(a:Agent)
 MERGE (s:Session {id: $session})
 CREATE (f2:Memory:Fact {id: f.id + '_v2', subject: f.subject, slot: f.slot, value: best,
                         tick: $tick, quarantined: false,
-                        support_total: clean_total, support_clean: clean_total})
+                        support_total: size(agree), support_clean: size(agree)})
 CREATE (f2)-[:SUPERSEDES]->(f), (a)-[:AUTHORED]->(f2), (f2)-[:RAN_IN]->(s)
-WITH f, f2
-MATCH (f)-[c:CONSOLIDATED_FROM]->(e:Episode) WHERE NOT e.quarantined
-CREATE (f2)-[:CONSOLIDATED_FROM {claim: c.claim}]->(e)
+WITH f2, best, agree
+UNWIND agree AS e
+CREATE (f2)-[:CONSOLIDATED_FROM {claim: best}]->(e)
 RETURN f2.id, f2.value, count(e) AS support
 """
 
@@ -142,7 +145,7 @@ ORDER BY m.tick
 # Q8 lease: claim a ready task, or take over an expired claim, atomically
 # (FalkorDB serialises write queries per graph). 0 rows = someone holds it.
 CLAIM = """
-MATCH (t:Task {id: $task}), (a:Agent {name: $me})
+MATCH (t:Task {id: $task})-[:REWORKS]->(:Memory)<-[:AUTHORED]-(a:Agent {name: $me})
 OPTIONAL MATCH (t)-[c:CLAIMED_BY]->(holder)
 WITH t, a, c, holder
 WHERE t.state IN ['ready', 'claimed'] AND (c IS NULL OR c.lease_until < $now)
@@ -155,7 +158,9 @@ RETURN t.id, holder.name AS taken_over_from
 # Q8b finish a claimed rework: the replacement already exists (see
 # loader.rework); mark done and drop the lease.
 COMPLETE = """
-MATCH (t:Task {id: $task})-[c:CLAIMED_BY]->(:Agent {name: $me})
+MATCH (t:Task {id: $task})-[:REWORKS]->(:Memory)<-[:SUPERSEDES]-(:Memory)
+MATCH (t)-[c:CLAIMED_BY {session: $session}]->(:Agent {name: $me})
+WHERE c.lease_until >= $now
 SET t.state = 'done', t.done_tick = $tick
 DELETE c
 RETURN t.id
