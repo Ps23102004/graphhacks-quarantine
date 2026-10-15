@@ -59,16 +59,17 @@ has "$out" "claim refused at tick" "kill-planner: live lease refuses a second cl
 has "$out" "took over lease from planner" "kill-planner: new process takes over expired lease"
 has "$out" "rounds [1, 2, 2, 0]" "kill-planner: same fixpoint"
 
-echo "== control: flag a clean doc quarantines nothing"
+echo "== control: a different doc gives a different, hand-derived closure"
 uv run quarantine session1 --graph validate_ctl >/dev/null
-out="$(uv run quarantine flag doc_2 --graph validate_ctl)"
-has "$out" "precise 0 " "flag doc_2: precise 0"
+out="$(uv run quarantine flag doc_5 --graph validate_ctl)"
+has "$out" "closure [ep_5, f_http_client, step_3, a_requirements]" "flag doc_5: ep_5 -> f_http_client -> step_3 -> a_requirements"
+has "$out" "precise 4 " "flag doc_5: precise 4"
 
 echo "== page"
 uv run python web/server.py --port "$WEB" --graph validate >/dev/null 2>&1 &
 WEBPID=$!
-sleep 2
-g="$(curl -s "localhost:$WEB/graph")"
+for i in $(seq 1 20); do curl -s -o /dev/null "localhost:$WEB/graph" && break; sleep 1; done
+g="$(curl -s "localhost:$WEB/graph" || true)"
 has "$g" '"precise": 6' "page JSON: precise 6"
 has "$g" '"per_agent": 25' "page JSON: per_agent 25 after healing"
 has "$g" '"time_based": 19' "page JSON: time_based 19 after healing"

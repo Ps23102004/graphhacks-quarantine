@@ -231,3 +231,19 @@ def test_cli_runs_the_three_commands_end_to_end(fx):
         assert f"rounds {ex['session2_round_changes']}, {ex['memories_after_session2']} memories" in out
     finally:
         connect("quarantine_cli_test").delete()
+
+
+def test_other_docs_have_their_own_hand_derived_closures(g, fx):
+    """Independent of the hero numbers: closures worked out by hand from the fixture's read sets."""
+    flag = fx["flag"]
+    q(g, Q.FLAG_DOC, doc="doc_5", reason="control", tick=flag["tick"])
+    q(g, Q.TAINT_CLOSURE, doc="doc_5", tick=flag["tick"])
+    # doc_5 -> ep_5 -> f_http_client (cites ep_5) -> step_3 (reads it) -> a_requirements (reads step_3)
+    assert quarantined(g) == {"ep_5", "f_http_client", "step_3", "a_requirements"}
+
+
+def test_flagging_a_doc_nothing_read_quarantines_nothing(g, fx):
+    q(g, "CREATE (:Doc {id: 'doc_unused', flagged: false})")
+    q(g, Q.FLAG_DOC, doc="doc_unused", reason="control", tick=40)
+    precise, ids_ = q(g, Q.TAINT_CLOSURE, doc="doc_unused", tick=40)[0]
+    assert precise == 0 and ids_ == [] and quarantined(g) == set()
