@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quarantine</title>
+<script src="/vendor/vis-network.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #171b21; --line: #2a313b; --text: #e6e9ee; --muted: #8b95a3;
+    --clean: #5b6675; --red: #e5484d; --green: #30a46c; --orange: #f5a524;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 15px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  body { display: grid; grid-template-rows: auto auto 1fr auto; }
+  header { display: flex; align-items: baseline; gap: 16px; padding: 14px 20px 8px; }
+  h1 { margin: 0; font-size: 18px; letter-spacing: .02em; }
+  #banner { font-size: 14px; color: var(--muted); }
+  #banner b { color: var(--text); }
+  #counters { display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: 12px; padding: 4px 20px 12px; }
+  .counter { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+  .counter .n { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .counter .l { font-size: 12px; color: var(--muted); }
+  .counter.precise .n { color: var(--red); }
+  #legend { align-self: center; font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+  #net { min-height: 360px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  #detail { padding: 10px 20px 14px; font-size: 13px; min-height: 64px; color: var(--muted); }
+  #detail code { color: var(--text); }
+  #detail .path { color: var(--orange); }
+  #err { color: var(--red); }
+  @media (max-width: 700px) { #counters { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header><h1>QUARANTINE</h1><div id="banner">connecting...</div></header>
+<section id="counters">
+  <div class="counter precise"><div class="n" id="c-precise">-</div><div class="l">graph-precise: memories quarantined</div></div>
+  <div class="counter"><div class="n" id="c-agent">-</div><div class="l">naive: wipe every compromised agent</div></div>
+  <div class="counter"><div class="n" id="c-time">-</div><div class="l">naive: forget everything after the bad doc</div></div>
+  <div id="legend">
+    <span><i class="dot" style="background:var(--clean)"></i>clean</span>
+    <span><i class="dot" style="background:var(--red)"></i>quarantined</span>
+    <span><i class="dot" style="background:var(--green)"></i>healed twin (SUPERSEDES)</span>
+  </div>
+</section>
+<div id="net"></div>
+<footer id="detail">Click a red memory to see why it is red.</footer>
+
+<script>
+const C = { clean: "#5b6675", red: "#e5484d", green: "#30a46c", orange: "#f5a524", text: "#e6e9ee", edge: "#3b4552" };
+const ROW = { Doc: 0, Episode: 1, Fact: 2, PlanStep: 3, Artifact: 4 };
+const GAP_X = 118, GAP_Y = 150, TWIN_DY = 78;
+
+const nodes = new vis.DataSet(), edges = new vis.DataSet();
+const net = new vis.Network(document.getElementById("net"), { nodes, edges }, {
+  physics: false, interaction: { hover: true },
+  nodes: { shape: "dot", size: 17, font: { color: C.text, size: 13, face: "ui-monospace, Menlo, monospace" },
+           borderWidth: 2, color: { background: C.clean, border: "#0f1216" } },
+  edges: { arrows: { to: { enabled: true, scaleFactor: 0.45 } }, color: { color: C.edge }, width: 1, smooth: false },
+});
+
+let state = { red: new Set(), seen: false, count: 0 };
+let pending = new Map();           // id -> timeout, for the staggered red wave
+
+function layout(data) {
+  const rows = {};
+  const base = [...data.docs.map(d => ({ id: d.id, kind: "Doc", tick: 0 })),
+                ...data.nodes.filter(n => !n.twin_of)];
+  for (const n of base) (rows[n.kind] ||= []).push(n);
+  const pos = {};
+  for (const [kind, list] of Object.entries(rows)) {
+    list.sort((a, b) => (a.tick - b.tick) || a.id.localeCompare(b.id));
+    list.forEach((n, i) => { pos[n.id] = { x: (i - (list.length - 1) / 2) * GAP_X, y: ROW[kind] * GAP_Y }; });
+  }
+  for (const n of data.nodes.filter(n => n.twin_of)) {
+    const p = pos[n.twin_of] || { x: 0, y: ROW[n.kind] * GAP_Y };
+    pos[n.id] = { x: p.x + 38, y: p.y + TWIN_DY };
+  }
+  return pos;
+}
+
+function look(n, data) {
+  if (n.twin_of) return { color: { background: C.green, border: C.green }, shapeProperties: { borderDashes: false } };
+  if (n.red && !state.red.has(n.id)) return { color: { background: C.clean, border: "#0f1216" } }; // waiting its turn
+  if (n.red) return { color: { background: C.red, border: C.red } };
+  return { color: { background: C.clean, border: "#0f1216" } };
+}
+
+function render(data) {
+  const pos = layout(data);
+  const newlyRed = data.nodes.filter(n => n.red && !state.red.has(n.id) && !pending.has(n.id))
+                             .sort((a, b) => a.tick - b.tick);
+  // the first poll after load shows existing red at once; later red appears as a wave
+  const wave = state.seen;
+  newlyRed.forEach((n, i) => {
+    const go = () => { state.red.add(n.id); pending.delete(n.id); nodes.update({ id: n.id, ...look(n, data) }); };
+    if (wave) pending.set(n.id, setTimeout(go, 420 * (i + 1))); else state.red.add(n.id);
+  });
+
+  for (const d of data.docs) {
+    nodes.update({ id: d.id, label: d.id, shape: "square", size: 15, title: d.title, ...pos[d.id],
+      color: { background: d.flagged ? "#7a1d22" : "#2a313b", border: d.flagged ? C.red : "#566070" },
+      borderWidth: d.flagged ? 3 : 2 });
+  }
+  for (const n of data.nodes) {
+    nodes.update({ id: n.id, label: n.id, title: `${n.kind} by ${n.agent}\n${n.text || n.value || ""}`, ...pos[n.id], ...look(n, data),
+      shape: n.kind === "Fact" ? "diamond" : n.kind === "Episode" ? "dot" : n.kind === "PlanStep" ? "triangle" : "box" });
+  }
+  for (const e of data.edges) {
+    const id = `${e.src}|${e.type}|${e.dst}`;
+    if (edges.get(id)) continue;
+    const sup = e.type === "SUPERSEDES";
+    edges.add({ id, from: e.src, to: e.dst, dashes: sup || e.type === "EXTRACTED_FROM",
+                color: { color: sup ? C.green : C.edge }, width: sup ? 2 : 1 });
+  }
+
+  const c = data.counters;
+  document.getElementById("c-precise").textContent = c ? c.precise : "-";
+  document.getElementById("c-agent").textContent = c ? c.per_agent : "-";
+  document.getElementById("c-time").textContent = c ? c.time_based : "-";
+
+  const twins = data.nodes.filter(n => n.twin_of).length;
+  document.getElementById("banner").innerHTML =
+    !data.nodes.length ? "empty graph - run <b>quarantine session1</b>"
+    : !data.flagged ? "<b>Session 1</b> - crew writing memory, read sets recorded as edges"
+    : twins === 0 ? `<b>Session 2</b> - advisory: <b>${data.flagged}</b> is prompt-injected`
+    : `<b>Session 2</b> - healing: ${twins} memor${twins === 1 ? "y" : "ies"} rewritten from clean support`;
+  if (nodes.length !== state.count) { state.count = nodes.length; net.fit({ animation: false }); }
+  state.seen = true;
+}
+
+async function poll() {
+  try {
+    const r = await fetch("/graph");
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    render(data);
+  } catch (e) {
+    document.getElementById("banner").innerHTML = `<span id="err">graph unreachable: ${e.message}</span>`;
+  }
+}
+
+function highlight(hops) {
+  edges.forEach(e => edges.update({ id: e.id, color: { color: e.dashes && e.id.includes("SUPERSEDES") ? C.green : C.edge }, width: e.id.includes("SUPERSEDES") ? 2 : 1 }));
+  if (!hops) return;
+  for (let i = 0; i + 1 < hops.length; i++) {
+    edges.get().filter(e => e.from === hops[i] && e.to === hops[i + 1])
+      .forEach(e => edges.update({ id: e.id, color: { color: C.orange }, width: 4 }));
+  }
+}
+
+net.on("click", async p => {
+  const detail = document.getElementById("detail");
+  const id = p.nodes[0];
+  if (!id) { highlight(null); detail.textContent = "Click a red memory to see why it is red."; return; }
+  const n = nodes.get(id);
+  const isRed = n && n.color && n.color.background === C.red;
+  if (!isRed) { highlight(null); detail.innerHTML = `<code>${id}</code> - ${(n.title || "").replace(/\n/g, " - ")}`; return; }
+  const rc = await (await fetch("/receipt?id=" + encodeURIComponent(id))).json();
+  if (!rc) { detail.innerHTML = `<code>${id}</code> has no path to the flagged document.`; return; }
+  highlight(rc.hops);
+  const chain = rc.hops.map((h, i) => i ? ` <span class="path">-${rc.via[i - 1]}-></span> ${h}` : h).join("");
+  detail.innerHTML = `<code>${id}</code> is red: ${rc.len} hops (shortestPath)<br><code>${chain}</code>`;
+});
+
+poll();
+setInterval(poll, 1000);
+</script>
+</body>
+</html>
