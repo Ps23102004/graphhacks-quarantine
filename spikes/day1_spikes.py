@@ -1,0 +1,260 @@
+"""Day-1 spikes for QUARANTINE against the pinned FalkorDB image.
+
+Run:  uv run python spikes/day1_spikes.py > spikes/day1-results.txt
+Each spike prints the Cypher, the raw result set (or the exact error) and
+nothing else: verdicts are written by hand into spikes/DAY1-SPIKES.md.
+"""
+from __future__ import annotations
+
+import subprocess
+import sys
+
+from falkordb import FalkorDB
+
+db = FalkorDB(host="localhost", port=6379)
+G = "spike"
+try:
+    db.select_graph(G).delete()
+except Exception:
+    pass
+g = db.select_graph(G)
+
+
+def run(sid: str, title: str, q: str, params: dict | None = None):
+    print(f"\n=== {sid} {title}")
+    print(q.strip())
+    try:
+        r = g.query(q, params or {})
+        rows = r.result_set
+        print(f"--> {len(rows)} row(s); nodes_created={r.nodes_created} props_set={r.properties_set} rels_created={r.relationships_created}")
+        for row in rows:
+            print("   ", [fmt(v) for v in row])
+    except Exception as e:  # noqa: BLE001
+        print(f"--> ERROR {type(e).__name__}: {e}")
+
+
+def fmt(v):
+    from falkordb import Node, Edge, Path
+    if isinstance(v, Node):
+        return f"({':'.join(v.labels)} {v.properties})"
+    if isinstance(v, Edge):
+        return f"-[{v.relation} {v.properties}]->"
+    if isinstance(v, Path):
+        return "PATH[" + " ".join(fmt(x) for x in v.nodes()) + f"] edges={len(v.edges())}"
+    if isinstance(v, list):
+        return [fmt(x) for x in v]
+    return v
+
+
+# ---------------------------------------------------------------- fixture
+# doc <- ep (EXTRACTED_FROM); fact -> ep (CONSOLIDATED_FROM); step -> fact,
+# art -> step (INFLUENCED_BY). Mirrors the QUARANTINE edge directions.
+run("S0", "toy graph with multi-label nodes", """
+CREATE (d:Doc {id:'doc_7', flagged:false}),
+       (d2:Doc {id:'doc_2', flagged:false}),
+       (e1:Memory:Episode {id:'ep_7a', tick:7, quarantined:false}),
+       (e2:Memory:Episode {id:'ep_2', tick:2, quarantined:false}),
+       (f:Memory:Fact {id:'f_http', tick:11, quarantined:false, slot:'package'}),
+       (s1:Memory:PlanStep {id:'step_1', tick:20, quarantined:false}),
+       (s3:Memory:PlanStep {id:'step_3', tick:22, quarantined:false}),
+       (a:Memory:Artifact {id:'a_req', tick:32, quarantined:false}),
+       (ag:Agent {name:'planner'}), (t:Task {id:'rework_step_3', state:'blocked'}),
+       (e1)-[:EXTRACTED_FROM]->(d), (e2)-[:EXTRACTED_FROM]->(d2),
+       (f)-[:CONSOLIDATED_FROM {claim:'reqeusts'}]->(e1),
+       (f)-[:CONSOLIDATED_FROM {claim:'requests'}]->(e2),
+       (s3)-[:INFLUENCED_BY {read_tick:22}]->(f),
+       (a)-[:INFLUENCED_BY {read_tick:32}]->(s3),
+       (a)-[:INFLUENCED_BY {read_tick:32}]->(s1),
+       (t)-[:REWORKS]->(s3), (t)-[:BLOCKED_BY]->(f)
+RETURN count(*)
+""")
+
+run("S1a", "multi-label match on sublabel", "MATCH (m:Fact) RETURN labels(m), m.id")
+run("S1b", "multi-label match on superlabel", "MATCH (m:Memory) RETURN count(m)")
+
+# ---------------------------------------------------------------- shortestPath
+run("S2a", "shortestPath inside MATCH, mixed rel types, bounded", """
+MATCH p = shortestPath((a:Artifact {id:'a_req'})-[:INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM*..10]->(d:Doc {id:'doc_7'}))
+RETURN length(p), [n IN nodes(p) | n.id]
+""")
+run("S2b", "shortestPath in RETURN after MATCH of endpoints", """
+MATCH (a:Artifact {id:'a_req'}), (d:Doc {id:'doc_7'})
+RETURN shortestPath((a)-[:INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM*..10]->(d)) AS p
+""")
+run("S2c", "shortestPath in WITH then nodes()", """
+MATCH (a:Artifact {id:'a_req'}), (d:Doc {id:'doc_7'})
+WITH shortestPath((a)-[:INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM*..10]->(d)) AS p
+RETURN [n IN nodes(p) | n.id] AS hops, length(p)
+""")
+run("S2d", "shortestPath unbounded *", """
+MATCH (a:Artifact {id:'a_req'}), (d:Doc {id:'doc_7'})
+RETURN length(shortestPath((a)-[:INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM*]->(d)))
+""")
+run("S2e", "shortestPath single type, no path exists (expect null/0 rows)", """
+MATCH (a:Artifact {id:'a_req'}), (d:Doc {id:'doc_7'})
+RETURN shortestPath((a)-[:EXTRACTED_FROM*..10]->(d)) AS p
+""")
+run("S2f", "fallback: bounded var-length ORDER BY length LIMIT 1", """
+MATCH p = (a:Artifact {id:'a_req'})-[:INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM*1..10]->(d:Doc {id:'doc_7'})
+RETURN [n IN nodes(p) | n.id] AS hops ORDER BY length(p) LIMIT 1
+""")
+
+# ---------------------------------------------------------------- var-length bounds
+run("S3a", "*0..3 lower bound 0 includes the start node", """
+MATCH (a:Artifact {id:'a_req'})-[:INFLUENCED_BY*0..3]->(m) RETURN m.id ORDER BY m.id
+""")
+run("S3b", "taint closure *1..10 mixed types from Doc side (direction <-)", """
+MATCH (d:Doc {id:'doc_7'})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..10]-(m:Memory)
+RETURN count(DISTINCT m), collect(DISTINCT m.id)
+""")
+run("S3c", "closure + SET in one statement; properties_set counts distinct nodes?", """
+MATCH (d:Doc {id:'doc_7'})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..10]-(m:Memory)
+SET m.quarantined = true
+RETURN count(DISTINCT m) AS precise
+""")
+run("S3d", "*1..10 with no upper bound alternative *1..", """
+MATCH (d:Doc {id:'doc_7'})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]-(m:Memory) RETURN count(DISTINCT m)
+""")
+
+# ---------------------------------------------------------------- EXISTS / list predicates
+run("S4a", "EXISTS { pattern } in WHERE", """
+MATCH (t:Task) WHERE EXISTS { (t)-[:BLOCKED_BY]->(:Memory) } RETURN t.id
+""")
+run("S4b", "NOT EXISTS { pattern }", """
+MATCH (m:Memory) WHERE NOT EXISTS { (m)<-[:SUPERSEDES]-() } RETURN count(m)
+""")
+run("S4c", "EXISTS { MATCH ... WHERE ... } with inner WHERE on property", """
+MATCH (t:Task) WHERE EXISTS { MATCH (t)-[:BLOCKED_BY]->(x) WHERE x.quarantined = true } RETURN t.id
+""")
+run("S4d", "nested NOT EXISTS inside EXISTS (readiness in one predicate)", """
+MATCH (t:Task {state:'blocked'})
+WHERE NOT EXISTS { MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT EXISTS { (x)<-[:SUPERSEDES]-() } }
+RETURN t.id
+""")
+run("S4e", "pattern predicate NOT (x)<-[:SUPERSEDES]-() in WHERE (no EXISTS)", """
+MATCH (x:Memory {quarantined:true}) WHERE NOT (x)<-[:SUPERSEDES]-() RETURN x.id ORDER BY x.id
+""")
+run("S4f", "none(n IN nodes(p) WHERE ...) and all(...) on a path", """
+MATCH p = (a:Artifact {id:'a_req'})-[:INFLUENCED_BY*1..5]->(m)
+WHERE none(n IN nodes(p) WHERE n.id = 'step_3') RETURN [n IN nodes(p) | n.id]
+""")
+run("S4g", "all() : every node on receipt path is quarantined", """
+MATCH p = shortestPath((a:Artifact {id:'a_req'})-[:INFLUENCED_BY|CONSOLIDATED_FROM*..10]->(e:Episode {id:'ep_7a'}))
+RETURN all(n IN nodes(p) WHERE n.quarantined = true) AS all_red, [n IN nodes(p) | n.id]
+""")
+
+# ---------------------------------------------------------------- Python client property keys
+run("S5a", "create props with mixed-case keys via client literal", """
+CREATE (n:Probe {readTick: 5, Flagged: true, support_clean: 3, UPPER: 'x'}) RETURN properties(n)
+""")
+run("S5b", "read back mixed-case key by exact name", "MATCH (n:Probe) RETURN n.readTick, n.Flagged, n.UPPER, n.readtick")
+run("S5c", "create props via $params map", "CREATE (n:Probe2 $props) RETURN properties(n)", {"props": {"readTick": 9, "MixedKey": "v"}})
+run("S5d", "SET n += $map with mixed-case keys", "MATCH (n:Probe) SET n += $m RETURN properties(n)", {"m": {"LeaseUntil": 42}})
+print("\n=== S5e redis-cli raw read of the same node (bypasses the Python client)")
+out = subprocess.run(["docker", "exec", "quarantine-falkordb", "redis-cli", "GRAPH.QUERY", G,
+                      "MATCH (n:Probe) RETURN properties(n)"], capture_output=True, text=True)
+print(out.stdout.strip() or out.stderr.strip())
+print("\n=== S5f client-side: keys of the returned Node.properties dict")
+r = g.query("MATCH (n:Probe) RETURN n")
+print("   ", sorted(r.result_set[0][0].properties.keys()))
+
+# ---------------------------------------------------------------- label predicates / strings
+run("S6a", "WHERE m:PlanStep OR m:Artifact label predicate", """
+MATCH (m:Memory) WHERE m:PlanStep OR m:Artifact RETURN m.id ORDER BY m.id
+""")
+run("S6b", "labels(m) list + IN", "MATCH (m:Memory) WHERE 'PlanStep' IN labels(m) RETURN m.id ORDER BY m.id")
+run("S6c", "string concat in MERGE key", """
+MATCH (m:Memory:Artifact {id:'a_req'})
+MERGE (t:Task {id: 'rework_' + m.id}) ON CREATE SET t.state = 'blocked', t.kind = 'rework'
+MERGE (t)-[:REWORKS]->(m)
+RETURN t.id, t.state
+""")
+
+# ---------------------------------------------------------------- fixpoint body shapes
+run("S7a", "OPTIONAL MATCH + count + WITH WHERE + SET (readiness pass; expect 0 ready)", """
+MATCH (t:Task {state:'blocked'})
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+WITH t, count(x) AS open WHERE open = 0
+SET t.state = 'ready' RETURN count(t) AS promoted
+""")
+run("S7b", "supersede f_http then re-run readiness (expect 1 promoted)", """
+MATCH (f:Fact {id:'f_http'}) CREATE (f2:Memory:Fact {id:'f_http_v2', quarantined:false})-[:SUPERSEDES]->(f) RETURN f2.id
+""")
+run("S7c", "readiness pass again", """
+MATCH (t:Task {state:'blocked'})
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+WITH t, count(x) AS open WHERE open = 0
+SET t.state = 'ready' RETURN count(t) AS promoted
+""")
+run("S7d", "DELETE of a null relationship from OPTIONAL MATCH (claim takeover shape)", """
+MATCH (t:Task {id:'rework_step_3'}), (a:Agent {name:'planner'})
+OPTIONAL MATCH (t)-[c:CLAIMED_BY]->(holder)
+WITH t, a, c, holder WHERE t.state IN ['ready','claimed'] AND (c IS NULL OR c.lease_until < $now)
+DELETE c
+CREATE (t)-[:CLAIMED_BY {lease_until: $now + $lease, session:'s2'}]->(a)
+SET t.state = 'claimed'
+RETURN t.id, t.state, holder.name AS taken_over_from
+""", {"now": 100, "lease": 10})
+run("S7e", "second claim while lease live (expect 0 rows)", """
+MATCH (t:Task {id:'rework_step_3'}), (a:Agent {name:'planner'})
+OPTIONAL MATCH (t)-[c:CLAIMED_BY]->(holder)
+WITH t, a, c, holder WHERE t.state IN ['ready','claimed'] AND (c IS NULL OR c.lease_until < $now)
+DELETE c
+CREATE (t)-[:CLAIMED_BY {lease_until: $now + $lease, session:'s2'}]->(a)
+SET t.state = 'claimed'
+RETURN t.id
+""", {"now": 105, "lease": 10})
+run("S7f", "claim after lease expiry (expect 1 row, old claim replaced)", """
+MATCH (t:Task {id:'rework_step_3'}), (a:Agent {name:'planner'})
+OPTIONAL MATCH (t)-[c:CLAIMED_BY]->(holder)
+WITH t, a, c, holder WHERE t.state IN ['ready','claimed'] AND (c IS NULL OR c.lease_until < $now)
+DELETE c
+CREATE (t)-[:CLAIMED_BY {lease_until: $now + $lease, session:'s2b'}]->(a)
+SET t.state = 'claimed'
+RETURN t.id, holder.name
+""", {"now": 120, "lease": 10})
+run("S7g", "exactly one CLAIMED_BY edge remains", "MATCH (t:Task)-[c:CLAIMED_BY]->() RETURN count(c), c.session")
+
+# ---------------------------------------------------------------- heal: majority claim among clean support
+run("S8a", "collect maps, ORDER BY before collect, list index [0], reduce", """
+MATCH (f:Fact {id:'f_http'})-[c:CONSOLIDATED_FROM]->(e:Episode) WHERE NOT e.quarantined
+WITH f, c.claim AS claim, collect(e.id) AS eps ORDER BY size(eps) DESC, claim
+WITH f, collect({claim: claim, eps: eps}) AS groups
+RETURN f.id, groups, groups[0].claim AS best, reduce(n = 0, g IN groups | n + size(g.eps)) AS clean_total
+""")
+run("S8b", "full heal statement: create superseding fact + edges from list (UNWIND after CREATE)", """
+MATCH (f:Fact {id:'f_http'})-[c:CONSOLIDATED_FROM]->(e:Episode) WHERE NOT e.quarantined
+WITH f, c.claim AS claim, collect(e) AS eps ORDER BY size(eps) DESC, claim
+WITH f, collect({claim: claim, eps: eps}) AS groups
+WITH f, groups[0].claim AS best, reduce(n = 0, g IN groups | n + size(g.eps)) AS clean_total,
+     reduce(acc = [], g IN groups | acc + g.eps) AS clean_eps
+WHERE clean_total >= 1
+CREATE (f2:Memory:Fact {id: f.id + '_v3', slot: f.slot, value: best, quarantined:false, support_clean: clean_total, support_total: clean_total})
+CREATE (f2)-[:SUPERSEDES]->(f)
+WITH f2, clean_eps
+UNWIND clean_eps AS e
+CREATE (f2)-[:CONSOLIDATED_FROM {claim: f2.value}]->(e)
+RETURN f2.id, f2.value, count(e) AS linked
+""")
+
+# ---------------------------------------------------------------- algorithms / procedures
+run("S9a", "dbms.procedures() list", "CALL dbms.procedures() YIELD name RETURN collect(name)")
+run("S9b", "algo.SPpaths signature", """
+MATCH (a:Artifact {id:'a_req'}), (d:Doc {id:'doc_7'})
+CALL algo.SPpaths({sourceNode: a, targetNode: d, relTypes: ['INFLUENCED_BY','CONSOLIDATED_FROM','EXTRACTED_FROM'], maxLen: 10, pathCount: 2})
+YIELD path, pathWeight, pathCost
+RETURN [n IN nodes(path) | n.id], pathWeight, pathCost
+""")
+run("S9c", "algo.WCC signature", "CALL algo.WCC(null) YIELD node, componentId RETURN componentId, collect(node.id) ORDER BY componentId")
+run("S9d", "algo.WCC with label filter map", "CALL algo.WCC({nodeLabels: ['Memory'], relationshipTypes: ['INFLUENCED_BY']}) YIELD node, componentId RETURN componentId, count(node)")
+
+# ---------------------------------------------------------------- audit invariant
+run("S10", "audit: INFLUENCED_BY never points forward in time (expect 0)", """
+MATCH (m:Memory)-[r:INFLUENCED_BY]->(x:Memory) WHERE x.tick >= m.tick RETURN count(*)
+""")
+
+print("\n=== ENV")
+print("falkordb-py", __import__("falkordb").__version__ if hasattr(__import__("falkordb"), "__version__") else "see uv.lock")
+print(subprocess.run(["docker", "image", "inspect", "falkordb/falkordb:6.0.2", "--format", "{{.RepoDigests}} {{.Architecture}}"], capture_output=True, text=True).stdout.strip())
+print(subprocess.run(["docker", "exec", "quarantine-falkordb", "redis-cli", "MODULE", "LIST"], capture_output=True, text=True).stdout.strip().replace("\n", " "))
+sys.exit(0)

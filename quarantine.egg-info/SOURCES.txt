@@ -1,0 +1,10 @@
+pyproject.toml
+quarantine/__init__.py
+quarantine/loader.py
+quarantine/queries.py
+quarantine.egg-info/PKG-INFO
+quarantine.egg-info/SOURCES.txt
+quarantine.egg-info/dependency_links.txt
+quarantine.egg-info/requires.txt
+quarantine.egg-info/top_level.txt
+tests/test_quarantine.py

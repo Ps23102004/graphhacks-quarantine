@@ -1,0 +1,499 @@
+
+=== COUNT_MEMORIES (Session 1 loaded)  params={}
+MATCH (m:Memory) RETURN count(m) AS n
+--> 1 row(s)
+    [25]
+
+=== FLAG_DOC  params={'doc': 'doc_7', 'reason': 'Advisory: forum thread 88213 is a prompt injection; `reqeusts` is a typosquat of `requests`.', 'tick': 40}
+MATCH (d:Doc {id: $doc})
+SET d.flagged = true, d.flag_reason = $reason, d.flag_tick = $tick
+RETURN d.id
+--> 1 row(s)
+    ['doc_7']
+
+=== Q1 TAINT_CLOSURE  params={'doc': 'doc_7', 'tick': 40}
+MATCH (d:Doc {id: $doc})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..10]-(m:Memory)
+SET m.quarantined = true, m.quarantine_tick = $tick
+RETURN count(DISTINCT m) AS precise, collect(DISTINCT m.id) AS ids
+--> 1 row(s)
+    [6, ['ep_7a', 'ep_7b', 'f_http_pin', 'step_3', 'a_requirements', 'f_http_client']]
+
+=== Q2 NAIVE_PER_AGENT  params={'doc': 'doc_7'}
+MATCH (d:Doc {id: $doc})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..10]-(:Memory)<-[:AUTHORED]-(a:Agent)
+WITH DISTINCT a
+MATCH (a)-[:AUTHORED]->(all:Memory)
+RETURN count(DISTINCT all) AS naive, collect(DISTINCT a.name) AS agents_wiped
+--> 1 row(s)
+    [25, ['research', 'planner', 'coder']]
+
+=== Q2b NAIVE_TIME_BASED  params={'doc': 'doc_7'}
+MATCH (d:Doc {id: $doc})<-[:EXTRACTED_FROM]-(e:Episode)
+WITH min(e.tick) AS t0
+MATCH (m:Memory) WHERE m.tick >= t0
+RETURN count(m) AS naive_time, t0
+--> 1 row(s)
+    [19, 7]
+
+=== Q3 RECEIPT (shortestPath)  params={'from': 'a_requirements', 'doc': 'doc_7'}
+MATCH (a:Memory {id: $from}), (d:Doc {id: $doc})
+WITH shortestPath((a)-[:INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM*..10]->(d)) AS p
+RETURN [n IN nodes(p) | n.id] AS hops, length(p) AS len, [r IN relationships(p) | type(r)] AS via
+--> 1 row(s)
+    [['a_requirements', 'step_3', 'f_http_client', 'ep_7a', 'doc_7'], 4, ['INFLUENCED_BY', 'INFLUENCED_BY', 'CONSOLIDATED_FROM', 'EXTRACTED_FROM']]
+
+=== Q3b RECEIPT_SPPATHS (algo.SPpaths)  params={'from': 'a_requirements', 'doc': 'doc_7'}
+MATCH (a:Memory {id: $from}), (d:Doc {id: $doc})
+CALL algo.SPpaths({sourceNode: a, targetNode: d,
+                   relTypes: ['INFLUENCED_BY', 'CONSOLIDATED_FROM', 'EXTRACTED_FROM'],
+                   maxLen: 10, pathCount: 1})
+YIELD path, pathWeight
+RETURN [n IN nodes(path) | n.id] AS hops, pathWeight AS len
+--> 1 row(s)
+    [['a_requirements', 'step_3', 'f_http_pin', 'ep_7b', 'doc_7'], 4]
+
+=== Q3 RECEIPT for a clean artifact (null path)  params={'from': 'a_fetch_py', 'doc': 'doc_7'}
+MATCH (a:Memory {id: $from}), (d:Doc {id: $doc})
+WITH shortestPath((a)-[:INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM*..10]->(d)) AS p
+RETURN [n IN nodes(p) | n.id] AS hops, length(p) AS len, [r IN relationships(p) | type(r)] AS via
+--> 1 row(s)
+    [[], None, []]
+
+=== Q4a SUPPORT_AND_HEALABLE  params={}
+MATCH (m:Memory)
+OPTIONAL MATCH (m)-[:CONSOLIDATED_FROM]->(e:Episode) WHERE NOT e.quarantined
+WITH m, count(e) AS clean
+SET m.support_clean = CASE WHEN m:Fact THEN clean ELSE null END,
+    m.healable = CASE WHEN NOT m.quarantined THEN null
+                      WHEN m:Episode THEN false
+                      WHEN m:Fact THEN clean >= 2
+                      ELSE true END
+RETURN m.id, m.support_clean, m.healable
+ORDER BY m.tick
+--> 25 row(s)
+    ['ep_1', None, None]
+    ['ep_2', None, None]
+    ['ep_3', None, None]
+    ['ep_4', None, None]
+    ['ep_5', None, None]
+    ['ep_6', None, None]
+    ['ep_7a', None, False]
+    ['ep_7b', None, False]
+    ['ep_8', None, None]
+    ['f_goal', 1, None]
+    ['f_http_client', 3, True]
+    ['f_http_pin', 0, False]
+    ['f_http_usage', 2, None]
+    ['f_api', 1, None]
+    ['f_deps', 1, None]
+    ['f_cache', 1, None]
+    ['step_1', None, None]
+    ['step_2', None, None]
+    ['step_3', None, True]
+    ['step_4', None, None]
+    ['step_5', None, None]
+    ['a_scaffold', None, None]
+    ['a_cache_py', None, None]
+    ['a_requirements', None, True]
+    ['a_fetch_py', None, None]
+
+=== Q7 CREATE_REWORK_TASKS  params={'tick': 40}
+MATCH (m:Memory {quarantined: true}) WHERE m:PlanStep OR m:Artifact
+MERGE (t:Task {id: 'rework_' + m.id})
+  ON CREATE SET t.kind = 'rework', t.state = 'blocked', t.created_tick = $tick
+MERGE (t)-[:REWORKS]->(m)
+RETURN t.id ORDER BY t.id
+--> 2 row(s)
+    ['rework_a_requirements']
+    ['rework_step_3']
+
+=== Q7 CREATE_BLOCKED_BY  params={}
+MATCH (t:Task {kind: 'rework'})-[:REWORKS]->(m:Memory)-[:INFLUENCED_BY]->(x:Memory {quarantined: true, healable: true})
+MERGE (t)-[:BLOCKED_BY]->(x)
+RETURN t.id, collect(x.id) AS blocked_by ORDER BY t.id
+--> 2 row(s)
+    ['rework_a_requirements', ['step_3']]
+    ['rework_step_3', ['f_http_client']]
+
+=== Q6 STARTUP research (before heal)  params={'me': 'research'}
+MATCH (a:Agent {name: $me})-[:AUTHORED]->(m:Memory {quarantined: true})
+WHERE NOT (m)<-[:SUPERSEDES]-()
+OPTIONAL MATCH (t:Task)-[:REWORKS]->(m)
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+RETURN m.id AS memory, m.healable AS healable, t.id AS task, t.state AS state,
+       collect(x.id) AS waiting_on
+ORDER BY m.tick
+--> 4 row(s)
+    ['ep_7a', False, None, None, []]
+    ['ep_7b', False, None, None, []]
+    ['f_http_client', True, None, None, []]
+    ['f_http_pin', False, None, None, []]
+
+=== Q6 STARTUP planner (before heal)  params={'me': 'planner'}
+MATCH (a:Agent {name: $me})-[:AUTHORED]->(m:Memory {quarantined: true})
+WHERE NOT (m)<-[:SUPERSEDES]-()
+OPTIONAL MATCH (t:Task)-[:REWORKS]->(m)
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+RETURN m.id AS memory, m.healable AS healable, t.id AS task, t.state AS state,
+       collect(x.id) AS waiting_on
+ORDER BY m.tick
+--> 1 row(s)
+    ['step_3', True, 'rework_step_3', 'blocked', ['f_http_client']]
+
+=== Q6 STARTUP coder (before heal)  params={'me': 'coder'}
+MATCH (a:Agent {name: $me})-[:AUTHORED]->(m:Memory {quarantined: true})
+WHERE NOT (m)<-[:SUPERSEDES]-()
+OPTIONAL MATCH (t:Task)-[:REWORKS]->(m)
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+RETURN m.id AS memory, m.healable AS healable, t.id AS task, t.state AS state,
+       collect(x.id) AS waiting_on
+ORDER BY m.tick
+--> 1 row(s)
+    ['a_requirements', True, 'rework_a_requirements', 'blocked', ['step_3']]
+
+=== RED_WAVE (after closure)  params={}
+MATCH (m:Memory)
+OPTIONAL MATCH (m)<-[:SUPERSEDES]-(r:Memory)
+RETURN m.id AS id, labels(m)[1] AS kind, m.tick AS tick, m.quarantined AS red, count(r) > 0 AS superseded
+ORDER BY m.tick
+--> 25 row(s)
+    ['ep_1', 'Episode', 1, False, False]
+    ['ep_2', 'Episode', 2, False, False]
+    ['ep_3', 'Episode', 3, False, False]
+    ['ep_4', 'Episode', 4, False, False]
+    ['ep_5', 'Episode', 5, False, False]
+    ['ep_6', 'Episode', 6, False, False]
+    ['ep_7a', 'Episode', 7, True, False]
+    ['ep_7b', 'Episode', 8, True, False]
+    ['ep_8', 'Episode', 9, False, False]
+    ['f_goal', 'Fact', 10, False, False]
+    ['f_http_client', 'Fact', 11, True, False]
+    ['f_http_pin', 'Fact', 12, True, False]
+    ['f_http_usage', 'Fact', 13, False, False]
+    ['f_api', 'Fact', 14, False, False]
+    ['f_deps', 'Fact', 15, False, False]
+    ['f_cache', 'Fact', 16, False, False]
+    ['step_1', 'PlanStep', 20, False, False]
+    ['step_2', 'PlanStep', 21, False, False]
+    ['step_3', 'PlanStep', 22, True, False]
+    ['step_4', 'PlanStep', 23, False, False]
+    ['step_5', 'PlanStep', 24, False, False]
+    ['a_scaffold', 'Artifact', 30, False, False]
+    ['a_cache_py', 'Artifact', 31, False, False]
+    ['a_requirements', 'Artifact', 32, True, False]
+    ['a_fetch_py', 'Artifact', 33, False, False]
+
+##### Session 2 rounds (scheduler: promote, heal, then ready work per agent)
+
+----- round 1
+
+=== Q5 PROMOTE_READY  params={}
+MATCH (t:Task {state: 'blocked'})
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+WITH t, count(x) AS open WHERE open = 0
+SET t.state = 'ready'
+RETURN count(t) AS promoted
+--> 1 row(s)
+    [0]
+
+=== Q4b HEAL_FACTS  params={'session': 's2', 'tick': 41}
+MATCH (f:Fact {quarantined: true, healable: true})-[c:CONSOLIDATED_FROM]->(e:Episode)
+WHERE NOT (f)<-[:SUPERSEDES]-() AND NOT e.quarantined
+WITH f, c.claim AS claim, collect(e) AS eps ORDER BY size(eps) DESC, claim
+WITH f, collect({claim: claim, eps: eps}) AS groups
+WITH f, groups[0].claim AS best, reduce(n = 0, g IN groups | n + size(g.eps)) AS clean_total
+WHERE clean_total >= 2
+MATCH (f)<-[:AUTHORED]-(a:Agent)
+MERGE (s:Session {id: $session})
+CREATE (f2:Memory:Fact {id: f.id + '_v2', subject: f.subject, slot: f.slot, value: best,
+                        tick: $tick, quarantined: false,
+                        support_total: clean_total, support_clean: clean_total})
+CREATE (f2)-[:SUPERSEDES]->(f), (a)-[:AUTHORED]->(f2), (f2)-[:RAN_IN]->(s)
+WITH f, f2
+MATCH (f)-[c:CONSOLIDATED_FROM]->(e:Episode) WHERE NOT e.quarantined
+CREATE (f2)-[:CONSOLIDATED_FROM {claim: c.claim}]->(e)
+RETURN f2.id, f2.value, count(e) AS support
+--> 1 row(s)
+    ['f_http_client_v2', 'requests', 3]
+
+=== Q6 STARTUP planner  params={'me': 'planner'}
+MATCH (a:Agent {name: $me})-[:AUTHORED]->(m:Memory {quarantined: true})
+WHERE NOT (m)<-[:SUPERSEDES]-()
+OPTIONAL MATCH (t:Task)-[:REWORKS]->(m)
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+RETURN m.id AS memory, m.healable AS healable, t.id AS task, t.state AS state,
+       collect(x.id) AS waiting_on
+ORDER BY m.tick
+--> 1 row(s)
+    ['step_3', True, 'rework_step_3', 'blocked', []]
+
+=== Q6 STARTUP coder  params={'me': 'coder'}
+MATCH (a:Agent {name: $me})-[:AUTHORED]->(m:Memory {quarantined: true})
+WHERE NOT (m)<-[:SUPERSEDES]-()
+OPTIONAL MATCH (t:Task)-[:REWORKS]->(m)
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+RETURN m.id AS memory, m.healable AS healable, t.id AS task, t.state AS state,
+       collect(x.id) AS waiting_on
+ORDER BY m.tick
+--> 1 row(s)
+    ['a_requirements', True, 'rework_a_requirements', 'blocked', ['step_3']]
+round 1 changes = 1
+
+----- round 2
+
+=== Q5 PROMOTE_READY  params={}
+MATCH (t:Task {state: 'blocked'})
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+WITH t, count(x) AS open WHERE open = 0
+SET t.state = 'ready'
+RETURN count(t) AS promoted
+--> 1 row(s)
+    [1]
+
+=== Q4b HEAL_FACTS  params={'session': 's2', 'tick': 42}
+MATCH (f:Fact {quarantined: true, healable: true})-[c:CONSOLIDATED_FROM]->(e:Episode)
+WHERE NOT (f)<-[:SUPERSEDES]-() AND NOT e.quarantined
+WITH f, c.claim AS claim, collect(e) AS eps ORDER BY size(eps) DESC, claim
+WITH f, collect({claim: claim, eps: eps}) AS groups
+WITH f, groups[0].claim AS best, reduce(n = 0, g IN groups | n + size(g.eps)) AS clean_total
+WHERE clean_total >= 2
+MATCH (f)<-[:AUTHORED]-(a:Agent)
+MERGE (s:Session {id: $session})
+CREATE (f2:Memory:Fact {id: f.id + '_v2', subject: f.subject, slot: f.slot, value: best,
+                        tick: $tick, quarantined: false,
+                        support_total: clean_total, support_clean: clean_total})
+CREATE (f2)-[:SUPERSEDES]->(f), (a)-[:AUTHORED]->(f2), (f2)-[:RAN_IN]->(s)
+WITH f, f2
+MATCH (f)-[c:CONSOLIDATED_FROM]->(e:Episode) WHERE NOT e.quarantined
+CREATE (f2)-[:CONSOLIDATED_FROM {claim: c.claim}]->(e)
+RETURN f2.id, f2.value, count(e) AS support
+--> 0 row(s)
+
+=== Q6 STARTUP planner  params={'me': 'planner'}
+MATCH (a:Agent {name: $me})-[:AUTHORED]->(m:Memory {quarantined: true})
+WHERE NOT (m)<-[:SUPERSEDES]-()
+OPTIONAL MATCH (t:Task)-[:REWORKS]->(m)
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+RETURN m.id AS memory, m.healable AS healable, t.id AS task, t.state AS state,
+       collect(x.id) AS waiting_on
+ORDER BY m.tick
+--> 1 row(s)
+    ['step_3', True, 'rework_step_3', 'ready', []]
+
+=== Q8 CLAIM  params={'task': 'rework_step_3', 'me': 'planner', 'now': 43, 'lease': 5, 'session': 's2'}
+MATCH (t:Task {id: $task}), (a:Agent {name: $me})
+OPTIONAL MATCH (t)-[c:CLAIMED_BY]->(holder)
+WITH t, a, c, holder
+WHERE t.state IN ['ready', 'claimed'] AND (c IS NULL OR c.lease_until < $now)
+DELETE c
+CREATE (t)-[:CLAIMED_BY {lease_until: $now + $lease, session: $session}]->(a)
+SET t.state = 'claimed'
+RETURN t.id, holder.name AS taken_over_from
+--> 1 row(s)
+    ['rework_step_3', None]
+    rework() wrote step_3_v2 reads=['f_http_client_v2', 'f_deps']
+
+=== Q8b COMPLETE  params={'task': 'rework_step_3', 'me': 'planner', 'tick': 43}
+MATCH (t:Task {id: $task})-[c:CLAIMED_BY]->(:Agent {name: $me})
+SET t.state = 'done', t.done_tick = $tick
+DELETE c
+RETURN t.id
+--> 1 row(s)
+    ['rework_step_3']
+
+=== Q6 STARTUP coder  params={'me': 'coder'}
+MATCH (a:Agent {name: $me})-[:AUTHORED]->(m:Memory {quarantined: true})
+WHERE NOT (m)<-[:SUPERSEDES]-()
+OPTIONAL MATCH (t:Task)-[:REWORKS]->(m)
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+RETURN m.id AS memory, m.healable AS healable, t.id AS task, t.state AS state,
+       collect(x.id) AS waiting_on
+ORDER BY m.tick
+--> 1 row(s)
+    ['a_requirements', True, 'rework_a_requirements', 'blocked', []]
+round 2 changes = 2
+
+----- round 3
+
+=== Q5 PROMOTE_READY  params={}
+MATCH (t:Task {state: 'blocked'})
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+WITH t, count(x) AS open WHERE open = 0
+SET t.state = 'ready'
+RETURN count(t) AS promoted
+--> 1 row(s)
+    [1]
+
+=== Q4b HEAL_FACTS  params={'session': 's2', 'tick': 44}
+MATCH (f:Fact {quarantined: true, healable: true})-[c:CONSOLIDATED_FROM]->(e:Episode)
+WHERE NOT (f)<-[:SUPERSEDES]-() AND NOT e.quarantined
+WITH f, c.claim AS claim, collect(e) AS eps ORDER BY size(eps) DESC, claim
+WITH f, collect({claim: claim, eps: eps}) AS groups
+WITH f, groups[0].claim AS best, reduce(n = 0, g IN groups | n + size(g.eps)) AS clean_total
+WHERE clean_total >= 2
+MATCH (f)<-[:AUTHORED]-(a:Agent)
+MERGE (s:Session {id: $session})
+CREATE (f2:Memory:Fact {id: f.id + '_v2', subject: f.subject, slot: f.slot, value: best,
+                        tick: $tick, quarantined: false,
+                        support_total: clean_total, support_clean: clean_total})
+CREATE (f2)-[:SUPERSEDES]->(f), (a)-[:AUTHORED]->(f2), (f2)-[:RAN_IN]->(s)
+WITH f, f2
+MATCH (f)-[c:CONSOLIDATED_FROM]->(e:Episode) WHERE NOT e.quarantined
+CREATE (f2)-[:CONSOLIDATED_FROM {claim: c.claim}]->(e)
+RETURN f2.id, f2.value, count(e) AS support
+--> 0 row(s)
+
+=== Q6 STARTUP planner  params={'me': 'planner'}
+MATCH (a:Agent {name: $me})-[:AUTHORED]->(m:Memory {quarantined: true})
+WHERE NOT (m)<-[:SUPERSEDES]-()
+OPTIONAL MATCH (t:Task)-[:REWORKS]->(m)
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+RETURN m.id AS memory, m.healable AS healable, t.id AS task, t.state AS state,
+       collect(x.id) AS waiting_on
+ORDER BY m.tick
+--> 0 row(s)
+
+=== Q6 STARTUP coder  params={'me': 'coder'}
+MATCH (a:Agent {name: $me})-[:AUTHORED]->(m:Memory {quarantined: true})
+WHERE NOT (m)<-[:SUPERSEDES]-()
+OPTIONAL MATCH (t:Task)-[:REWORKS]->(m)
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+RETURN m.id AS memory, m.healable AS healable, t.id AS task, t.state AS state,
+       collect(x.id) AS waiting_on
+ORDER BY m.tick
+--> 1 row(s)
+    ['a_requirements', True, 'rework_a_requirements', 'ready', []]
+
+=== Q8 CLAIM  params={'task': 'rework_a_requirements', 'me': 'coder', 'now': 45, 'lease': 5, 'session': 's2'}
+MATCH (t:Task {id: $task}), (a:Agent {name: $me})
+OPTIONAL MATCH (t)-[c:CLAIMED_BY]->(holder)
+WITH t, a, c, holder
+WHERE t.state IN ['ready', 'claimed'] AND (c IS NULL OR c.lease_until < $now)
+DELETE c
+CREATE (t)-[:CLAIMED_BY {lease_until: $now + $lease, session: $session}]->(a)
+SET t.state = 'claimed'
+RETURN t.id, holder.name AS taken_over_from
+--> 1 row(s)
+    ['rework_a_requirements', None]
+    rework() wrote a_requirements_v2 reads=['step_3_v2', 'step_1']
+
+=== Q8b COMPLETE  params={'task': 'rework_a_requirements', 'me': 'coder', 'tick': 45}
+MATCH (t:Task {id: $task})-[c:CLAIMED_BY]->(:Agent {name: $me})
+SET t.state = 'done', t.done_tick = $tick
+DELETE c
+RETURN t.id
+--> 1 row(s)
+    ['rework_a_requirements']
+round 3 changes = 2
+
+----- round 4
+
+=== Q5 PROMOTE_READY  params={}
+MATCH (t:Task {state: 'blocked'})
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+WITH t, count(x) AS open WHERE open = 0
+SET t.state = 'ready'
+RETURN count(t) AS promoted
+--> 1 row(s)
+    [0]
+
+=== Q4b HEAL_FACTS  params={'session': 's2', 'tick': 46}
+MATCH (f:Fact {quarantined: true, healable: true})-[c:CONSOLIDATED_FROM]->(e:Episode)
+WHERE NOT (f)<-[:SUPERSEDES]-() AND NOT e.quarantined
+WITH f, c.claim AS claim, collect(e) AS eps ORDER BY size(eps) DESC, claim
+WITH f, collect({claim: claim, eps: eps}) AS groups
+WITH f, groups[0].claim AS best, reduce(n = 0, g IN groups | n + size(g.eps)) AS clean_total
+WHERE clean_total >= 2
+MATCH (f)<-[:AUTHORED]-(a:Agent)
+MERGE (s:Session {id: $session})
+CREATE (f2:Memory:Fact {id: f.id + '_v2', subject: f.subject, slot: f.slot, value: best,
+                        tick: $tick, quarantined: false,
+                        support_total: clean_total, support_clean: clean_total})
+CREATE (f2)-[:SUPERSEDES]->(f), (a)-[:AUTHORED]->(f2), (f2)-[:RAN_IN]->(s)
+WITH f, f2
+MATCH (f)-[c:CONSOLIDATED_FROM]->(e:Episode) WHERE NOT e.quarantined
+CREATE (f2)-[:CONSOLIDATED_FROM {claim: c.claim}]->(e)
+RETURN f2.id, f2.value, count(e) AS support
+--> 0 row(s)
+
+=== Q6 STARTUP planner  params={'me': 'planner'}
+MATCH (a:Agent {name: $me})-[:AUTHORED]->(m:Memory {quarantined: true})
+WHERE NOT (m)<-[:SUPERSEDES]-()
+OPTIONAL MATCH (t:Task)-[:REWORKS]->(m)
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+RETURN m.id AS memory, m.healable AS healable, t.id AS task, t.state AS state,
+       collect(x.id) AS waiting_on
+ORDER BY m.tick
+--> 0 row(s)
+
+=== Q6 STARTUP coder  params={'me': 'coder'}
+MATCH (a:Agent {name: $me})-[:AUTHORED]->(m:Memory {quarantined: true})
+WHERE NOT (m)<-[:SUPERSEDES]-()
+OPTIONAL MATCH (t:Task)-[:REWORKS]->(m)
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+RETURN m.id AS memory, m.healable AS healable, t.id AS task, t.state AS state,
+       collect(x.id) AS waiting_on
+ORDER BY m.tick
+--> 0 row(s)
+round 4 changes = 0
+
+=== RED_WAVE (after Session 2)  params={}
+MATCH (m:Memory)
+OPTIONAL MATCH (m)<-[:SUPERSEDES]-(r:Memory)
+RETURN m.id AS id, labels(m)[1] AS kind, m.tick AS tick, m.quarantined AS red, count(r) > 0 AS superseded
+ORDER BY m.tick
+--> 28 row(s)
+    ['ep_1', 'Episode', 1, False, False]
+    ['ep_2', 'Episode', 2, False, False]
+    ['ep_3', 'Episode', 3, False, False]
+    ['ep_4', 'Episode', 4, False, False]
+    ['ep_5', 'Episode', 5, False, False]
+    ['ep_6', 'Episode', 6, False, False]
+    ['ep_7a', 'Episode', 7, True, False]
+    ['ep_7b', 'Episode', 8, True, False]
+    ['ep_8', 'Episode', 9, False, False]
+    ['f_goal', 'Fact', 10, False, False]
+    ['f_http_client', 'Fact', 11, True, True]
+    ['f_http_pin', 'Fact', 12, True, False]
+    ['f_http_usage', 'Fact', 13, False, False]
+    ['f_api', 'Fact', 14, False, False]
+    ['f_deps', 'Fact', 15, False, False]
+    ['f_cache', 'Fact', 16, False, False]
+    ['step_1', 'PlanStep', 20, False, False]
+    ['step_2', 'PlanStep', 21, False, False]
+    ['step_3', 'PlanStep', 22, True, True]
+    ['step_4', 'PlanStep', 23, False, False]
+    ['step_5', 'PlanStep', 24, False, False]
+    ['a_scaffold', 'Artifact', 30, False, False]
+    ['a_cache_py', 'Artifact', 31, False, False]
+    ['a_requirements', 'Artifact', 32, True, True]
+    ['a_fetch_py', 'Artifact', 33, False, False]
+    ['f_http_client_v2', 'Fact', 41, False, False]
+    ['step_3_v2', 'PlanStep', 43, False, False]
+    ['a_requirements_v2', 'Artifact', 45, False, False]
+
+=== COUNT_MEMORIES (after Session 2)  params={}
+MATCH (m:Memory) RETURN count(m) AS n
+--> 1 row(s)
+    [28]
+
+=== AUDIT_NO_FORWARD_INFLUENCE  params={}
+MATCH (m:Memory)-[:INFLUENCED_BY]->(x:Memory) WHERE x.tick >= m.tick RETURN count(*) AS bad
+--> 1 row(s)
+    [0]
+
+=== AUDIT_CLEAN_NEVER_CITES_QUARANTINED  params={}
+MATCH (m:Memory {quarantined: false})-[:INFLUENCED_BY|CONSOLIDATED_FROM]->(x:Memory {quarantined: true}) RETURN count(*) AS bad
+--> 1 row(s)
+    [0]
+
+=== AUDIT_CLOSURE_IS_CLOSED  params={}
+MATCH (x:Memory {quarantined: true})<-[:INFLUENCED_BY|CONSOLIDATED_FROM]-(m:Memory {quarantined: false}) RETURN count(*) AS bad
+--> 1 row(s)
+    [0]
+
+=== lineage kept: superseded chain  params={}
+MATCH (n:Memory)-[:SUPERSEDES]->(o:Memory) RETURN n.id, o.id, o.quarantined, n.quarantined ORDER BY n.tick
+--> 3 row(s)
+    ['f_http_client_v2', 'f_http_client', True, False]
+    ['step_3_v2', 'step_3', True, False]
+    ['a_requirements_v2', 'a_requirements', True, False]
