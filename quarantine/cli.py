@@ -9,6 +9,7 @@ Everything is the same statements tests/test_quarantine.py asserts; this file on
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 import time
 
@@ -111,8 +112,14 @@ def kill_planner(g, task: str, tick: int) -> int:
     def claim(now: int, session: str):
         return q(g, Q.CLAIM, task=task, me="planner", now=now, lease=LEASE, session=session)
 
-    must(claim(tick, "s2"), f"planner could not claim {task}")
-    say(f"  planner claimed {task} (session s2, lease until tick {tick + LEASE}) ... killed (no COMPLETE)")
+    # A real separate process claims the task and hangs; we SIGKILL it. Nothing of it survives except the graph.
+    child = subprocess.Popen([sys.executable, "-m", "quarantine.cli", "hold", "--graph", g.name,
+                              "--task", task, "--tick", str(tick)], stdout=subprocess.PIPE, text=True)
+    first = child.stdout.readline().strip()
+    must(first == "held", f"planner process could not claim {task}: {first!r}")
+    child.kill()
+    child.wait()
+    say(f"  planner (process {child.pid}, session s2) claimed {task}, lease until tick {tick + LEASE} ... kill -9, exit {child.returncode}")
     for memory, _h, t, state, waiting in q(g, Q.STARTUP, me="coder"):
         say("  " + startup_line("coder", memory, t, state, waiting))
 
@@ -175,6 +182,16 @@ def session2(args) -> None:
     say(f"fixpoint: rounds {changes}, {q(g, Q.COUNT_MEMORIES)[0][0]} memories")
 
 
+def hold(args) -> None:
+    """Claim a rework task as the Planner (session s2), then sleep until killed."""
+    g = connect(args.graph)
+    if not q(g, Q.CLAIM, task=args.task, me="planner", now=args.tick, lease=LEASE, session="s2"):
+        print("refused", flush=True)
+        sys.exit(1)
+    print("held", flush=True)
+    time.sleep(300)
+
+
 # ---------------------------------------------------------------- argparse
 def main(argv: list[str] | None = None) -> None:
     common = argparse.ArgumentParser(add_help=False)
@@ -191,6 +208,11 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("doc")
     p.add_argument("--reason", help="advisory text (default: the fixture's)")
     p.set_defaults(run=flag)
+
+    p = sub.add_parser("hold", parents=[common])        # internal: the process --kill-planner kills
+    p.add_argument("--task", required=True)
+    p.add_argument("--tick", type=int, required=True)
+    p.set_defaults(run=hold)
 
     p = sub.add_parser("session2", parents=[common], help="heal and rework to a fixpoint")
     p.add_argument("--kill-planner", action="store_true", help="kill the planner mid-rework; show lease takeover")

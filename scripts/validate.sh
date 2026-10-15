@@ -55,6 +55,7 @@ case "$out" in *"healed f_http_pin"*) bad "session2 must not heal the version pi
 uv run quarantine session1 --graph validate >/dev/null
 uv run quarantine flag doc_7 --graph validate >/dev/null
 out="$(uv run quarantine session2 --kill-planner --graph validate)"
+has "$out" "kill -9, exit -9" "kill-planner: the planner process is really SIGKILLed"
 has "$out" "claim refused at tick" "kill-planner: live lease refuses a second claim"
 has "$out" "took over lease from planner" "kill-planner: new process takes over expired lease"
 has "$out" "rounds [1, 2, 2, 0]" "kill-planner: same fixpoint"
