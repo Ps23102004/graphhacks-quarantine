@@ -23,7 +23,7 @@ SRC = Path(__file__).resolve().parent.parent
 MUTATIONS = [
     ("closure ignores read-set edges",        "quarantine/queries.py", "EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..10]-(m:Memory)\nSET m.quarantined", "EXTRACTED_FROM|CONSOLIDATED_FROM*1..10]-(m:Memory)\nSET m.quarantined"),
     ("closure depth capped at 1 hop",         "quarantine/queries.py", "INFLUENCED_BY*1..10]-(m:Memory)\nSET m.quarantined", "INFLUENCED_BY*1..1]-(m:Memory)\nSET m.quarantined"),
-    ("heal threshold 2 -> 1 clean episode",   "quarantine/queries.py", "WHEN m:Fact THEN clean >= 2", "WHEN m:Fact THEN clean >= 1"),
+    ("heal threshold 2 -> 1 clean episode",   "quarantine/queries.py", "WHEN m:Fact THEN best >= 2 AND best > second", "WHEN m:Fact THEN best >= 1 AND best > second"),
     ("heal rule drops its own size check (equivalent mutant: the healable flag already guards it)",         "quarantine/queries.py", "WHERE size(agree) >= 2\nMATCH (f)<-[:AUTHORED]", "WHERE size(agree) >= 0\nMATCH (f)<-[:AUTHORED]"),
     ("episodes become healable",              "quarantine/queries.py", "WHEN m:Episode THEN false", "WHEN m:Episode THEN true"),
     ("rework not blocked by healable inputs", "quarantine/queries.py", "x:Memory {quarantined: true, healable: true})\nMERGE (t)-[:BLOCKED_BY]", "x:Memory {quarantined: true, healable: false})\nMERGE (t)-[:BLOCKED_BY]"),

@@ -296,8 +296,9 @@ def test_heal_takes_a_strict_plurality_and_counts_only_agreeing_episodes(g, fx):
     _synthetic_fact(g, "f_plural", ["zzz", "zzz", "aaa"])
     _synthetic_fact(g, "f_tie", ["zzz", "aaa"])
     _synthetic_fact(g, "f_lone", ["zzz"])
+    _synthetic_fact(g, "f_tie22", ["zzz", "zzz", "aaa", "aaa"])        # two claims, two supporters each: no winner
     rows = {r[0]: r for r in q(g, Q.SUPPORT_AND_HEALABLE)}
-    assert [rows[f][2] for f in ("f_plural", "f_tie", "f_lone")] == [True, False, False]
+    assert [rows[f][2] for f in ("f_plural", "f_tie", "f_lone", "f_tie22")] == [True, False, False, False]
     healed = q(g, Q.HEAL_FACTS, session="s2", tick=41)
     assert healed == [["f_plural_v2", "zzz", 2]]                        # support is the two that agree, not all three
     assert q(g, "MATCH (:Fact {id: 'f_plural_v2'})-[c:CONSOLIDATED_FROM]->() RETURN count(c)")[0][0] == 2
@@ -311,8 +312,6 @@ def test_zombie_complete_cannot_close_a_task_and_rework_is_idempotent(g, fx):
     assert q(g, Q.CLAIM, task="rework_step_3", me="planner", now=50, lease=5, session="s2")
     assert q(g, Q.CLAIM, task="rework_step_3", me="coder", now=60, lease=5, session="s2c") == []   # not its author
     assert q(g, Q.CLAIM, task="rework_step_3", me="planner", now=56, lease=5, session="s2b")      # takeover
-    # the dead process wakes up: wrong session, and no replacement written yet
-    assert q(g, Q.COMPLETE, task="rework_step_3", me="planner", tick=57, now=57, session="s2") == []
     # the live holder cannot close it without writing the replacement first
     assert q(g, Q.COMPLETE, task="rework_step_3", me="planner", tick=57, now=57, session="s2b") == []
     assert q(g, "MATCH (t:Task {id: 'rework_step_3'}) RETURN t.state")[0][0] == "claimed"
@@ -322,6 +321,9 @@ def test_zombie_complete_cannot_close_a_task_and_rework_is_idempotent(g, fx):
     assert q(g, "MATCH (m:Memory {id: 'step_3_v2'}) RETURN count(m)")[0][0] == 1
     assert read_set(g, "step_3_v2") == set(spec["reads"])
     assert q(g, "MATCH (:Memory {id: 'step_3_v2'})-[r:INFLUENCED_BY]->() RETURN count(r)")[0][0] == len(spec["reads"])
+    # the replacement now exists, but the dead process (old session) still cannot close the task
+    assert q(g, Q.COMPLETE, task="rework_step_3", me="planner", tick=58, now=58, session="s2") == []
+    assert q(g, "MATCH (t:Task {id: 'rework_step_3'}) RETURN t.state")[0][0] == "claimed"
     assert q(g, Q.COMPLETE, task="rework_step_3", me="planner", tick=58, now=58, session="s2b")
     assert q(g, Q.PROMOTE_READY)[0][0] == 1                                                        # Coder unblocks
 
