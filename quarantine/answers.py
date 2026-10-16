@@ -14,9 +14,20 @@ Rules this file enforces (see docs/GUIDELINE-CONFORMANCE.md):
 from __future__ import annotations
 
 from quarantine import queries as Q
-from quarantine.loader import rq
+from quarantine.loader import rq as _rq
 
 PROVENANCE = "INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM"
+
+def rq(g, cypher: str, **params) -> list:
+    """Read-only query that treats a graph which does not exist yet as empty (RO_QUERY never creates a key)."""
+    try:
+        return _rq(g, cypher, **params)
+    except Exception as e:  # noqa: BLE001
+        msg = str(e).lower()
+        if "empty key" in msg or "not exist" in msg:
+            return []
+        raise
+
 
 # ---------------------------------------------------------------- shapes
 def shape_path(answer: str, hops: list[str], via: list[str]) -> dict:
@@ -55,7 +66,7 @@ def sentence(hops: list[str], via: list[str]) -> str:
 
 # ---------------------------------------------------------------- resolvers (run before any query)
 def resolve_memory(g, memory_id: str) -> dict | None:
-    rows = rq(g, "MATCH (m:Memory {id: $id})<-[:AUTHORED]-(a:Agent) OPTIONAL MATCH (m)-[:RAN_IN]->(s:Session) "
+    rows = rq(g, "MATCH (m:Memory {id: $id}) OPTIONAL MATCH (m)<-[:AUTHORED]-(a:Agent) OPTIONAL MATCH (m)-[:RAN_IN]->(s:Session) "
                  "RETURN m.id, labels(m)[1], m.tick, s.id, a.name, m.quarantined, m.text, m.value", id=memory_id)
     if not rows:
         return None

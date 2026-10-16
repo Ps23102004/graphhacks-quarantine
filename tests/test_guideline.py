@@ -84,7 +84,7 @@ def test_rule2_reads_use_ro_query_and_one_graph_per_tenant(fx):
             pass
     # (b) every read-only catalog function and every page/MCP read goes through rq / ro_query
     src = (ROOT / "quarantine" / "answers.py").read_text()
-    assert " q(" not in src and "rq(" in src
+    assert " q(" not in src and "_rq(" in src and "import rq as _rq" in src
     for path in ("web/server.py", "quarantine/mcp_server.py", "quarantine/agent_runtime.py"):
         assert "ro_query" in (ROOT / path).read_text(), path
     # (c) tenant isolation: two crews in two graphs, an advisory in one never touches the other
