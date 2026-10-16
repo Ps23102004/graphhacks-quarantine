@@ -12,15 +12,15 @@ Deadline Sun 2026-10-18 14:29 EDT; submit target Sun 12:00 EDT. Full schedule an
 | page test (`tests/test_web.py`) | done |
 | README body, LICENSE, disclosure, deploy, MCP beat, video, blog, submission | not started |
 
-## Who does what
+## Who does what (re-split Fri 2026-10-16 by Parth)
 
-| person | role | owns | hours | first task |
-|---|---|---|---|---|
-| **Aashna** | graph + harness + deploy | spikes S13-S16 (DAY1-SPIKES.md), MCP beat (agent writes its own Cypher; read-only credential), VM + Docker compose + Caddy deploy, review of every query change against `fixture.yaml` numbers | ~13 | run the four README commands on her own laptop from a fresh clone, then S13/S15 |
-| **Parth** | page + video + integration | page polish (labels, fonts, projector-readable sizes, a "reset" for retakes), the 3-minute video (script in PLAN.md section 6, three takes, cut, captions), final integration checks D1/D2/D3, vibecoding the page with Claude | ~14 | polish the page against the video script beats; record take 1 rough on Fri |
-| **Aman** | paper, legal, submission | README body (pitch, schema diagram, three numbers, limits, "why not Graphiti"), LICENSE (MIT), AI-use disclosure, rules-compliance checklist (new work built in window, FalkorDB primary and central, team locks on submit, "source-available SSPL" wording, no secrets in git), blog post (AirPods side prize), the submission form and confirmation screenshot, and the final read of README as a stranger | ~12 | read `README.md` + PLAN.md sections 1, 7, 9; draft README body and disclosure |
+| person | role | owns | first task |
+|---|---|---|---|
+| **Parth** | build: adding things | the page, the CLI, new features, the video; works on branch `improve` with Claude; `freeze-v1` tag is the fallback | finish the video script with the four answer shapes and the orange "what a naive wipe loses" view |
+| **Aashna** | review, fixes, testing | reviews every commit on `improve` before it merges to main; runs `uv run pytest -q` (76), `scripts/validate.sh`, `scripts/mutation_check.py`, `scripts/heldout_eval.py`; owns the fresh-clone run on her laptop and the compose check; files bugs as failing tests | fresh clone + full validation on her machine; then review `quarantine/answers.py` against `docs/GUIDELINE-CONFORMANCE.md` |
+| **Aman** | research and paper work | README body, LICENSE, AI-use disclosure, rules compliance ("source-available (SSPL)", new work in window, team locks at submit), the blog post, the submission form; researches the organizers' guide and FalkorDB docs so every claim in the README cites something | read `docs/GUIDELINE-CONFORMANCE.md` and `docs/EVAL-HELDOUT.md`; draft the README sections that cite them; confirm the kickoff email's guide text against our paraphrase |
 
-Cross-review rule: whoever wrote a query never signs it off alone. Aashna reviews Parth's page server; Parth reads Aman's README by running every command in it; Aman reads the video script against the rules.
+Merge rule: nothing lands on `main` without Aashna's review and a green `scripts/validate.sh`. Parth does not merge his own branch.
 
 ## Checkpoints (EDT)
 

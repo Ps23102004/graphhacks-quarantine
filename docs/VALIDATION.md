@@ -1,6 +1,6 @@
 # VALIDATION — status of the Quarantine build (Helix-style)
 
-Updated Thu 2026-10-15. Re-fill the "status" column after every change; do not record a pass you did not just see.
+Updated Fri 2026-10-16 (branch `improve`; `freeze-v1` tag = the Thursday baseline). Re-fill the "status" column after every change; do not record a pass you did not just see.
 
 | field | value |
 |---|---|
@@ -14,8 +14,10 @@ Updated Thu 2026-10-15. Re-fill the "status" column after every change; do not r
 | check | command | result |
 |---|---|---|
 | unit + integration | `uv run pytest -q` | 52 passed |
-| fresh clone, throwaway FalkorDB, real CLI + page | `scripts/validate.sh` | 22 passed, 0 failed |
-| mutation check (tests catch breakage) | `uv run python scripts/mutation_check.py` | 22 mutations, 0 unexpected survivors; 1 documented equivalent mutant (redundant size check in the heal query) |
+| fresh clone, throwaway FalkorDB, real CLI + page | `scripts/validate.sh` | not re-run since the guide changes: run before merging `improve` |
+| mutation check (tests catch breakage) | `uv run python scripts/mutation_check.py` | 30 mutations; last full run pending (see below) |
+| held-out worlds vs independent oracle | `uv run python scripts/heldout_eval.py` | 3 x 2645 cases, 0 mismatches; 3 x 878 full-pipeline runs, 0 violations (`docs/EVAL-HELDOUT.md`) |
+| organizers' guide + Track 02 bar | `uv run pytest -q tests/test_guideline.py tests/test_track02_bar.py` | 12 passed (`docs/GUIDELINE-CONFORMANCE.md`) |
 | independent review (different model, read-only, did not write the code) | Opus 5.5 subagent, 2026-10-15 | 14 findings (2 blockers, 8 should-fix, 4 nits); see below |
 
 "Fail-to-pass" evidence: each new test was written against the unfixed behaviour the reviewer reported (or against a surviving mutant) and the mutation check shows it goes red when the fix is removed.

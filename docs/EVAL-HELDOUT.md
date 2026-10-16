@@ -20,6 +20,18 @@ Seeds 1000 and up for this report; the test suite uses 2000+ and 3000+. The seed
 
 "Precise quarantine" is the mean share of a world's memories that the graph quarantines. The naive columns are the mean share each policy would discard. "Clean lost" is the share of the world's non-poisoned memories that policy throws away.
 
+## Whole Session 2 on unseen worlds
+
+The same runner also executes the full repair: flag, closure, heal, claim with leases, rework derived from the graph (`loader.derive_rework`: keep clean reads, swap quarantined reads for their healed twins, drop reads that can never heal), to a fixpoint. Invariants checked per run: the set of twins equals what the oracle predicts (every tainted step/artifact plus every healable fact), every task reaches `done`, the three audit queries return 0, and the unreplaced quarantined set is exactly the episodes plus the unhealable facts.
+
+| world model | worlds | (world, doc) runs | invariant violations |
+|---|---|---|---|
+| declared read sets | 100 | 878 | 0 |
+| cumulative context | 100 | 878 | 0 |
+| deep chains | 100 | 878 | 0 |
+
+Two more bugs this found: a step whose inputs were all poisoned beyond repair had an empty read set, and the rework write (an `UNWIND` over nothing) returned no row and raised; and the first version of derived rework copied the quarantined memory's text into the clean twin (flagged by security review as poison laundering). Now a twin with no inputs is marked `ungrounded`, and a derived twin carries a placeholder flagged `needs_regeneration` until an agent supplies real content.
+
 ## A real bug this found
 
 A hop bound in the closure query (`*1..10`) silently left poisoned memories deeper than ten hops marked clean. The random worlds did not hit it (they have short alternative paths), but a hand-built chain world did: with 9 chained steps the graph already missed the last step and the artifact, which would then keep being used. Fixed by removing the bound (the graph is a DAG because reads only point backwards in time), with a regression test on a 40-step chain and mutation checks that fail if any of the closure, per-agent baseline or receipt is bounded again.
