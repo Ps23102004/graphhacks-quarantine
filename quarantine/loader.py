@@ -92,10 +92,21 @@ def validate_fixture(fx: dict) -> None:
 
 
 def connect(name: str = "quarantine", host: str | None = None, port: int | None = None) -> Graph:
-    """FALKORDB_HOST/PORT let containers, tests, and scripts override connection parameters."""
-    h = host if host is not None else os.environ.get("FALKORDB_HOST", "localhost")
-    p = port if port is not None else int(os.environ.get("FALKORDB_PORT", 6379))
-    return FalkorDB(host=h, port=p).select_graph(name)
+    """Local to live by environment only (organizers' guide): FALKORDB_HOST/PORT for the Docker image,
+    plus FALKORDB_USERNAME/FALKORDB_PASSWORD and FALKORDB_TLS=1 for FalkorDB Cloud. Same code either way."""
+    return FalkorDB(**connection_kwargs(host, port)).select_graph(name)
+
+
+def connection_kwargs(host: str | None = None, port: int | None = None) -> dict:
+    kw: dict = {"host": host if host is not None else os.environ.get("FALKORDB_HOST", "localhost"),
+                "port": port if port is not None else int(os.environ.get("FALKORDB_PORT", 6379))}
+    if os.environ.get("FALKORDB_USERNAME"):
+        kw["username"] = os.environ["FALKORDB_USERNAME"]
+    if os.environ.get("FALKORDB_PASSWORD"):
+        kw["password"] = os.environ["FALKORDB_PASSWORD"]
+    if os.environ.get("FALKORDB_TLS", "").lower() in ("1", "true", "yes"):
+        kw["ssl"] = True
+    return kw
 
 
 def q(g: Graph, cypher: str, **params):

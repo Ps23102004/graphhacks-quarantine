@@ -18,6 +18,7 @@ import time
 
 from quarantine import queries as Q
 from quarantine.agent_runtime import recovery_status
+from quarantine.answers import sentence
 from quarantine.loader import connect, derive_rework, load, q, read_fixture, rework, validate_fixture
 
 LEASE = 5
@@ -115,6 +116,7 @@ def flag(args) -> None:
         hops, length, via = q(g, Q.RECEIPT, **{"from": aid, "doc": args.doc})[0]
         chain = hops[0] + "".join(f" -{t}-> {h}" for t, h in zip(via, hops[1:]))
         say(f"receipt {aid} ({length} hops): {chain}")
+        say(f"  in words: {sentence(hops, via)}")
 
 
 # ---------------------------------------------------------------- session 2

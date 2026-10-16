@@ -14,6 +14,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from quarantine import queries as Q
+from quarantine.answers import why_quarantined
 from quarantine.loader import connect, q
 
 HERE = Path(__file__).resolve().parent
@@ -70,12 +71,11 @@ def snapshot(g) -> dict:
 
 
 def receipt(g, mid: str) -> dict | None:
-    for (doc,) in _read_query(g, "MATCH (d:Doc {flagged: true}) RETURN d.id ORDER BY d.id"):
-        rows = _read_query(g, Q.RECEIPT, **{"from": mid, "doc": doc})
-        if rows and rows[0][0]:                                         # first flagged doc this memory actually reaches
-            hops, length, via = rows[0]
-            return dict(hops=hops, len=length, via=via)
-    return None
+    """Page receipt: the guide's answer shape plus the fields the page already reads (hops/len/via)."""
+    out = why_quarantined(g, mid)
+    if out["shape"] != "path":
+        return None if out["shape"] == "not_in_graph" else {"error": out["answer"], "shape": out["shape"]}
+    return dict(hops=out["hops"], len=out["length"], via=out["via"], sentence=out["sentence"], shape="path")
 
 
 def get_allowed_hosts() -> set[str]:

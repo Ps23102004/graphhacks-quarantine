@@ -1,4 +1,8 @@
-"""MCP tool server exposing read-only Cypher inspection for Quarantine.
+"""MCP tool server: a fixed, read-only tool catalog over the Quarantine graph.
+
+The agent never writes Cypher. Every tool runs a human-written query from quarantine/answers.py or
+quarantine/queries.py through the read-only path, resolves its arguments against the graph first, and
+answers in one of four shapes: path, memory, not_in_graph, unknown.
 
 Run:
     uv run python -m quarantine.mcp_server
@@ -7,6 +11,10 @@ from __future__ import annotations
 
 import os
 from mcp.server.fastmcp import FastMCP
+from quarantine.answers import blast_radius as _blast_radius
+from quarantine.answers import recall as _recall
+from quarantine.answers import why_connected as _why_connected
+from quarantine.answers import why_quarantined
 from quarantine.loader import connect
 
 mcp = FastMCP("quarantine-memory")
@@ -48,22 +56,43 @@ def inspect_quarantined_memories() -> list[dict]:
 
 @mcp.tool()
 def trace_provenance_receipt(memory_id: str) -> dict:
-    """Trace shortestPath provenance from memory back to flagged prompt-injected document."""
+    """Why is this memory quarantined? Answer shapes: path (hops + sentence), not_in_graph (clean memory),
+    unknown (id does not resolve; nothing runs). The argument is resolved against the graph before any query."""
     if not memory_id or not isinstance(memory_id, str):
-        return {"error": f"Invalid memory_id: {memory_id!r}"}
-    g = connect(GRAPH_NAME)
-    query = """
-    MATCH (m:Memory {id: $id}), (d:Doc {flagged: true})
-    WITH shortestPath((m)-[:INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM*]->(d)) AS p
-    WHERE p IS NOT NULL
-    RETURN [n IN nodes(p) | n.id] AS hops, length(p) AS len, [r IN relationships(p) | type(r)] AS via
-    ORDER BY len ASC
-    LIMIT 1
-    """
-    rows = _ro_query(g, query, id=memory_id)
-    if not rows or not rows[0] or not rows[0][0]:
-        return {"error": f"No provenance path to flagged document for {memory_id}"}
-    return {"hops": rows[0][0], "length": rows[0][1], "edge_types": rows[0][2]}
+        return {"shape": "unknown", "error": f"Invalid memory_id: {memory_id!r}"}
+    out = why_quarantined(connect(GRAPH_NAME), memory_id)
+    if out["shape"] != "path":                                          # keep the error key older clients read
+        out["error"] = out["answer"] if out["shape"] == "unknown" else f"No provenance path to flagged document for {memory_id}"
+    else:
+        out["length"] = out["length"]; out["edge_types"] = out["via"]
+    return out
+
+
+@mcp.tool()
+def why_connected(from_id: str, to_id: str) -> dict:
+    """How does A lead to B? Weighted shortest path over provenance edges via algo.SPpaths (shortestPath fallback).
+    Both ids are resolved first: an unresolved id returns shape "unknown" and nothing runs."""
+    if not isinstance(from_id, str) or not isinstance(to_id, str) or not from_id or not to_id:
+        return {"shape": "unknown", "error": "from_id and to_id must be non-empty strings"}
+    return _why_connected(connect(GRAPH_NAME), from_id, to_id)
+
+
+@mcp.tool()
+def recall(memory_id: str) -> dict:
+    """What does this memory say? Answered from memory with when it was learned (tick, session, author),
+    or shape "unknown" if the id does not resolve."""
+    if not isinstance(memory_id, str) or not memory_id:
+        return {"shape": "unknown", "error": "memory_id must be a non-empty string"}
+    return _recall(connect(GRAPH_NAME), memory_id)
+
+
+@mcp.tool()
+def blast_radius(doc_id: str) -> dict:
+    """'And then': every memory derived from this document, read-only (what the harness would quarantine if flagged).
+    Shape not_in_graph when nothing derives from it; unknown when the document does not resolve."""
+    if not isinstance(doc_id, str) or not doc_id:
+        return {"shape": "unknown", "error": "doc_id must be a non-empty string"}
+    return _blast_radius(connect(GRAPH_NAME), doc_id)
 
 
 @mcp.tool()
