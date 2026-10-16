@@ -11,14 +11,14 @@ pytest.importorskip("mcp", reason="optional MCP SDK: run `uv sync --all-extras`"
 
 from quarantine.loader import connect, q
 
-PORT = int(os.environ.get("FALKORDB_PORT", 6393))
+PORT = int(os.environ.get("FALKORDB_PORT", 6379))
 GRAPH = "quarantine_mcp_test"
 
 
 @pytest.fixture(autouse=True)
-def clean_graph():
-    os.environ["QUARANTINE_GRAPH"] = GRAPH
-    os.environ["FALKORDB_PORT"] = str(PORT)
+def clean_graph(monkeypatch):
+    monkeypatch.setenv("QUARANTINE_GRAPH", GRAPH)                     # restored after each test: no leak into other files
+    monkeypatch.setenv("FALKORDB_PORT", str(PORT))
     g = connect(GRAPH, port=PORT)
     try:
         g.delete()

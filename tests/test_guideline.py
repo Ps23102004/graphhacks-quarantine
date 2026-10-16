@@ -79,6 +79,7 @@ def test_rule1_agent_never_writes_cypher_fixed_catalog_with_validation(g):
     # the MCP layer inherits the behaviour, including on non-string input
     import os
     import quarantine.mcp_server as srv
+    prev = os.environ.get("QUARANTINE_GRAPH")
     os.environ["QUARANTINE_GRAPH"] = "guideline_test"
     try:
         for bad in (None, 123, "", "\x00", "no_such"):
@@ -87,6 +88,8 @@ def test_rule1_agent_never_writes_cypher_fixed_catalog_with_validation(g):
                 assert fn(*args)["shape"] == "unknown", (bad, fn.__name__)
     finally:
         os.environ.pop("QUARANTINE_GRAPH", None)
+        if prev is not None:
+            os.environ["QUARANTINE_GRAPH"] = prev
 
 
 # ---------------------------------------------------------------- rule 2
@@ -220,6 +223,7 @@ def test_rule4_every_answer_is_one_of_four_shapes(g):
     import os
     import quarantine.mcp_server as srv
     from web.server import receipt
+    prev = os.environ.get("QUARANTINE_GRAPH")
     os.environ["QUARANTINE_GRAPH"] = "guideline_test"
     try:
         tool_calls = [(srv.inspect_quarantined_memories, ()), (srv.get_recovery_status, ()),
@@ -235,6 +239,8 @@ def test_rule4_every_answer_is_one_of_four_shapes(g):
         assert seen == shapes
     finally:
         os.environ.pop("QUARANTINE_GRAPH", None)
+        if prev is not None:
+            os.environ["QUARANTINE_GRAPH"] = prev
     assert receipt(g, "a_fetch_py")["shape"] == "not_in_graph"
     assert receipt(g, "a_requirements")["shape"] == "path" and receipt(g, "zzz")["shape"] == "unknown"
     # every catalog function only ever returns these four shapes, on good and bad inputs alike

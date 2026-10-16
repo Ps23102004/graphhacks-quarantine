@@ -12,13 +12,13 @@ import pytest
 from quarantine.loader import connect, q
 from web.server import make_handler
 
-PORT = int(os.environ.get("FALKORDB_PORT", 6393))
+PORT = int(os.environ.get("FALKORDB_PORT", 6379))
 GRAPH = "quarantine_http_test"
 
 
 @pytest.fixture
-def running_server():
-    os.environ["FALKORDB_PORT"] = str(PORT)
+def running_server(monkeypatch):
+    monkeypatch.setenv("FALKORDB_PORT", str(PORT))                     # restored after the test: no leak into other files
     g = connect(GRAPH, port=PORT)
     try:
         g.delete()
