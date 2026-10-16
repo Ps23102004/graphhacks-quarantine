@@ -21,8 +21,12 @@ SRC = Path(__file__).resolve().parent.parent
 
 # (what we break, file, exact old text, new text)
 MUTATIONS = [
-    ("closure ignores read-set edges",        "quarantine/queries.py", "EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..10]-(m:Memory)\nSET m.quarantined", "EXTRACTED_FROM|CONSOLIDATED_FROM*1..10]-(m:Memory)\nSET m.quarantined"),
-    ("closure depth capped at 1 hop",         "quarantine/queries.py", "INFLUENCED_BY*1..10]-(m:Memory)\nSET m.quarantined", "INFLUENCED_BY*1..1]-(m:Memory)\nSET m.quarantined"),
+    ("closure ignores read-set edges",        "quarantine/queries.py", "EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]-(m:Memory)\nSET m.quarantined", "EXTRACTED_FROM|CONSOLIDATED_FROM*1..]-(m:Memory)\nSET m.quarantined"),
+    ("closure depth capped at 1 hop",         "quarantine/queries.py", "INFLUENCED_BY*1..]-(m:Memory)\nSET m.quarantined", "INFLUENCED_BY*1..1]-(m:Memory)\nSET m.quarantined"),
+    ("closure bounded at 10 hops (the bug the held-out chain found)", "quarantine/queries.py", "INFLUENCED_BY*1..]-(m:Memory)\nSET m.quarantined", "INFLUENCED_BY*1..10]-(m:Memory)\nSET m.quarantined"),
+    ("per-agent baseline bounded at 10 hops", "quarantine/queries.py", "INFLUENCED_BY*1..]-(:Memory)<-[:AUTHORED]", "INFLUENCED_BY*1..10]-(:Memory)<-[:AUTHORED]"),
+    ("receipt bounded at 10 hops", "quarantine/queries.py", "EXTRACTED_FROM*]->(d)) AS p", "EXTRACTED_FROM*..10]->(d)) AS p"),
+    ("closure ignores consolidation edges", "quarantine/queries.py", "EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]-(m:Memory)\nSET m.quarantined", "EXTRACTED_FROM|INFLUENCED_BY*1..]-(m:Memory)\nSET m.quarantined"),
     ("heal threshold 2 -> 1 clean episode",   "quarantine/queries.py", "WHEN m:Fact THEN best >= 2 AND best > second", "WHEN m:Fact THEN best >= 1 AND best > second"),
     ("heal rule drops its own size check (equivalent mutant: the healable flag already guards it)",         "quarantine/queries.py", "WHERE size(agree) >= 2\nMATCH (f)<-[:AUTHORED]", "WHERE size(agree) >= 0\nMATCH (f)<-[:AUTHORED]"),
     ("episodes become healable",              "quarantine/queries.py", "WHEN m:Episode THEN false", "WHEN m:Episode THEN true"),

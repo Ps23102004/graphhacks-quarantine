@@ -54,7 +54,7 @@ def trace_provenance_receipt(memory_id: str) -> dict:
     g = connect(GRAPH_NAME)
     query = """
     MATCH (m:Memory {id: $id}), (d:Doc {flagged: true})
-    WITH shortestPath((m)-[:INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM*..10]->(d)) AS p
+    WITH shortestPath((m)-[:INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM*]->(d)) AS p
     WHERE p IS NOT NULL
     RETURN [n IN nodes(p) | n.id] AS hops, length(p) AS len, [r IN relationships(p) | type(r)] AS via
     ORDER BY len ASC

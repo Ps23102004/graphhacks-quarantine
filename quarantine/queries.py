@@ -16,9 +16,9 @@ RETURN d.id
 """
 
 # Q1 hero: everything whose provenance reaches the flagged doc. One traversal,
-# three edge types, any depth up to 10. Returns the "precise" count.
+# three edge types, any depth (the graph is a DAG: reads only point backwards in time). Returns the "precise" count.
 TAINT_CLOSURE = """
-MATCH (d:Doc {id: $doc})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..10]-(m:Memory)
+MATCH (d:Doc {id: $doc})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]-(m:Memory)
 SET m.quarantined = true, m.quarantine_tick = $tick
 RETURN count(DISTINCT m) AS precise, collect(DISTINCT m.id) AS ids
 """
@@ -26,7 +26,7 @@ RETURN count(DISTINCT m) AS precise, collect(DISTINCT m.id) AS ids
 # Q2 baseline: "reset the compromised agent". Every memory authored by any agent
 # that authored anything in the closure.
 NAIVE_PER_AGENT = """
-MATCH (d:Doc {id: $doc})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..10]-(:Memory)<-[:AUTHORED]-(a:Agent)
+MATCH (d:Doc {id: $doc})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]-(:Memory)<-[:AUTHORED]-(a:Agent)
 WITH DISTINCT a
 MATCH (a)-[:AUTHORED]->(all:Memory) WHERE NOT (all)-[:SUPERSEDES]->()
 RETURN count(DISTINCT all) AS naive, collect(DISTINCT a.name) AS agents_wiped
@@ -45,7 +45,7 @@ RETURN count(m) AS naive_time, max(t0) AS t0
 # shortestPath in WITH/RETURN (spike S2a), never in MATCH.
 RECEIPT = """
 MATCH (a:Memory {id: $from}), (d:Doc {id: $doc})
-WITH shortestPath((a)-[:INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM*..10]->(d)) AS p
+WITH shortestPath((a)-[:INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM*]->(d)) AS p
 RETURN [n IN nodes(p) | n.id] AS hops, length(p) AS len, [r IN relationships(p) | type(r)] AS via
 """
 

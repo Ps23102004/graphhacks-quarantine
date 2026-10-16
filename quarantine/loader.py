@@ -149,7 +149,7 @@ def load(g: Graph, fx: dict, after_write=None) -> None:
         _node(g, "Doc", {"id": did, "flagged": False, **d})
 
     for eid, e in fx["episodes"].items():
-        _memory(g, "Episode", eid, "research", "s1", {"tick": e["tick"], "text": e["text"]})
+        _memory(g, "Episode", eid, e.get("agent", "research"), "s1", {"tick": e["tick"], "text": e["text"]})
         res = q(g, "MATCH (m:Episode {id: $eid}), (d:Doc {id: $doc}) CREATE (m)-[:EXTRACTED_FROM]->(d) RETURN count(*)",
                 eid=eid, doc=e["doc"])
         if not res or res[0][0] == 0:
@@ -157,7 +157,7 @@ def load(g: Graph, fx: dict, after_write=None) -> None:
         done(eid)
 
     for fid, f in fx["facts"].items():
-        _memory(g, "Fact", fid, "research", "s1",
+        _memory(g, "Fact", fid, f.get("agent", "research"), "s1",
                 {"subject": f["subject"], "slot": f["slot"], "value": f["value"],
                  "tick": f["tick"], "support_total": len(f["support"])})
         for s in f["support"]:
@@ -169,12 +169,12 @@ def load(g: Graph, fx: dict, after_write=None) -> None:
         done(fid)
 
     for sid, s in fx["steps"].items():
-        _memory(g, "PlanStep", sid, "planner", "s1", {"order": s["order"], "tick": s["tick"], "text": s["text"]})
+        _memory(g, "PlanStep", sid, s.get("agent", "planner"), "s1", {"order": s["order"], "tick": s["tick"], "text": s["text"]})
         _influenced_by(g, sid, s["reads"], s["tick"], "s1")
         done(sid)
 
     for aid, a in fx["artifacts"].items():
-        _memory(g, "Artifact", aid, "coder", "s1", {"path": a["path"], "tick": a["tick"], "text": a["text"]})
+        _memory(g, "Artifact", aid, a.get("agent", "coder"), "s1", {"path": a["path"], "tick": a["tick"], "text": a["text"]})
         _influenced_by(g, aid, a["reads"], a["tick"], "s1")
         done(aid)
 
