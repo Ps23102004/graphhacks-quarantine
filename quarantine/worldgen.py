@@ -138,11 +138,11 @@ def make_chain_world(n_steps: int) -> dict:
     for i in range(n_steps):
         steps[f"step_{i}"] = {"order": i, "tick": 10 + i, "text": f"s{i}", "agent": "w0",
                               "reads": ["f_0"] if i == 0 else [f"step_{i - 1}"]}
-    return {"sessions": {"s1": {"label": "chain"}}, "agents": {"research": {"role": "r"}, "w0": {"role": "w"}},
+    return {"sessions": {"s1": {"label": "chain"}}, "agents": {"research": {"role": "r"}, "w0": {"role": "w"}, "w1": {"role": "w"}},
             "docs": {"doc_1": {"uri": "u", "title": "t"}, "doc_2": {"uri": "u2", "title": "t2"}},
             "episodes": {"ep_1": {"doc": "doc_1", "tick": 1, "text": "bad"}, "ep_2": {"doc": "doc_2", "tick": 2, "text": "ok"}},
             "facts": {"f_0": {"subject": "s", "slot": "x", "tick": 5, "value": "x",
                               "support": [{"ep": "ep_1", "claim": "x"}, {"ep": "ep_2", "claim": "x"}]}},
             "steps": steps,
-            "artifacts": {"art_0": {"path": "a.py", "tick": 10 + n_steps, "text": "a", "agent": "w0",
+            "artifacts": {"art_0": {"path": "a.py", "tick": 10 + n_steps, "text": "a", "agent": "w1",   # only reachable at the end of the chain, authored by a different agent
                                     "reads": [f"step_{n_steps - 1}"]}}}

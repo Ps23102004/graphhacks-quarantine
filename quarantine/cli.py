@@ -51,7 +51,7 @@ def session1(args) -> None:
     if args.slow < 0 or not math.isfinite(args.slow):
         sys.exit("error: --slow must be a non-negative finite number")
 
-    fx = read_fixture()
+    fx = read_fixture(args.fixture)
     validate_fixture(fx)
 
     g = connect(args.graph)
@@ -65,12 +65,12 @@ def session1(args) -> None:
     # what each memory did, from the fixture; printed the moment the loader has written it
     did: dict[str, tuple[str, str, str, int]] = {}
     for k, e in fx["episodes"].items():
-        did[k] = ("research", f"extracted {e['doc']}", e["text"], e["tick"])
+        did[k] = (e.get("agent", "research"), f"extracted {e['doc']}", e["text"], e["tick"])
     for k, f in fx["facts"].items():
-        did[k] = ("research", f"consolidated {ids(s['ep'] for s in f['support'])}", f["value"], f["tick"])
+        did[k] = (f.get("agent", "research"), f"consolidated {ids(s['ep'] for s in f['support'])}", f["value"], f["tick"])
     for kind, agent in (("steps", "planner"), ("artifacts", "coder")):
         for k, s_ in fx[kind].items():
-            did[k] = (agent, f"read {ids(s_['reads'])}", s_["text"], s_["tick"])
+            did[k] = (s_.get("agent", agent), f"read {ids(s_['reads'])}", s_["text"], s_["tick"])
 
     written = []
 
@@ -89,9 +89,9 @@ def session1(args) -> None:
 
 # ---------------------------------------------------------------- flag
 def flag(args) -> None:
-    fx = read_fixture()
+    fx = read_fixture(args.fixture)
     g = connect(args.graph)
-    f = fx["flag"]
+    f = fx.get("flag") or {"doc": args.doc, "tick": 40, "reason": ""}
     reason = args.reason or (f["reason"] if args.doc == f["doc"] else f"flagged {args.doc} from the CLI")
     must(q(g, Q.FLAG_DOC, doc=args.doc, reason=reason, tick=f["tick"]),
          f"no doc {args.doc!r} in graph {args.graph!r} (run `quarantine session1` first)")
@@ -146,7 +146,7 @@ def kill_planner(g, task: str, tick: int) -> int:
 
 
 def session2(args) -> None:
-    fx = read_fixture()
+    fx = read_fixture(args.fixture)
     g = connect(args.graph)
     must(q(g, "MATCH (t:Task) RETURN t.id LIMIT 1"), "no rework tasks yet (run `quarantine flag DOC` first)")
 
@@ -178,7 +178,7 @@ def session2(args) -> None:
                     continue
 
                 # scripted rework for the demo's memories, graph-derived for any other flagged doc
-                spec = fx["rework"].get(memory) or derive_rework(g, memory)
+                spec = fx.get("rework", {}).get(memory) or derive_rework(g, memory)
 
                 # Check if clean replacement already exists (restart / recovery case)
                 rep_rows = q(g, "MATCH (m:Memory {id: $mid})<-[:SUPERSEDES]-(r:Memory {quarantined: false}) RETURN r.id", mid=memory)
@@ -234,6 +234,7 @@ def status_cmd(args) -> None:
 def main(argv: list[str] | None = None) -> None:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--graph", default="quarantine", help="FalkorDB graph name (default: quarantine)")
+    common.add_argument("--fixture", default=None, help="world to load (default: fixture.yaml); e.g. fixtures/support-crew.yaml")
 
     ap = argparse.ArgumentParser(prog="quarantine", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)

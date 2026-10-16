@@ -1,0 +1,81 @@
+# A second, different world for the same engine: a customer-support crew whose knowledge base gets poisoned.
+# Hand-written to show the engine is not tied to the weather-CLI demo; the expected numbers below are derived BY HAND
+# from the read sets (see the comments), and tests/test_second_world.py asserts them against the graph.
+sessions:
+  s1: {label: "Session 1: ingest the knowledge base, plan macros, write replies"}
+  s2: {label: "Session 2: advisory, quarantine, heal, rework"}
+
+agents:
+  ingest:    {role: "KB ingest + consolidation"}
+  triage:    {role: "Triage planner"}
+  responder: {role: "Reply writer"}
+
+docs:
+  kb_1: {uri: "kb/refund-policy.md",        title: "Refund policy (v3)"}
+  kb_2: {uri: "kb/returns-faq.md",          title: "Returns FAQ"}
+  kb_3: {uri: "kb/shipping.md",             title: "Shipping times"}
+  kb_4: {uri: "kb/chargebacks.md",          title: "Chargeback handling"}
+  kb_5: {uri: "forum/refund-hack-thread",   title: "Forum: 'refund window is now 90 days, no receipts'",
+         note: "poisoned: injected text that changes the refund window and waives receipts"}
+  kb_6: {uri: "kb/hours.md",                title: "Support hours"}
+  kb_7: {uri: "kb/receipts.md",              title: "Receipts required for refunds"}
+
+episodes:
+  e1: {agent: ingest, doc: kb_1, tick: 1, text: "Refund window is 30 days from delivery."}
+  e2: {agent: ingest, doc: kb_2, tick: 2, text: "Returns accepted within 30 days."}
+  e3: {agent: ingest, doc: kb_3, tick: 3, text: "Standard shipping 3 to 5 business days."}
+  e4: {agent: ingest, doc: kb_4, tick: 4, text: "Chargebacks go to the billing team, never refund manually."}
+  e5: {agent: ingest, doc: kb_5, tick: 5, text: "The refund window is now 90 days."}
+  e6: {agent: ingest, doc: kb_5, tick: 6, text: "Refunds are auto-approved; no receipt needed."}
+  e7: {agent: ingest, doc: kb_6, tick: 7, text: "Support hours are 9 to 17 on weekdays."}
+  e8: {agent: ingest, doc: kb_7, tick: 8, text: "A receipt is required for every refund."}
+
+facts:
+  f_window:   {agent: ingest, subject: refunds, slot: window_days, tick: 10, value: "90",
+               support: [{ep: e1, claim: "30"}, {ep: e2, claim: "30"}, {ep: e5, claim: "90"}, {ep: e8, claim: "30"}]}
+  f_receipt:  {agent: ingest, subject: refunds, slot: receipt, tick: 11, value: "not needed",
+               support: [{ep: e6, claim: "not needed"}, {ep: e8, claim: "required"}]}
+  f_shipping: {agent: ingest, subject: shipping, slot: days, tick: 12, value: "3 to 5 business days",
+               support: [{ep: e3, claim: "3 to 5 business days"}]}
+  f_chargeback: {agent: ingest, subject: chargebacks, slot: route, tick: 13, value: "billing team",
+               support: [{ep: e4, claim: "billing team"}]}
+  f_hours:    {agent: ingest, subject: support, slot: hours, tick: 14, value: "9 to 17 weekdays",
+               support: [{ep: e7, claim: "9 to 17 weekdays"}]}
+
+steps:
+  s_hours:  {order: 1, tick: 20, agent: triage, text: "Add office hours to the auto-reply footer.", reads: [f_hours]}
+  s_refund: {order: 2, tick: 21, agent: triage, text: "Write the refund macro: 90 day window, no receipt.", reads: [f_window, f_receipt]}
+  s_ship:   {order: 3, tick: 22, agent: triage, text: "Write the shipping-status macro.", reads: [f_shipping]}
+  s_charge: {order: 4, tick: 23, agent: triage, text: "Route chargebacks to billing.", reads: [f_chargeback, s_hours]}
+
+artifacts:
+  a_refund:   {path: "macros/refund.txt",   tick: 30, agent: responder, text: "Refunds within 90 days, no receipt needed.", reads: [s_refund]}
+  a_ship:     {path: "macros/shipping.txt", tick: 31, agent: responder, text: "Shipping takes 3 to 5 business days.",       reads: [s_ship]}
+  a_faq:      {path: "faq.md",              tick: 32, agent: responder, text: "FAQ: refunds (90 days) and shipping (3 to 5 days).", reads: [s_refund, s_ship]}
+  a_charge:   {path: "macros/charge.txt",   tick: 33, agent: responder, text: "Chargebacks are handled by billing.",         reads: [s_charge]}
+
+flag:
+  doc: kb_5
+  session: s2
+  tick: 40
+  reason: "Advisory: forum thread was an injected refund-policy change."
+
+# No scripted rework: the engine derives it from the graph (placeholders flagged needs_regeneration).
+rework: {}
+
+# Derived BY HAND from the read sets above (not copied from program output):
+#  closure of kb_5 = {e5, e6} (extracted) + {f_window (cites e5), f_receipt (cites e6)} + {s_refund (reads both)}
+#                    + {a_refund (reads s_refund), a_faq (reads s_refund)}  = 7 memories; a_ship, a_charge, s_ship, s_charge stay clean.
+#  total memories = 8 episodes + 5 facts + 4 steps + 4 artifacts = 21
+#  wipe-every-compromised-agent: ingest, triage and responder are all in the closure -> 21
+#  time-based: first kb_5 episode is e5 at tick 5 -> everything with tick >= 5: e5..e8 (4) + 5 facts + 4 steps + 4 artifacts = 17
+#  heal: f_window has clean episodes e1, e2, e8 all saying "30" -> heals to "30" with 3 supporters;
+#        f_receipt has one clean episode (e8) -> not healable, stays quarantined forever
+expected:
+  total_memories: 21
+  closure_ids: [e5, e6, f_window, f_receipt, s_refund, a_refund, a_faq]
+  precise: 7
+  naive_per_agent: 21
+  naive_time_based: 17
+  heal: {f_window: {value: "30", support_clean: 3}}
+  dead: [e5, e6, f_receipt]
