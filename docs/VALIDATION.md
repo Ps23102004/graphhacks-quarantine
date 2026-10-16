@@ -13,7 +13,7 @@ Updated Thu 2026-10-15. Re-fill the "status" column after every change; do not r
 
 | check | command | result |
 |---|---|---|
-| unit + integration | `uv run pytest -q` | 18 passed |
+| unit + integration | `uv run pytest -q` | 52 passed |
 | fresh clone, throwaway FalkorDB, real CLI + page | `scripts/validate.sh` | 22 passed, 0 failed |
 | mutation check (tests catch breakage) | `uv run python scripts/mutation_check.py` | 22 mutations, 0 unexpected survivors; 1 documented equivalent mutant (redundant size check in the heal query) |
 | independent review (different model, read-only, did not write the code) | Opus 5.5 subagent, 2026-10-15 | 14 findings (2 blockers, 8 should-fix, 4 nits); see below |
@@ -45,7 +45,7 @@ Demo-script mismatches the reviewer found (wrong `--slow` usage, nodes not appea
 
 Working-tree checks on `fix/demo-verification`, based on `26d2f7f`; these changes are not committed. Tests used a separate pinned-image FalkorDB container on loopback port 6391 and a page server on 8766. The existing demo database was not changed.
 
-- Python suite: **18 passed**. JavaScript syntax and diff whitespace checks passed.
+- Python suite: **52 passed**. JavaScript syntax and diff whitespace checks passed.
 - `scripts/check_browser.js`: **11 passed** through the standalone Playwright CLI, including the fully healed graph's insertion and resize checks. The original eight checks also ran through Playwright MCP. The standalone runner initially lacked a global `URL`; resolving the origin inside the page fixed that test-only compatibility issue.
 - Live CLI replay: precise/per-agent/time-based **6 / 25 / 19**, a four-hop clicked receipt, actual Planner SIGKILL with exit **-9**, refusal while its lease was live, takeover after expiry, rounds **[1, 2, 2, 0]**, and **28 memories** after healing.
 - Visible Chromium tab: the post-fix wave counted **0, 1, 2, 3, 4, 5, 6**, with **418–420 ms** between steps. Document visibility remained `visible`. This verifies that browser session, not an OS-level foreground recording or physical projector.

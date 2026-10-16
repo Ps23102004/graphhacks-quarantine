@@ -7,7 +7,7 @@ Every command and line below was captured from the real CLI on 2026-10-15. Re-ca
 ```bash
 docker start quarantine-falkordb          # or the docker run line in README.md
 uv run python web/server.py               # page at http://localhost:8765, on the right half of the screen
-uv run pytest -q                          # must say 18 passed before every take
+uv run pytest -q                          # must say 52 passed before every take
 ```
 
 Terminal on the left, page on the right. The page also draws the 8 source documents as a top row of squares (25 memories in four rows below them).

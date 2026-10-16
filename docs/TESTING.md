@@ -16,7 +16,7 @@ uv sync
 ## 1. Unit and integration tests (about 5 s)
 
 ```bash
-uv run pytest -q          # expect: 18 passed
+uv run pytest -q          # expect: 52 passed
 ```
 
 Tests use their own graphs (`quarantine_test`, `quarantine_cli_test`, `quarantine_web_test`) and delete them afterwards. They never touch the demo graph named `quarantine`.

@@ -188,12 +188,22 @@ net.on("click", async p => {
   const n = nodes.get(id);
   const isRed = state.red.has(id);
   if (!isRed) { highlight(null); detail.innerHTML = `<code>${esc(id)}</code> - ${esc(n.note || "")}`; return; }
-  const rc = await (await fetch("/receipt?id=" + encodeURIComponent(id))).json();
-  if (request !== detailRequest) return;
-  if (!rc) { detail.innerHTML = `<code>${esc(id)}</code> has no path to the flagged document.`; return; }
-  highlight(rc.hops);
-  const chain = rc.hops.map((h, i) => i ? ` <span class="path">-${esc(rc.via[i - 1])}-&gt;</span> ${esc(h)}` : esc(h)).join("");
-  detail.innerHTML = `<code>${esc(id)}</code> is quarantined: ${esc(rc.len)} hops (shortestPath)<br><code>${chain}</code>`;
+  try {
+    const res = await fetch("/receipt?id=" + encodeURIComponent(id));
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rc = await res.json();
+    if (request !== detailRequest) return;
+    if (!rc || rc.error) {
+      detail.innerHTML = `<code>${esc(id)}</code> ${esc(rc && rc.error ? rc.error : "has no path to the flagged document.")}`;
+      return;
+    }
+    highlight(rc.hops);
+    const chain = rc.hops.map((h, i) => i ? ` <span class="path">-${esc(rc.via[i - 1])}-&gt;</span> ${esc(h)}` : esc(h)).join("");
+    detail.innerHTML = `<code>${esc(id)}</code> is quarantined: ${esc(rc.len)} hops (shortestPath)<br><code>${chain}</code>`;
+  } catch (err) {
+    if (request !== detailRequest) return;
+    detail.innerHTML = `<span id="err">receipt fetch failed: ${esc(err.message)}</span>`;
+  }
 });
 
 poll();

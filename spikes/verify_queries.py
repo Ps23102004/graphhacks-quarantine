@@ -57,7 +57,7 @@ for rnd in range(1, 6):
                 show("Q8 CLAIM", Q.CLAIM, task=task, me=agent, now=tick, lease=5, session="s2")
                 new = rework(g, memory, agent, spec["text"], spec["reads"], tick, "s2")
                 print(f"    rework() wrote {new} reads={spec['reads']}")
-                show("Q8b COMPLETE", Q.COMPLETE, task=task, me=agent, tick=tick)
+                show("Q8b COMPLETE", Q.COMPLETE, task=task, me=agent, tick=tick, now=tick, session="s2")
                 tick += 1
                 n += 1
     print(f"round {rnd} changes = {n}")

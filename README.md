@@ -41,19 +41,19 @@ graph TD
     classDef poisoned fill:#e5484d,stroke:#e5484d,color:#ffffff,stroke-width:3px;
     classDef healed fill:#30a46c,stroke:#30a46c,color:#ffffff,stroke-width:2px;
 
-    D7[Doc: doc_7<br/>Prompt Injection]:::poisoned -->|EXTRACTED_FROM| EP7A[Episode: ep_7a<br/>Rename requests]:::poisoned
-    D7 -->|EXTRACTED_FROM| EP7B[Episode: ep_7b<br/>Pin v2.31]:::poisoned
+    EP7A[Episode: ep_7a<br/>Rename requests]:::poisoned -->|EXTRACTED_FROM| D7[Doc: doc_7<br/>Prompt Injection]:::poisoned
+    EP7B[Episode: ep_7b<br/>Pin v2.31]:::poisoned -->|EXTRACTED_FROM| D7
 
-    EP1[Episode: ep_1]:::episode -->|CONSOLIDATED_FROM| F_CLIENT[Fact: f_http_client]:::poisoned
-    EP2[Episode: ep_2]:::episode -->|CONSOLIDATED_FROM| F_CLIENT
-    EP3[Episode: ep_3]:::episode -->|CONSOLIDATED_FROM| F_CLIENT
-    EP7A -->|CONSOLIDATED_FROM| F_CLIENT
-    EP7B -->|CONSOLIDATED_FROM| F_PIN[Fact: f_http_pin]:::poisoned
+    F_CLIENT[Fact: f_http_client]:::poisoned -->|CONSOLIDATED_FROM| EP1[Episode: ep_1]:::episode
+    F_CLIENT -->|CONSOLIDATED_FROM| EP2[Episode: ep_2]:::episode
+    F_CLIENT -->|CONSOLIDATED_FROM| EP3[Episode: ep_3]:::episode
+    F_CLIENT -->|CONSOLIDATED_FROM| EP7A
+    F_PIN[Fact: f_http_pin]:::poisoned -->|CONSOLIDATED_FROM| EP7B
 
-    F_CLIENT -->|INFLUENCED_BY| S3[PlanStep: step_3<br/>Add HTTP dep]:::poisoned
-    F_PIN -->|INFLUENCED_BY| S3
+    S3[PlanStep: step_3<br/>Add HTTP dep]:::poisoned -->|INFLUENCED_BY| F_CLIENT
+    S3 -->|INFLUENCED_BY| F_PIN
     
-    S3 -->|INFLUENCED_BY| A_REQ[Artifact: a_requirements<br/>requirements.txt]:::poisoned
+    A_REQ[Artifact: a_requirements<br/>requirements.txt]:::poisoned -->|INFLUENCED_BY| S3
 
     %% Healing in Session 2
     F_CLIENT_V2[Fact: f_http_client_v2<br/>requests - 3 clean votes]:::healed -.->|SUPERSEDES| F_CLIENT
@@ -117,7 +117,7 @@ docker run -d --name quarantine-falkordb -p 6379:6379 -p 3000:3000 \
 ### 2. Install & Run Tests
 ```bash
 uv sync
-uv run pytest -q                              # 18 passed in ~3s
+uv run pytest -q                              # 52 passed in ~3s
 ```
 
 ### 3. Run the 3-Minute Demo Commands

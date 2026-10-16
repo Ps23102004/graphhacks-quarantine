@@ -3,18 +3,22 @@
     quarantine session1 [--slow 0.4]      load Session 1 from fixture.yaml
     quarantine flag doc_7                 advisory lands: closure, baselines, receipts
     quarantine session2 [--kill-planner]  heal + rework to a fixpoint
+    quarantine status                     inspect recovery status as JSON
 
 Everything is the same statements tests/test_quarantine.py asserts; this file only prints them.
 """
 from __future__ import annotations
 
 import argparse
+import json
+import math
 import subprocess
 import sys
 import time
 
 from quarantine import queries as Q
-from quarantine.loader import connect, load, q, read_fixture, rework
+from quarantine.agent_runtime import recovery_status
+from quarantine.loader import connect, load, q, read_fixture, rework, validate_fixture
 
 LEASE = 5
 AGENTS = ("planner", "coder")
@@ -44,12 +48,19 @@ def startup_line(agent: str, memory: str, task, state, waiting) -> str:
 
 # ---------------------------------------------------------------- session 1
 def session1(args) -> None:
+    if args.slow < 0 or not math.isfinite(args.slow):
+        sys.exit("error: --slow must be a non-negative finite number")
+
     fx = read_fixture()
+    validate_fixture(fx)
+
     g = connect(args.graph)
     try:
         g.delete()
-    except Exception:  # noqa: BLE001  (graph did not exist yet)
-        pass
+    except Exception as e:
+        err = str(e).lower()
+        if "not exist" not in err and "empty key" not in err:
+            raise
     g = connect(args.graph)
     # what each memory did, from the fixture; printed the moment the loader has written it
     did: dict[str, tuple[str, str, str, int]] = {}
@@ -144,7 +155,10 @@ def session2(args) -> None:
         for memory, _h, task, state, waiting in q(g, Q.STARTUP, me=agent):
             say("  " + startup_line(agent, memory, task, state, waiting))
 
-    tick, changes, killed = 41, [], False
+    max_tick_rows = q(g, "MATCH (m:Memory) RETURN max(m.tick)")
+    base_tick = max_tick_rows[0][0] if max_tick_rows and max_tick_rows[0][0] else 40
+    tick, changes, killed = max(41, base_tick + 1), [], False
+
     while True:
         say(f"--- round {len(changes) + 1} ---")
         n = q(g, Q.PROMOTE_READY)[0][0]
@@ -157,21 +171,37 @@ def session2(args) -> None:
         for agent in AGENTS:
             for memory, _h, task, state, waiting in q(g, Q.STARTUP, me=agent):
                 say("  " + startup_line(agent, memory, task, state, waiting))
-                if state != "ready":
+                if state not in ("ready", "claimed"):
                     continue
-                session = "s2"
-                if args.kill_planner and agent == "planner" and not killed:
-                    killed, session = True, "s2b"
-                    tick = kill_planner(g, task, tick)
-                else:
-                    must(q(g, Q.CLAIM, task=task, me=agent, now=tick, lease=LEASE, session="s2"),
-                         f"{agent} could not claim {task}")
-                    say(f"  {agent}: claimed {task}")
+
+                # Check if rework is supported BEFORE claiming task (Finding 10)
                 spec = fx["rework"].get(memory)
                 if spec is None:
                     sys.exit(f"error: no scripted rework for {memory} (the demo scripts only {ids(fx['rework'])}; flag {fx['flag']['doc']})")
-                new_id = rework(g, memory, agent, spec["text"], spec["reads"], tick, session)
-                q(g, Q.COMPLETE, task=task, me=agent, tick=tick, now=tick, session=session)
+
+                # Check if clean replacement already exists (restart / recovery case)
+                rep_rows = q(g, "MATCH (m:Memory {id: $mid})<-[:SUPERSEDES]-(r:Memory {quarantined: false}) RETURN r.id", mid=memory)
+                has_clean_rep = bool(rep_rows and rep_rows[0])
+
+                session = "s2"
+                if not has_clean_rep:
+                    if args.kill_planner and agent == "planner" and not killed:
+                        killed, session = True, "s2b"
+                        tick = kill_planner(g, task, tick)
+                    else:
+                        must(q(g, Q.CLAIM, task=task, me=agent, now=tick, lease=LEASE, session="s2"),
+                             f"{agent} could not claim {task}")
+                        say(f"  {agent}: claimed {task}")
+                    new_id = rework(g, memory, agent, spec["text"], spec["reads"], tick, session, task=task)
+                else:
+                    new_id = rep_rows[0][0]
+                    # Ensure current worker has claim to complete it
+                    q(g, Q.CLAIM, task=task, me=agent, now=tick, lease=LEASE, session=session)
+
+                completed = q(g, Q.COMPLETE, task=task, me=agent, tick=tick, now=tick, session=session)
+                if not completed:
+                    sys.exit(f"error: {agent} could not complete {task}")
+
                 say(f"  {agent}: wrote {new_id} reads {ids(spec['reads'])}; COMPLETE {task}")
                 tick += 1
                 n += 1
@@ -190,6 +220,12 @@ def hold(args) -> None:
         sys.exit(1)
     print("held", flush=True)
     time.sleep(300)
+
+
+def status_cmd(args) -> None:
+    """Print graph recovery status as JSON."""
+    g = connect(args.graph)
+    say(json.dumps(recovery_status(g), indent=2))
 
 
 # ---------------------------------------------------------------- argparse
@@ -217,6 +253,9 @@ def main(argv: list[str] | None = None) -> None:
     p = sub.add_parser("session2", parents=[common], help="heal and rework to a fixpoint")
     p.add_argument("--kill-planner", action="store_true", help="kill the planner mid-rework; show lease takeover")
     p.set_defaults(run=session2)
+
+    p = sub.add_parser("status", parents=[common], help="print graph recovery status as JSON")
+    p.set_defaults(run=status_cmd)
 
     args = ap.parse_args(argv)
     args.run(args)

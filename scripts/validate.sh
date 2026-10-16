@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Fresh-clone validation: what a judge (or Aman, or a clean machine) would do.
-#   scripts/validate.sh            validates the committed HEAD of this repo
-# Starts a throwaway FalkorDB (same pinned image) on port 6390, clones HEAD into a temp dir,
-# installs from the lockfile, and checks every number the video says. Exit 0 = all green.
+# Fresh-clone and working-tree validation.
+#   scripts/validate.sh
+# Validates working-tree changes as well as clean repo state.
+# Starts a throwaway FalkorDB on port 6390, runs tests, demo commands, MCP bridge, and web.
 set -euo pipefail
 
 IMAGE="falkordb/falkordb:6.0.2@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6"
@@ -14,13 +14,20 @@ WORK="$(mktemp -d)"
 pass=0; fail=0
 ok()   { echo "  PASS  $1"; pass=$((pass+1)); }
 bad()  { echo "  FAIL  $1"; fail=$((fail+1)); }
+skip() { echo "  SKIP  $1"; }
 has()  { grep -qF -- "$2" <<<"$1" && ok "$3" || bad "$3  (missing: $2)"; }
 cleanup() { docker rm -f "$NAME" >/dev/null 2>&1 || true; [ -n "${WEBPID:-}" ] && kill "$WEBPID" 2>/dev/null || true; rm -rf "$WORK"; }
 trap cleanup EXIT
 
-[ -z "$(git -C "$SRC" status --porcelain)" ] || echo "  note: working tree is dirty; validating committed HEAD only"
-echo "== clone HEAD $(git -C "$SRC" rev-parse --short HEAD)"
-git clone -q "$SRC" "$WORK/repo"
+mkdir -p "$WORK/repo"
+if [ -z "$(git -C "$SRC" status --porcelain)" ]; then
+  echo "== working tree is clean; copying working tree =="
+else
+  echo "== working tree has uncommitted edits; explicitly testing working tree (not stale HEAD) =="
+fi
+
+# Copy working tree (including uncommitted edits) excluding transient caches
+tar -C "$SRC" --exclude='.git' --exclude='.venv' --exclude='.pytest_cache' --exclude='dist' --exclude='build' -cf - . | tar -C "$WORK/repo" -xf -
 cd "$WORK/repo"
 
 echo "== throwaway FalkorDB on :$PORT"
@@ -30,10 +37,10 @@ for i in $(seq 1 30); do docker exec "$NAME" redis-cli ping 2>/dev/null | grep -
 docker exec "$NAME" redis-cli ping | grep -q PONG && ok "FalkorDB up" || { bad "FalkorDB did not start"; exit 1; }
 export FALKORDB_PORT="$PORT"
 
-echo "== install from lockfile"
-uv sync --frozen -q && ok "uv sync --frozen" || { bad "uv sync"; exit 1; }
+echo "== install dependencies and sync lockfile"
+uv sync --frozen --all-extras -q && ok "uv sync --frozen --all-extras" || { bad "uv sync"; exit 1; }
 
-echo "== tests"
+echo "== run tests"
 out="$(uv run pytest -q 2>&1)" && ok "pytest: $(tail -1 <<<"$out")" || { bad "pytest"; echo "$out" | tail -20; }
 
 echo "== demo commands (graph 'validate')"
@@ -66,7 +73,26 @@ out="$(uv run quarantine flag doc_5 --graph validate_ctl)"
 has "$out" "closure [ep_5, f_http_client, step_3, a_requirements]" "flag doc_5: ep_5 -> f_http_client -> step_3 -> a_requirements"
 has "$out" "precise 4 " "flag doc_5: precise 4"
 
-echo "== page"
+echo "== packaging and wheel build"
+uv build --wheel -q && ok "uv build --wheel" || bad "uv build failed"
+
+echo "== MCP inspection bridge"
+mcp_list="$(QUARANTINE_GRAPH=validate uv run scripts/mcp_inspect.py list 2>&1)"
+has "$mcp_list" "inspect_quarantined_memories" "mcp list: inspect_quarantined_memories"
+has "$mcp_list" "trace_provenance_receipt" "mcp list: trace_provenance_receipt"
+has "$mcp_list" "get_recovery_status" "mcp list: get_recovery_status"
+
+mcp_call="$(QUARANTINE_GRAPH=validate uv run scripts/mcp_inspect.py call trace_provenance_receipt '{"memory_id": "a_requirements"}' 2>&1)"
+has "$mcp_call" "hops" "mcp call trace_provenance_receipt returns hops"
+
+echo "== Compose configuration"
+if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
+  docker compose -f deploy/docker-compose.yml config --quiet && ok "docker compose config valid" || bad "docker compose config invalid"
+else
+  skip "docker compose CLI not found"
+fi
+
+echo "== web page"
 uv run python web/server.py --port "$WEB" --graph validate >/dev/null 2>&1 &
 WEBPID=$!
 for i in $(seq 1 20); do curl -s -o /dev/null "localhost:$WEB/graph" && break; sleep 1; done
@@ -75,6 +101,7 @@ has "$g" '"precise": 6' "page JSON: precise 6"
 has "$g" '"per_agent": 25' "page JSON: per_agent 25 after healing"
 has "$g" '"time_based": 19' "page JSON: time_based 19 after healing"
 [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: evil.example' "localhost:$WEB/graph")" = 403 ] && ok "page refuses foreign Host" || bad "page Host check"
+[ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "localhost:$WEB/graph")" = 405 ] && ok "page refuses POST method" || bad "page POST check"
 
 echo
 echo "validation: $pass passed, $fail failed"

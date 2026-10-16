@@ -33,13 +33,14 @@ When multi-agent crews (`Research`, `Planner`, `Coder`) collaborate across sessi
    docker run -d --name quarantine-falkordb -p 6379:6379 -p 3000:3000 \
      falkordb/falkordb:6.0.2@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6
    uv sync
-   uv run pytest -v  # Must pass 25/25 tests
+   uv run pytest -v  # Must pass 52/52 tests
    ```
 2. **Verify Docker Compose Deployment:**
    - Test `deploy/docker-compose.yml`:
      ```bash
-     cd deploy && docker compose up -d
+     docker compose -f deploy/docker-compose.yml up -d
      ```
+     Or run `bash scripts/validate_compose.sh` for automated test with container recreate and persistence check.
    - Verify `http://localhost:8765` opens and responds with the live web viewer.
 3. **FalkorDB Spike Check (S13 & S15):**
    - Check index performance on FalkorDB 6.0.2:

@@ -1,6 +1,7 @@
 [project]
 name = "quarantine"
 version = "0.1.0"
+license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "falkordb>=1.8.0",
@@ -10,6 +11,11 @@ dependencies = [
 
 [project.scripts]
 quarantine = "quarantine.cli:main"
+
+[project.optional-dependencies]
+mcp = [
+    "mcp>=1.12.0,<2",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -22,4 +28,10 @@ requires = ["setuptools>=75"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["quarantine"]
+packages = ["quarantine", "web"]
+
+[tool.setuptools.package-data]
+web = ["index.html", "vendor/*"]
+
+[tool.setuptools.data-files]
+"share/quarantine" = ["fixture.yaml"]

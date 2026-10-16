@@ -66,7 +66,7 @@ RETURN [n IN nodes(path) | n.id] AS hops, pathWeight AS len
 SUPPORT_AND_HEALABLE = """
 MATCH (m:Memory)
 OPTIONAL MATCH (m)-[c:CONSOLIDATED_FROM]->(e:Episode) WHERE NOT e.quarantined
-WITH m, c.claim AS claim, count(e) AS n ORDER BY n DESC
+WITH m, c.claim AS claim, count(DISTINCT e) AS n ORDER BY n DESC
 WITH m, collect(n) AS ns
 WITH m, reduce(t = 0, x IN ns | t + x) AS clean, head(ns) AS best,
      CASE WHEN size(ns) > 1 THEN ns[1] ELSE 0 END AS second
@@ -90,6 +90,10 @@ MERGE (t)-[:REWORKS]->(m)
 RETURN t.id ORDER BY t.id
 """
 CREATE_BLOCKED_BY = """
+OPTIONAL MATCH (t_old:Task {kind: 'rework'})-[b:BLOCKED_BY]->(x_old:Memory)
+WHERE x_old.quarantined <> true OR x_old.healable <> true
+DELETE b
+WITH count(*) AS dummy
 MATCH (t:Task {kind: 'rework'})-[:REWORKS]->(m:Memory)-[:INFLUENCED_BY]->(x:Memory {quarantined: true, healable: true})
 MERGE (t)-[:BLOCKED_BY]->(x)
 RETURN t.id, collect(x.id) AS blocked_by ORDER BY t.id
@@ -102,10 +106,11 @@ RETURN t.id, collect(x.id) AS blocked_by ORDER BY t.id
 HEAL_FACTS = """
 MATCH (f:Fact {quarantined: true, healable: true})-[c:CONSOLIDATED_FROM]->(e:Episode)
 WHERE NOT (f)<-[:SUPERSEDES]-() AND NOT e.quarantined
-WITH f, c.claim AS claim, collect(e) AS eps ORDER BY size(eps) DESC, claim
+WITH f, c.claim AS claim, collect(DISTINCT e) AS eps ORDER BY size(eps) DESC, claim
 WITH f, collect({claim: claim, eps: eps}) AS groups
-WITH f, groups[0].claim AS best, groups[0].eps AS agree
-WHERE size(agree) >= 2
+WITH f, groups[0].claim AS best, groups[0].eps AS agree,
+     CASE WHEN size(groups) > 1 THEN size(groups[1].eps) ELSE 0 END AS second_cnt
+WHERE size(agree) >= 2 AND size(agree) > second_cnt
 MATCH (f)<-[:AUTHORED]-(a:Agent)
 MERGE (s:Session {id: $session})
 CREATE (f2:Memory:Fact {id: f.id + '_v2', subject: f.subject, slot: f.slot, value: best,
@@ -123,7 +128,7 @@ RETURN f2.id, f2.value, count(e) AS support
 # a whole round changes nothing.
 PROMOTE_READY = """
 MATCH (t:Task {state: 'blocked'})
-OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-(:Memory {quarantined: false})
 WITH t, count(x) AS open WHERE open = 0
 SET t.state = 'ready'
 RETURN count(t) AS promoted
@@ -131,12 +136,15 @@ RETURN count(t) AS promoted
 
 # Q6 per-agent start-up query. A fresh process asks: what of mine is
 # quarantined and not yet replaced, is there a rework task for it, and what
-# is it waiting on? Nothing else is loaded from Session 1.
+# is it waiting on? Unfinished tasks (ready or claimed) are returned so a restarted
+# worker can resume work.
 STARTUP = """
 MATCH (a:Agent {name: $me})-[:AUTHORED]->(m:Memory {quarantined: true})
-WHERE NOT (m)<-[:SUPERSEDES]-()
 OPTIONAL MATCH (t:Task)-[:REWORKS]->(m)
-OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-()
+OPTIONAL MATCH (m)<-[:SUPERSEDES]-(clean_rep:Memory {quarantined: false})
+WITH a, m, t, clean_rep
+WHERE clean_rep IS NULL OR (t IS NOT NULL AND t.state IN ['ready', 'claimed'])
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-(:Memory {quarantined: false})
 RETURN m.id AS memory, m.healable AS healable, t.id AS task, t.state AS state,
        collect(x.id) AS waiting_on
 ORDER BY m.tick
@@ -155,10 +163,10 @@ SET t.state = 'claimed'
 RETURN t.id, holder.name AS taken_over_from
 """
 
-# Q8b finish a claimed rework: the replacement already exists (see
+# Q8b finish a claimed rework: the clean replacement already exists (see
 # loader.rework); mark done and drop the lease.
 COMPLETE = """
-MATCH (t:Task {id: $task})-[:REWORKS]->(:Memory)<-[:SUPERSEDES]-(:Memory)
+MATCH (t:Task {id: $task})-[:REWORKS]->(:Memory)<-[:SUPERSEDES]-(rep:Memory {quarantined: false})
 MATCH (t)-[c:CLAIMED_BY {session: $session}]->(:Agent {name: $me})
 WHERE c.lease_until >= $now
 SET t.state = 'done', t.done_tick = $tick
@@ -180,8 +188,9 @@ MATCH (x:Memory {quarantined: true})<-[:INFLUENCED_BY|CONSOLIDATED_FROM]-(m:Memo
 # ---------------------------------------------------------------- read-only views for the UI
 RED_WAVE = """
 MATCH (m:Memory)
-OPTIONAL MATCH (m)<-[:SUPERSEDES]-(r:Memory)
-RETURN m.id AS id, labels(m)[1] AS kind, m.tick AS tick, m.quarantined AS red, count(r) > 0 AS superseded
+OPTIONAL MATCH (m)-[:SUPERSEDES]->(old:Memory)
+OPTIONAL MATCH (m)<-[:AUTHORED]-(a:Agent)
+RETURN m.id, labels(m)[1], m.tick, m.quarantined, a.name, m.text, old.id, m.value, m.path
 ORDER BY m.tick
 """
-COUNT_MEMORIES = "MATCH (m:Memory) RETURN count(m) AS n"
+COUNT_MEMORIES = "MATCH (m:Memory) RETURN count(m)"

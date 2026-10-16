@@ -94,7 +94,13 @@ def main() -> int:
             path.write_text(mutated)
             r = pytest()
             path.write_text(orig)
-            caught = r.returncode != 0
+            if r.returncode == 1:
+                caught = True
+            elif r.returncode == 0:
+                caught = False
+            else:
+                print(f"  ERROR   {name}: pytest exited with code {r.returncode} (infrastructure/collection failure)")
+                caught = False
             lines = r.stdout.splitlines()
             fail_line = next((l for l in lines if l.startswith("FAILED")), "") or next((l for l in lines if l.startswith("E ")), "")
             print(f"  {'CAUGHT  ' if caught else 'SURVIVED'} {name}   {fail_line[:90]}")
