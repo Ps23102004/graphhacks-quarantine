@@ -40,6 +40,18 @@ def _read_query(g, cypher: str, **params):
     return q(g, cypher, **params)
 
 
+def mark_naive(nodes: list[dict], edges: list[dict], flagged: str) -> None:
+    """Per node: would each naive policy have thrown it away? Mirrors Q.NAIVE_PER_AGENT / Q.NAIVE_TIME_BASED
+    (healed twins are not part of the world the naive wipe would hit); the counters above come from those queries."""
+    bad_agents = {n["agent"] for n in nodes if n["red"]}
+    first = [n["tick"] for n in nodes if n["id"] in {e["src"] for e in edges if e["type"] == "EXTRACTED_FROM" and e["dst"] == flagged}]
+    t0 = min(first) if first else None
+    for n in nodes:
+        twin = bool(n["twin_of"])
+        n["naive_agent"] = (not twin) and n["agent"] in bad_agents
+        n["naive_time"] = (not twin) and t0 is not None and n["tick"] >= t0
+
+
 def snapshot(g) -> dict:
     nodes = [dict(id=i, kind=k, tick=t, red=bool(r), agent=a, text=tx, twin_of=tw, value=v, path=p)
              for i, k, t, r, a, tx, tw, v, p in _read_query(g, NODES)]
@@ -53,6 +65,7 @@ def snapshot(g) -> dict:
         counters = dict(precise=precise,
                         per_agent=_read_query(g, Q.NAIVE_PER_AGENT, doc=flagged)[0][0],
                         time_based=_read_query(g, Q.NAIVE_TIME_BASED, doc=flagged)[0][0])
+        mark_naive(nodes, edges, flagged)
     return dict(nodes=nodes, docs=docs, edges=edges, flagged=flagged, counters=counters)
 
 

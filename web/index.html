@@ -19,7 +19,10 @@
   #banner { font-size: 14px; color: var(--muted); }
   #banner b { color: var(--text); }
   #counters { display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: 12px; padding: 4px 20px 12px; }
-  .counter { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+  .counter { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px;
+    color: inherit; font: inherit; text-align: left; cursor: pointer; }
+  .counter:hover { border-color: var(--muted); }
+  .counter.active { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
   .counter .n { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
   .counter .l { font-size: 12px; color: var(--muted); }
   .counter.precise .n { color: var(--red); }
@@ -37,13 +40,14 @@
 <body>
 <header><h1>QUARANTINE</h1><div id="banner">connecting...</div></header>
 <section id="counters">
-  <div class="counter precise"><div class="n" id="c-precise">-</div><div class="l">graph-precise: memories quarantined</div></div>
-  <div class="counter"><div class="n" id="c-agent">-</div><div class="l">naive: wipe every compromised agent</div></div>
-  <div class="counter"><div class="n" id="c-time">-</div><div class="l">naive: forget everything after the bad doc</div></div>
+  <button class="counter precise active" data-view="precise"><div class="n" id="c-precise">-</div><div class="l">graph-precise: memories quarantined</div></button>
+  <button class="counter" data-view="agent"><div class="n" id="c-agent">-</div><div class="l">naive: wipe every compromised agent (click to see)</div></button>
+  <button class="counter" data-view="time"><div class="n" id="c-time">-</div><div class="l">naive: forget everything after the bad doc (click to see)</div></button>
   <div id="legend">
     <span><i class="dot" style="background:var(--clean)"></i>clean</span>
     <span><i class="dot" style="background:var(--red)">!</i>quarantined</span>
     <span><i class="dot" style="background:var(--green)">+</i>healed twin (SUPERSEDES)</span>
+    <span><i class="dot" style="background:var(--orange)">x</i>clean work a naive wipe would lose</span>
   </div>
 </section>
 <div id="net"></div>
@@ -72,6 +76,8 @@ const DETAIL_HINT = "Click a quarantined (!) memory to see its source path.";
 let detailRequest = 0;             // invalidates in-flight receipts on a new click or reset
 let state = { red: new Set(), seen: false, count: 0 };
 let pending = new Map();           // id -> timeout, for the staggered red wave
+let view = "precise";            // precise | agent | time: which policy's casualties are painted
+const meta = new Map();         // id -> latest snapshot node, so a view change can repaint without a fetch
 let total = null;                  // precise count from the server; the counter climbs to it as the wave lands
 const showPrecise = () => { document.getElementById("c-precise").textContent = total === null ? "-" : Math.min(state.red.size, total); };
 
@@ -92,15 +98,32 @@ function layout(data) {
   return pos;
 }
 
-function look(n, data) {
+function look(n) {
   const red = n.red && state.red.has(n.id);
   const twin = n.twin_of && !red;
+  if (view !== "precise" && !twin) {                                     // a naive policy's casualties
+    const wiped = view === "agent" ? n.naive_agent : n.naive_time;
+    if (wiped && !n.red) return { label: `x ${n.id}`, color: { background: C.orange, border: C.orange }, borderWidth: 3,
+      shapeProperties: { borderDashes: false }, font: { color: n.kind === "Artifact" ? "#0f1216" : C.text } };
+    if (!wiped) return { label: n.id, color: { background: "#2a313b", border: "#0f1216" }, borderWidth: 1,
+      shapeProperties: { borderDashes: false }, font: { color: C.muted } };
+  }
   const color = red ? C.red : twin ? C.green : C.clean;
   return { label: `${red ? "! " : twin ? "+ " : ""}${n.id}`,
     color: { background: color, border: red || twin ? color : "#0f1216" },
     borderWidth: red || twin ? 3 : 2, shapeProperties: { borderDashes: red ? [4, 3] : false },
     font: { color: n.kind === "Artifact" && (red || twin) ? "#0f1216" : C.text } };
 }
+
+function setView(v) {
+  view = v;
+  document.querySelectorAll(".counter").forEach(b => b.classList.toggle("active", b.dataset.view === v));
+  nodes.update([...meta.values()].map(n => ({ id: n.id, ...look(n) })));
+  const lost = [...meta.values()].filter(n => v !== "precise" && !n.red && (v === "agent" ? n.naive_agent : n.naive_time)).length;
+  document.getElementById("detail").textContent = v === "precise" ? DETAIL_HINT
+    : `${v === "agent" ? "Wiping every compromised agent" : "Forgetting everything after the bad document"} throws away ${lost} clean memories (x, orange) along with the poisoned ones (!, red). The graph keeps those ${lost}.`;
+}
+document.querySelectorAll(".counter").forEach(b => b.addEventListener("click", () => setView(view === b.dataset.view ? "precise" : b.dataset.view)));
 
 function render(data) {
   // a reset (session1 rebuilds the graph) must clear the page too: stale twins, stale red state, pending wave timers
@@ -115,15 +138,17 @@ function render(data) {
       document.getElementById("detail").textContent = DETAIL_HINT;
     }
     pending.forEach(t => clearTimeout(t)); pending.clear(); state.red.clear();
-    nodes.update(data.nodes.map(n => ({ id: n.id, ...look(n, data) })));
+    nodes.update(data.nodes.map(n => ({ id: n.id, ...look(n) })));
   }
+  for (const n of data.nodes) meta.set(n.id, n);
+  for (const id of [...meta.keys()]) if (!liveNodes.has(id)) meta.delete(id);
   const pos = layout(data);
   const newlyRed = data.nodes.filter(n => n.red && !state.red.has(n.id) && !pending.has(n.id))
                              .sort((a, b) => a.tick - b.tick);
   // the first poll after load shows existing red at once; later red appears as a wave
   const wave = state.seen;
   newlyRed.forEach((n, i) => {
-    const go = () => { state.red.add(n.id); pending.delete(n.id); nodes.update({ id: n.id, ...look(n, data) }); showPrecise(); };
+    const go = () => { state.red.add(n.id); pending.delete(n.id); nodes.update({ id: n.id, ...look(n) }); showPrecise(); };
     if (wave) pending.set(n.id, setTimeout(go, 420 * (i + 1))); else state.red.add(n.id);
   });
 
@@ -134,7 +159,7 @@ function render(data) {
   }
   for (const n of data.nodes) {
     nodes.update({ id: n.id, label: n.id, title: tip(`${n.kind} by ${n.agent}\n${n.text || n.value || ""}`),
-      note: `${n.kind} by ${n.agent} - ${n.text || n.value || ""}`, ...pos[n.id], ...look(n, data),
+      note: `${n.kind} by ${n.agent} - ${n.text || n.value || ""}`, ...pos[n.id], ...look(n),
       shape: n.kind === "Fact" ? "diamond" : n.kind === "Episode" ? "dot" : n.kind === "PlanStep" ? "triangle" : "box" });
   }
   for (const e of data.edges) {

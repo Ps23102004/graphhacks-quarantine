@@ -59,3 +59,29 @@ def test_server_refuses_non_loopback_host_header():
             assert e.code == 403
     finally:
         srv.shutdown()
+
+
+def test_page_overlay_flags_add_up_to_the_counters():
+    """The orange 'clean work a naive wipe would lose' view paints exactly the nodes the counters count."""
+    g = connect("quarantine_overlay_test")
+    try:
+        try:
+            g.delete()
+        except Exception:  # noqa: BLE001
+            pass
+        g = connect("quarantine_overlay_test")
+        from quarantine import queries as Q
+        from quarantine.loader import load, q
+        fx = read_fixture()
+        load(g, fx)
+        q(g, Q.FLAG_DOC, doc="doc_7", reason="t", tick=40)
+        q(g, Q.TAINT_CLOSURE, doc="doc_7", tick=40)
+        s = snapshot(g)
+        c = s["counters"]
+        assert sum(n["naive_agent"] for n in s["nodes"]) == c["per_agent"] == fx["expected"]["naive_per_agent"]
+        assert sum(n["naive_time"] for n in s["nodes"]) == c["time_based"] == fx["expected"]["naive_time_based"]
+        assert all(n["naive_agent"] for n in s["nodes"] if n["red"]) and all(n["naive_time"] for n in s["nodes"] if n["red"])
+        lost = [n["id"] for n in s["nodes"] if n["naive_time"] and not n["red"]]
+        assert len(lost) == c["time_based"] - c["precise"]               # 13 clean memories the time-based wipe would lose
+    finally:
+        connect("quarantine_overlay_test").delete()
