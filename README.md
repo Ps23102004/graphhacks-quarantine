@@ -116,7 +116,7 @@ docker run -d --name quarantine-falkordb -p 6379:6379 -p 3000:3000 \
 
 ### 2. Install & Run Tests
 ```bash
-uv sync
+uv sync --all-extras                      # --all-extras installs the optional MCP SDK the MCP tests need
 uv run pytest -q                              # 52 passed in ~3s
 ```
 

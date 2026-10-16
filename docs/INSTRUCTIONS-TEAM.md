@@ -32,7 +32,7 @@ When multi-agent crews (`Research`, `Planner`, `Coder`) collaborate across sessi
    git clone <repo-url> && cd graphhacks-quarantine
    docker run -d --name quarantine-falkordb -p 6379:6379 -p 3000:3000 \
      falkordb/falkordb:6.0.2@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6
-   uv sync
+   uv sync --all-extras
    uv run pytest -v  # Must pass 52/52 tests
    ```
 2. **Verify Docker Compose Deployment:**

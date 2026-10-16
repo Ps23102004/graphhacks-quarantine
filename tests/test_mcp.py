@@ -7,6 +7,8 @@ import subprocess
 import sys
 import pytest
 
+pytest.importorskip("mcp", reason="optional MCP SDK: run `uv sync --all-extras`")
+
 from quarantine.loader import connect, q
 
 PORT = int(os.environ.get("FALKORDB_PORT", 6393))

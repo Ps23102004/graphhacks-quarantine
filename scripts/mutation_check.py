@@ -71,7 +71,7 @@ def main() -> int:
             if "PONG" in sh(["docker", "exec", NAME, "redis-cli", "ping"], work).stdout:
                 break
             time.sleep(1)
-        sh(["uv", "sync", "--frozen", "-q"], repo, env, check=True)
+        sh(["uv", "sync", "--frozen", "--all-extras", "-q"], repo, env, check=True)
 
         def pytest() -> subprocess.CompletedProcess:
             return sh(["uv", "run", "pytest", "-q", "-x"], repo, env)

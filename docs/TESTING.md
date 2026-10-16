@@ -10,7 +10,7 @@ Three layers, from fastest to most convincing. Anyone on the team (or a judge) c
 ```bash
 docker run -d --name quarantine-falkordb -p 6379:6379 -p 3000:3000 \
   falkordb/falkordb:6.0.2@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6
-uv sync
+uv sync --all-extras                      # --all-extras installs the optional MCP SDK the MCP tests need
 ```
 
 ## 1. Unit and integration tests (about 5 s)
