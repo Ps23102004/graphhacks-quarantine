@@ -120,7 +120,8 @@ def run_pipeline(g, world: dict, doc: str, max_rounds: int = 80) -> list[str]:
                     return bad
                 spec = derive_rework(g, memory)
                 try:
-                    rework(g, memory, agent, spec["text"], spec["reads"], tick, "s2", task=task)
+                    rework(g, memory, agent, spec["text"], spec["reads"], tick, "s2", task=task,
+                       needs_regeneration=spec.get("needs_regeneration", False))
                 except Exception as e:  # noqa: BLE001
                     bad.append(f"rework {memory} refused: {e}")
                     return bad

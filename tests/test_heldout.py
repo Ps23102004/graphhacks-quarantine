@@ -74,3 +74,25 @@ def test_rework_when_every_input_is_dead_does_not_crash_and_is_marked_ungrounded
         assert q(g, "MATCH (m:Memory {ungrounded: true})-[r:INFLUENCED_BY]->() RETURN count(r)")[0][0] == 0
     finally:
         connect("heldout_ungrounded_test").delete()
+
+
+def test_derived_rework_never_copies_quarantined_text_into_a_clean_memory():
+    """Security review finding: copying the old text into a twin trusted as clean launders the poison."""
+    from quarantine.heldout import run_pipeline
+    from quarantine.loader import read_fixture
+    fx = read_fixture()
+    g = connect("heldout_launder_test")
+    try:
+        try:
+            g.delete()
+        except Exception:  # noqa: BLE001
+            pass
+        g = connect("heldout_launder_test")
+        load(g, fx)
+        assert run_pipeline(g, fx, "doc_4") == []                        # doc_4 has no scripted rework: derived from the graph
+        for twin_id, old_id in (("step_4_v2", "step_4"), ("a_fetch_py_v2", "a_fetch_py")):
+            twin_text, flag, old_text = q(g, "MATCH (t:Memory {id: $t}), (o:Memory {id: $o}) "
+                                             "RETURN t.text, t.needs_regeneration, o.text", t=twin_id, o=old_id)[0]
+            assert flag is True and old_text not in twin_text and "needs regeneration" in twin_text
+    finally:
+        connect("heldout_launder_test").delete()

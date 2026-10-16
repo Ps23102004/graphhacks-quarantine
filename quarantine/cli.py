@@ -193,7 +193,8 @@ def session2(args) -> None:
                         must(q(g, Q.CLAIM, task=task, me=agent, now=tick, lease=LEASE, session="s2"),
                              f"{agent} could not claim {task}")
                         say(f"  {agent}: claimed {task}")
-                    new_id = rework(g, memory, agent, spec["text"], spec["reads"], tick, session, task=task)
+                    new_id = rework(g, memory, agent, spec["text"], spec["reads"], tick, session, task=task,
+                                    needs_regeneration=spec.get("needs_regeneration", False))
                 else:
                     new_id = rep_rows[0][0]
                     # Ensure current worker has claim to complete it

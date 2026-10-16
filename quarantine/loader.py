@@ -182,26 +182,33 @@ def load(g: Graph, fx: dict, after_write=None) -> None:
 def derive_rework(g: Graph, memory_id: str) -> dict:
     """Rework spec for any quarantined step/artifact, computed from the graph (no scripted fixture needed):
     keep each clean read, swap a quarantined read for its healed twin, drop a quarantined read that has no
-    twin (it can never heal). The text is the old text marked as reworked."""
+    twin (it can never heal).
+
+    The harness cannot author content, and it must NOT copy the quarantined memory's text into a memory that
+    is then trusted as clean (that would launder the poison). So the twin carries a placeholder that names
+    the clean inputs and is flagged needs_regeneration: a real agent (or the scripted fixture) supplies the
+    text. See rework(): any `text` it is given is what gets stored."""
     rows = q(g, """
         MATCH (m:Memory {id: $id})
         OPTIONAL MATCH (m)-[:INFLUENCED_BY]->(x:Memory)
         OPTIONAL MATCH (x)<-[:SUPERSEDES]-(t:Memory {quarantined: false})
-        RETURN m.text, x.id, x.quarantined, t.id
+        RETURN x.id, x.quarantined, t.id
     """, id=memory_id)
-    text = rows[0][0] if rows else ""
     reads = []
-    for _, xid, xq, tid in rows:
+    for xid, xq, tid in rows:
         if xid is None:
             continue
         if not xq:
             reads.append(xid)
         elif tid:
             reads.append(tid)
-    return {"text": f"{text} [reworked from clean sources]", "reads": sorted(set(reads))}
+    reads = sorted(set(reads))
+    return {"text": f"[needs regeneration: rebuild {memory_id} from {', '.join(reads) or 'its task alone'}]",
+            "reads": reads, "needs_regeneration": True}
 
 
-def rework(g: Graph, old_id: str, by: str, text: str, reads: list[str], tick: int, session: str, task: str | None = None) -> str:
+def rework(g: Graph, old_id: str, by: str, text: str, reads: list[str], tick: int, session: str, task: str | None = None,
+           needs_regeneration: bool = False) -> str:
     """An agent's rework write: a new memory of the same kind that SUPERSEDES the
     quarantined one, with its own read set. Refuses a read set that still cites
     quarantined, unreplaced memory (the harness guard that stops re-poisoning).
@@ -252,7 +259,7 @@ def rework(g: Graph, old_id: str, by: str, text: str, reads: list[str], tick: in
     MATCH (old:Memory {{id: $old}}), (a:Agent {{name: $by}})
     MERGE (s:Session {{id: $session}})
     CREATE (m:Memory:{kind} {{id: $new, tick: $tick, text: $text, quarantined: false, reworked_from: $old,
-                             ungrounded: $ungrounded}})
+                             ungrounded: $ungrounded, needs_regeneration: $regen}})
     SET m.order = old.order, m.path = old.path
     CREATE (m)-[:SUPERSEDES]->(old), (a)-[:AUTHORED]->(m), (m)-[:RAN_IN]->(s)
     """
@@ -269,7 +276,7 @@ def rework(g: Graph, old_id: str, by: str, text: str, reads: list[str], tick: in
         # One statement (no UNWIND over nothing), and the twin is marked ungrounded so nobody mistakes it for sourced work.
         cypher = head + "RETURN m.id"
     res = q(g, cypher, old=old_id, by=by, session=session, new=new_id, tick=tick, text=text, reads=reads,
-            ungrounded=not reads)
+            ungrounded=not reads, regen=needs_regeneration)
     if not res:
         raise RuntimeError(f"Atomic rework write failed for {new_id}")
     return new_id
