@@ -4,13 +4,16 @@ You are the merge gate. Parth builds on `improve`; nothing lands on `main` until
 
 Size of the change: 14 commits, 30 files, +1858 / -172 lines (`git diff --stat freeze-v1..improve`). About 1,600 lines of product code in `quarantine/`, about 1,100 lines of new tests.
 
-## 0. Get the code (Parth: this repo has no remote yet)
+## 0. Get the code
 
-The repo is local on Parth's Mac at `~/Developer/graphhacks-quarantine`. Parth has to give you a copy; pick one:
-- push to a private GitHub repo and add Aashna and Aman (needs Parth's go-ahead), or
-- `git bundle create quarantine.bundle --all` and send the file; `git clone quarantine.bundle graphhacks-quarantine`.
+Private repo: https://github.com/Ps23102004/graphhacks-quarantine (branches `main` and `improve`, tag `freeze-v1`). A private GitHub repo opens only for people who were added: ask Parth to add your GitHub username as a collaborator (Settings, Collaborators), accept the emailed invite, then:
 
-Then: `git checkout improve`. Tools needed: Docker, `uv`.
+```bash
+git clone https://github.com/Ps23102004/graphhacks-quarantine.git && cd graphhacks-quarantine
+git checkout improve
+```
+
+Tools needed: Docker, `uv`.
 
 ## 1. Run these first (about 30 minutes, all on your machine, not Parth's)
 
