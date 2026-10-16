@@ -87,6 +87,9 @@ MATCH (m:Memory {quarantined: true}) WHERE m:PlanStep OR m:Artifact
 MERGE (t:Task {id: 'rework_' + m.id})
   ON CREATE SET t.kind = 'rework', t.state = 'blocked', t.created_tick = $tick
 MERGE (t)-[:REWORKS]->(m)
+WITH t
+OPTIONAL MATCH (p:Procedure {id: 'rework_procedure'})
+FOREACH (pp IN CASE WHEN p IS NULL THEN [] ELSE [p] END | MERGE (t)-[:FOLLOWS]->(pp))
 RETURN t.id ORDER BY t.id
 """
 CREATE_BLOCKED_BY = """

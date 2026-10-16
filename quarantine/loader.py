@@ -145,6 +145,25 @@ def _influenced_by(g: Graph, mid: str, reads: list[str], tick: int, session: str
             raise ValueError(f"Failed to link INFLUENCED_BY from {mid} to missing {rid}")
 
 
+# The crew's procedural memory: how an advisory is handled. Stored as a node every incident's tasks point at
+# (Task)-[:FOLLOWS]->(Procedure), so "how we recover" is shared, versioned graph state, not a constant in code.
+# The harness reads lease_ticks from it (cli.session2). The Memory label is reserved for per-write memories.
+DEFAULT_PROCEDURE = {
+    "id": "rework_procedure", "version": 1, "lease_ticks": 5, "heal_min_clean": 2,
+    "steps": ["flag the document", "quarantine its provenance closure", "count clean support per fact",
+              "one rework task per quarantined step or artifact, BLOCKED_BY its healable inputs",
+              "heal facts by strict plurality of clean episodes", "promote tasks whose blockers are replaced",
+              "author claims with an expiring lease", "rework from clean inputs only", "complete; repeat to a fixpoint"],
+}
+
+
+def write_procedure(g: Graph, proc: dict | None = None) -> None:
+    p = {**DEFAULT_PROCEDURE, **(proc or {})}
+    q(g, "MERGE (h:Agent {name: 'harness'}) ON CREATE SET h.role = 'harness' "
+         "MERGE (p:Procedure {id: $id}) SET p += $props "
+         "MERGE (h)-[:AUTHORED]->(p)", id=p["id"], props=p)
+
+
 def load(g: Graph, fx: dict, after_write=None) -> None:
     """Session 1, exactly as the fixture says. Idempotent only on an empty graph.
     after_write(memory_id) is called once each memory and its edges exist (the CLI prints from it)."""
@@ -156,6 +175,7 @@ def load(g: Graph, fx: dict, after_write=None) -> None:
         _node(g, "Agent", {"name": name, **a})
     for did, d in fx["docs"].items():
         _node(g, "Doc", {"id": did, "flagged": False, **d})
+    write_procedure(g, fx.get("procedure"))
 
     for eid, e in fx["episodes"].items():
         _memory(g, "Episode", eid, e.get("agent", "research"), "s1", {"tick": e["tick"], "text": e["text"]})
@@ -271,6 +291,9 @@ def rework(g: Graph, old_id: str, by: str, text: str, reads: list[str], tick: in
                              ungrounded: $ungrounded, needs_regeneration: $regen}})
     SET m.order = old.order, m.path = old.path
     CREATE (m)-[:SUPERSEDES]->(old), (a)-[:AUTHORED]->(m), (m)-[:RAN_IN]->(s)
+    WITH m
+    OPTIONAL MATCH (t:Task {{id: $task}})
+    FOREACH (tt IN CASE WHEN t IS NULL THEN [] ELSE [t] END | MERGE (m)-[:REWORKED_FOR]->(tt))
     """
     if reads:
         cypher = head + """
@@ -285,7 +308,7 @@ def rework(g: Graph, old_id: str, by: str, text: str, reads: list[str], tick: in
         # One statement (no UNWIND over nothing), and the twin is marked ungrounded so nobody mistakes it for sourced work.
         cypher = head + "RETURN m.id"
     res = q(g, cypher, old=old_id, by=by, session=session, new=new_id, tick=tick, text=text, reads=reads,
-            ungrounded=not reads, regen=needs_regeneration)
+            ungrounded=not reads, regen=needs_regeneration, task=task_id)
     if not res:
         raise RuntimeError(f"Atomic rework write failed for {new_id}")
     return new_id

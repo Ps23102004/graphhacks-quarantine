@@ -21,7 +21,12 @@ from quarantine.agent_runtime import recovery_status
 from quarantine.answers import sentence
 from quarantine.loader import connect, derive_rework, load, q, read_fixture, rework, rq, validate_fixture
 
-LEASE = 5
+LEASE = 5                          # default; session2 reads the crew's procedure node for the live value
+
+
+def procedure_lease(g) -> int:
+    rows = rq(g, "MATCH (p:Procedure {id: 'rework_procedure'}) RETURN p.lease_ticks")
+    return int(rows[0][0]) if rows and rows[0][0] is not None else LEASE
 AGENTS = ("planner", "coder")
 
 
@@ -120,8 +125,10 @@ def flag(args) -> None:
 
 
 # ---------------------------------------------------------------- session 2
-def kill_planner(g, task: str, tick: int) -> int:
+def kill_planner(g, task: str, tick: int, lease: int = LEASE) -> int:
     """Planner process s2 claims `task` and dies. Returns the tick at which a new process (s2b) holds the lease."""
+    LEASE = lease  # noqa: N806  (the procedure's lease, read from the graph by the caller)
+
     def claim(now: int, session: str):
         return q(g, Q.CLAIM, task=task, me="planner", now=now, lease=LEASE, session=session)
 
@@ -163,6 +170,8 @@ def session2(args) -> None:
     max_tick_rows = rq(g, "MATCH (m:Memory) RETURN max(m.tick)")
     base_tick = max_tick_rows[0][0] if max_tick_rows and max_tick_rows[0][0] else 40
     tick, changes, killed = max(41, base_tick + 1), [], False
+    lease = procedure_lease(g)
+    say(f"procedure: rework_procedure (lease {lease} ticks), read from the graph")
 
     while True:
         say(f"--- round {len(changes) + 1} ---")
@@ -190,9 +199,9 @@ def session2(args) -> None:
                 if not has_clean_rep:
                     if args.kill_planner and agent == "planner" and not killed:
                         killed, session = True, "s2b"
-                        tick = kill_planner(g, task, tick)
+                        tick = kill_planner(g, task, tick, lease)
                     else:
-                        must(q(g, Q.CLAIM, task=task, me=agent, now=tick, lease=LEASE, session="s2"),
+                        must(q(g, Q.CLAIM, task=task, me=agent, now=tick, lease=lease, session="s2"),
                              f"{agent} could not claim {task}")
                         say(f"  {agent}: claimed {task}")
                     new_id = rework(g, memory, agent, spec["text"], spec["reads"], tick, session, task=task,
@@ -200,7 +209,7 @@ def session2(args) -> None:
                 else:
                     new_id = rep_rows[0][0]
                     # Ensure current worker has claim to complete it
-                    q(g, Q.CLAIM, task=task, me=agent, now=tick, lease=LEASE, session=session)
+                    q(g, Q.CLAIM, task=task, me=agent, now=tick, lease=lease, session=session)
 
                 completed = q(g, Q.COMPLETE, task=task, me=agent, tick=tick, now=tick, session=session)
                 if not completed:
@@ -219,7 +228,7 @@ def session2(args) -> None:
 def hold(args) -> None:
     """Claim a rework task as the Planner (session s2), then sleep until killed."""
     g = connect(args.graph)
-    if not q(g, Q.CLAIM, task=args.task, me="planner", now=args.tick, lease=LEASE, session="s2"):
+    if not q(g, Q.CLAIM, task=args.task, me="planner", now=args.tick, lease=procedure_lease(g), session="s2"):
         print("refused", flush=True)
         sys.exit(1)
     print("held", flush=True)

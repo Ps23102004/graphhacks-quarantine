@@ -53,6 +53,7 @@ def test_rule1_agent_never_writes_cypher_fixed_catalog_with_validation(g):
     tools = re.findall(r"@mcp\.tool\(\)\s*\ndef (\w+)\(([^)]*)\)", src)
     assert tools and not any("cypher" in sig.lower() or "query" in sig.lower() for _, sig in tools), tools
     # (c) an unresolved argument returns "unknown" and nothing runs: the resolver is consulted and no query executes
+    node_count = rq(g, "MATCH (n) RETURN count(n)")[0][0]
     calls: list[str] = []
     real_rq = answers.rq
     answers.rq = lambda g_, cypher, **p: (calls.append(cypher), real_rq(g_, cypher, **p))[1]
@@ -62,9 +63,30 @@ def test_rule1_agent_never_writes_cypher_fixed_catalog_with_validation(g):
             calls.clear()
             out = fn(g, *args)
             assert out["shape"] == "unknown", out
+            assert calls, "the resolver must actually consult the graph"
             assert all("Memory {id: $id}" in c or "Doc {id: $id}" in c for c in calls), calls   # resolvers only
+        # hostile and malformed ids never reach the server: no query at all, still shape "unknown"
+        for bad in ("\x00", "a\x00b", "\ud800", "x" * 100000, "", "x' }) MATCH (n) DETACH DELETE n //", "$id"):
+            assert answers.why_connected(g, "a_cache_py", bad)["shape"] == "unknown", bad
+            calls.clear()
+            for fn in (answers.recall, answers.why_quarantined, answers.blast_radius):
+                assert fn(g, bad)["shape"] == "unknown", (bad, fn.__name__)
+            if "\x00" in bad or "\ud800" in bad or len(bad) > 256 or not bad:
+                assert not calls, (bad, calls)                          # malformed: rejected before any query
+        assert rq(g, "MATCH (n) RETURN count(n)")[0][0] == node_count     # nothing was injected or deleted
     finally:
         answers.rq = real_rq
+    # the MCP layer inherits the behaviour, including on non-string input
+    import os
+    import quarantine.mcp_server as srv
+    os.environ["QUARANTINE_GRAPH"] = "guideline_test"
+    try:
+        for bad in (None, 123, "", "\x00", "no_such"):
+            for fn, args in ((srv.trace_provenance_receipt, (bad,)), (srv.recall, (bad,)), (srv.blast_radius, (bad,)),
+                             (srv.why_connected, ("a_cache_py", bad))):
+                assert fn(*args)["shape"] == "unknown", (bad, fn.__name__)
+    finally:
+        os.environ.pop("QUARANTINE_GRAPH", None)
 
 
 # ---------------------------------------------------------------- rule 2
@@ -82,11 +104,33 @@ def test_rule2_reads_use_ro_query_and_one_graph_per_tenant(fx):
             g.delete()
         except Exception:  # noqa: BLE001
             pass
-    # (b) every read-only catalog function and every page/MCP read goes through rq / ro_query
-    src = (ROOT / "quarantine" / "answers.py").read_text()
-    assert " q(" not in src and "_rq(" in src and "import rq as _rq" in src
-    for path in ("web/server.py", "quarantine/mcp_server.py", "quarantine/agent_runtime.py"):
-        assert "ro_query" in (ROOT / path).read_text(), path
+    # (b) runtime proof: with the write path disabled, every catalog function, the page and the status tools still work
+    from falkordb import Graph
+    from quarantine.agent_runtime import recovery_status
+    from web.server import receipt, snapshot
+    g2 = connect("guideline_ro_spy")
+    try:
+        g2.delete()
+    except Exception:  # noqa: BLE001
+        pass
+    g2 = connect("guideline_ro_spy")
+    load(g2, fx)
+    q(g2, Q.FLAG_DOC, doc="doc_7", reason="t", tick=40)
+    q(g2, Q.TAINT_CLOSURE, doc="doc_7", tick=40)
+    real_query, writes = Graph.query, []
+    Graph.query = lambda self, *a, **k: writes.append(a[0] if a else k) or (_ for _ in ()).throw(AssertionError("write path used for a read"))
+    try:
+        assert answers.why_quarantined(g2, "a_requirements")["shape"] == "path"
+        assert answers.why_connected(g2, "a_requirements", "doc_7")["shape"] == "path"
+        assert answers.recall(g2, "f_http_client")["shape"] == "memory"
+        assert answers.blast_radius(g2, "doc_7")["shape"] == "path"
+        assert snapshot(g2)["counters"]["precise"] == 6
+        assert receipt(g2, "a_requirements")["shape"] == "path"
+        assert recovery_status(g2)["quarantined_memories"] == 6
+    finally:
+        Graph.query = real_query
+        g2.delete()
+    assert writes == []
     # (c) tenant isolation: two crews in two graphs, an advisory in one never touches the other
     a, b = connect("guideline_tenant_a"), connect("guideline_tenant_b")
     for x in (a, b):
@@ -125,10 +169,26 @@ def test_rule3_local_to_live_is_environment_only(monkeypatch):
     assert kw == {"host": "r-abc.instance.cloud.falkordb.io", "port": 62345, "username": "falkordb",
                   "password": "example-not-a-real-secret", "ssl": True}
     # and nothing in the code base hard-codes a host or port outside connect()
-    for path in ROOT.glob("quarantine/*.py"):
+    for path in [*ROOT.glob("quarantine/*.py"), *ROOT.glob("web/*.py")]:
         if path.name == "loader.py":
             continue
-        assert "6379" not in path.read_text() and "FalkorDB(" not in path.read_text(), path
+        text = path.read_text()
+        assert "6379" not in text and "FalkorDB(" not in text and "FALKORDB_HOST" not in text, path
+    # the deployment honours the same variables (the skeptic found it hard-coded the local container)
+    import json
+    import shutil
+    import subprocess
+    if shutil.which("docker") is None:
+        pytest.skip("docker not installed")
+    env = {**os.environ, "FALKORDB_HOST": "cloud.example", "FALKORDB_PORT": "62345", "FALKORDB_TLS": "1",
+           "FALKORDB_USERNAME": "falkordb", "FALKORDB_PASSWORD": "example-not-a-real-secret"}
+    r = subprocess.run(["docker", "compose", "-f", str(ROOT / "deploy" / "docker-compose.yml"), "config", "--format", "json"],
+                       capture_output=True, text=True, env=env, timeout=60)
+    if r.returncode != 0:
+        pytest.skip(f"docker compose unavailable: {r.stderr[:120]}")
+    web_env = json.loads(r.stdout)["services"]["web"]["environment"]
+    assert web_env["FALKORDB_HOST"] == "cloud.example" and web_env["FALKORDB_PORT"] == "62345"
+    assert web_env["FALKORDB_TLS"] == "1" and web_env["FALKORDB_USERNAME"] == "falkordb"
 
 
 # ---------------------------------------------------------------- rule 4
@@ -156,6 +216,27 @@ def test_rule4_every_answer_is_one_of_four_shapes(g):
     shapes.add(out["shape"])
 
     assert shapes == {"path", "memory", "not_in_graph", "unknown"}
+    # every MCP tool, good and bad input, and the page receipt: a dict with "shape" in the four and an "answer"
+    import os
+    import quarantine.mcp_server as srv
+    from web.server import receipt
+    os.environ["QUARANTINE_GRAPH"] = "guideline_test"
+    try:
+        tool_calls = [(srv.inspect_quarantined_memories, ()), (srv.get_recovery_status, ()),
+                      (srv.trace_provenance_receipt, ("a_requirements",)), (srv.trace_provenance_receipt, ("a_fetch_py",)),
+                      (srv.trace_provenance_receipt, ("nope",)), (srv.why_connected, ("a_requirements", "doc_7")),
+                      (srv.why_connected, ("a_fetch_py", "doc_7")), (srv.recall, ("f_goal",)), (srv.recall, ("",)),
+                      (srv.blast_radius, ("doc_7",)), (srv.blast_radius, ("doc_1",)), (srv.blast_radius, (None,))]
+        seen = set()
+        for fn, args in tool_calls:
+            out = fn(*args)
+            assert isinstance(out, dict) and out["shape"] in shapes and "answer" in out, (fn.__name__, args, out)
+            seen.add(out["shape"])
+        assert seen == shapes
+    finally:
+        os.environ.pop("QUARANTINE_GRAPH", None)
+    assert receipt(g, "a_fetch_py")["shape"] == "not_in_graph"
+    assert receipt(g, "a_requirements")["shape"] == "path" and receipt(g, "zzz")["shape"] == "unknown"
     # every catalog function only ever returns these four shapes, on good and bad inputs alike
     for fn, good, bad in ((answers.why_quarantined, ("step_3",), ("x",)), (answers.why_connected, ("step_3", "doc_7"), ("step_3", "x")),
                           (answers.recall, ("step_3",), ("x",)), (answers.blast_radius, ("doc_7",), ("x",))):
@@ -176,6 +257,22 @@ def test_rule5_graph_algorithm_is_a_tool_and_actually_runs(g):
     assert out["sentence"].startswith("a_requirements was written after reading")
     # unconnected pairs are "not in the graph", not an error
     assert answers.why_connected(g, "a_fetch_py", "doc_7")["shape"] == "not_in_graph"
+    # direction is respected: provenance points from memory to document, never back
+    assert answers.why_connected(g, "doc_7", "a_requirements")["shape"] == "not_in_graph"
+    # a 63-hop chain still comes from the procedure (the skeptic found a silent maxLen 50 truncation)
+    from quarantine.worldgen import make_chain_world
+    gc = connect("guideline_chain")
+    try:
+        gc.delete()
+    except Exception:  # noqa: BLE001
+        pass
+    gc = connect("guideline_chain")
+    try:
+        load(gc, make_chain_world(60))
+        deep = answers.why_connected(gc, "art_0", "doc_1")
+        assert deep["shape"] == "path" and deep["method"] == "algo.SPpaths" and deep["length"] == 63, deep.get("method")
+    finally:
+        gc.delete()
 
 
 # ---------------------------------------------------------------- rule 6
@@ -188,7 +285,16 @@ def test_rule6_blast_radius_is_a_traversal_wearing_a_sentence(g):
                  "which was consolidated from ep_7a, which was extracted from doc_7.")
     out = answers.blast_radius(g, "doc_7")
     assert out["shape"] == "path" and out["members"] == ["a_requirements", "ep_7a", "ep_7b", "f_http_client", "f_http_pin", "step_3"]
-    assert out["sentence"].startswith("doc_7 led to 6 memories")
+    assert out["sentence"].startswith("doc_7 led to 6 memories") and "which was extracted from doc_7." in out["sentence"]
+    assert len(out["via"]) == len(out["hops"]) - 1 == 4                 # the longest chain, as hops and edges
+    assert {c["hops"][0] for c in out["chains"]} == set(out["members"]) # every member has its own chain to the doc
+    assert all(c["hops"][-1] == "doc_7" and len(c["via"]) == len(c["hops"]) - 1 for c in out["chains"])
+    # a malformed path is an error, never a silently shortened sentence
+    with pytest.raises(ValueError):
+        answers.sentence(["a", "b", "c"], ["INFLUENCED_BY"])
+    with pytest.raises(ValueError):
+        answers.sentence(["a", "b"], [])
+    assert answers.sentence(["a", "b"], ["CLAIMED_BY"]) == "a is linked by CLAIMED_BY to b."
     # the same "and then" on a document nothing derived from is "not in the graph", not zero-with-a-shrug
     q(g, "CREATE (:Doc {id: 'doc_lonely', flagged: false})")
     assert answers.blast_radius(g, "doc_lonely")["shape"] == "not_in_graph"
