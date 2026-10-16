@@ -55,17 +55,37 @@ VERBS = {"INFLUENCED_BY": "was written after reading", "CONSOLIDATED_FROM": "was
 
 
 def sentence(hops: list[str], via: list[str]) -> str:
-    """A traversal wearing a sentence: 'A was written after reading B, which was consolidated from C, ...'."""
+    """A traversal wearing a sentence: 'A was written after reading B, which was consolidated from C, ...'.
+    Raises on a malformed path rather than silently dropping hops."""
+    if len(via) != max(len(hops) - 1, 0):
+        raise ValueError(f"path has {len(hops)} nodes but {len(via)} edges")
     if len(hops) < 2:
         return hops[0] if hops else ""
-    parts = [f"{hops[0]} {VERBS.get(via[0], via[0].lower())} {hops[1]}"]
+    verb = lambda t: VERBS.get(t, f"is linked by {t} to")  # noqa: E731
+    parts = [f"{hops[0]} {verb(via[0])} {hops[1]}"]
     for t, h in zip(via[1:], hops[2:]):
-        parts.append(f"which {VERBS.get(t, t.lower())} {h}")
+        parts.append(f"which {verb(t)} {h}")
     return ", ".join(parts) + "."
 
 
 # ---------------------------------------------------------------- resolvers (run before any query)
+MAX_ID = 256
+
+
+def valid_id(x) -> bool:
+    """Only a short, NUL-free, UTF-8 encodable string can be a node id; anything else is "unknown" without a query."""
+    if not isinstance(x, str) or not x or len(x) > MAX_ID or "\x00" in x:
+        return False
+    try:
+        x.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 def resolve_memory(g, memory_id: str) -> dict | None:
+    if not valid_id(memory_id):
+        return None
     rows = rq(g, "MATCH (m:Memory {id: $id}) OPTIONAL MATCH (m)<-[:AUTHORED]-(a:Agent) OPTIONAL MATCH (m)-[:RAN_IN]->(s:Session) "
                  "RETURN m.id, labels(m)[1], m.tick, s.id, a.name, m.quarantined, m.text, m.value", id=memory_id)
     if not rows:
@@ -76,6 +96,8 @@ def resolve_memory(g, memory_id: str) -> dict | None:
 
 
 def resolve_doc(g, doc_id: str) -> dict | None:
+    if not valid_id(doc_id):
+        return None
     rows = rq(g, "MATCH (d:Doc {id: $id}) RETURN d.id, d.title, coalesce(d.flagged, false)", id=doc_id)
     return None if not rows else {"id": rows[0][0], "title": rows[0][1], "flagged": bool(rows[0][2])}
 
@@ -92,7 +114,10 @@ def why_quarantined(g, memory_id: str) -> dict:
         return shape_unknown(memory_id, "memory")
     if not m["quarantined"]:
         return shape_not_in_graph(f"{memory_id} has no provenance path to any flagged document")
-    for (doc,) in rq(g, "MATCH (d:Doc {flagged: true}) RETURN d.id ORDER BY d.id"):
+    # the advisory that quarantined it is recorded on the memory, so the receipt survives the doc being un-flagged
+    docs = [r[0] for r in rq(g, "MATCH (m:Memory {id: $id}) WHERE m.quarantine_doc IS NOT NULL RETURN m.quarantine_doc", id=memory_id)]
+    docs += [r[0] for r in rq(g, "MATCH (d:Doc {flagged: true}) RETURN d.id ORDER BY d.id") if r[0] not in docs]
+    for doc in docs:
         rows = rq(g, Q.RECEIPT, **{"from": memory_id, "doc": doc})
         if rows and rows[0][0]:
             hops, _length, via = rows[0]
@@ -101,8 +126,9 @@ def why_quarantined(g, memory_id: str) -> dict:
 
 
 def why_connected(g, from_id: str, to_id: str) -> dict:
-    """How does A lead to B? Weighted shortest path via algo.SPpaths over provenance edges (sponsor algorithm),
-    falling back to shortestPath if the procedure is unavailable on this server."""
+    """How does A lead to B? Fewest-hops path via algo.SPpaths over provenance edges (the sponsor's algorithm;
+    unweighted: no weightProp is passed). shortestPath runs instead only if the procedure raises on this server;
+    the result says which one answered ("method")."""
     a, b = resolve_node(g, from_id), resolve_node(g, to_id)
     if a is None:
         return shape_unknown(from_id)
@@ -113,11 +139,11 @@ def why_connected(g, from_id: str, to_id: str) -> dict:
     try:
         rows = rq(g, "MATCH (a {id: $a}), (b {id: $b}) "
                      "CALL algo.SPpaths({sourceNode: a, targetNode: b, "
-                     "relTypes: ['INFLUENCED_BY', 'CONSOLIDATED_FROM', 'EXTRACTED_FROM'], maxLen: 50, pathCount: 1}) "
+                     "relTypes: ['INFLUENCED_BY', 'CONSOLIDATED_FROM', 'EXTRACTED_FROM'], pathCount: 1}) "
                      "YIELD path RETURN [n IN nodes(path) | n.id], [r IN relationships(path) | type(r)]", a=from_id, b=to_id)
-    except Exception:  # noqa: BLE001  (older image without the procedure)
-        rows = []
-    if not rows:
+        if not rows:                                                    # the procedure ran and found nothing
+            return shape_not_in_graph(f"no provenance path from {from_id} to {to_id}")
+    except Exception:  # noqa: BLE001  (image without the procedure)
         method = "shortestPath"
         rows = rq(g, f"MATCH (a {{id: $a}}), (b {{id: $b}}) WITH shortestPath((a)-[:{PROVENANCE}*]->(b)) AS p "
                      "WHERE p IS NOT NULL RETURN [n IN nodes(p) | n.id], [r IN relationships(p) | type(r)]", a=from_id, b=to_id)
@@ -145,11 +171,19 @@ def blast_radius(g, doc_id: str) -> dict:
     if d is None:
         return shape_unknown(doc_id, "document")
     rows = rq(g, f"MATCH (d:Doc {{id: $doc}})<-[:{PROVENANCE}*1..]-(m:Memory) RETURN collect(DISTINCT m.id)", doc=doc_id)
-    ids = rows[0][0] if rows else []
+    ids = sorted(rows[0][0]) if rows else []
     if not ids:
         return shape_not_in_graph(f"nothing in the graph was derived from {doc_id}")
-    return {"shape": "path", "answer": f"{len(ids)} memories derive from {doc_id}", "members": sorted(ids),
-            "flagged": d["flagged"], "sentence": f"{doc_id} led to {len(ids)} memories: {', '.join(sorted(ids))}."}
+    # "and then", member by member: each one's own path back to the document, rendered as a sentence
+    chains = []
+    for mid in ids:
+        r = rq(g, Q.RECEIPT, **{"from": mid, "doc": doc_id})
+        if r and r[0][0]:
+            chains.append({"hops": r[0][0], "via": r[0][2], "sentence": sentence(r[0][0], r[0][2])})
+    longest = max(chains, key=lambda c: len(c["hops"]), default={"hops": [], "via": []})
+    return {"shape": "path", "answer": f"{len(ids)} memories derive from {doc_id}", "members": ids, "flagged": d["flagged"],
+            "hops": longest["hops"], "via": longest["via"], "chains": chains,
+            "sentence": f"{doc_id} led to {len(ids)} memories. Longest chain: {sentence(longest['hops'], longest['via'])}"}
 
 
 CATALOG = {"why_quarantined": why_quarantined, "why_connected": why_connected, "recall": recall, "blast_radius": blast_radius}

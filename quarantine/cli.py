@@ -19,7 +19,7 @@ import time
 from quarantine import queries as Q
 from quarantine.agent_runtime import recovery_status
 from quarantine.answers import sentence
-from quarantine.loader import connect, derive_rework, load, q, read_fixture, rework, validate_fixture
+from quarantine.loader import connect, derive_rework, load, q, read_fixture, rework, rq, validate_fixture
 
 LEASE = 5
 AGENTS = ("planner", "coder")
@@ -106,11 +106,11 @@ def flag(args) -> None:
     naive_time, _ = q(g, Q.NAIVE_TIME_BASED, doc=args.doc)[0]
 
     say(f"precise {precise} | per-agent {naive} | time-based {naive_time}")
-    closure = [r[0] for r in q(g, "MATCH (m:Memory {quarantined: true}) RETURN m.id ORDER BY m.tick")]
+    closure = [r[0] for r in rq(g, "MATCH (m:Memory {quarantined: true}) RETURN m.id ORDER BY m.tick")]
     say(f"closure {ids(closure)}")
     for task, waiting in blocked:
         say(f"task {task}  blocked_by {ids(waiting)}")
-    for (aid,) in q(g, "MATCH (m:Artifact {quarantined: true}) RETURN m.id ORDER BY m.tick"):
+    for (aid,) in rq(g, "MATCH (m:Artifact {quarantined: true}) RETURN m.id ORDER BY m.tick"):
         if aid not in closure_ids:
             continue                                                    # red from an earlier advisory
         hops, length, via = q(g, Q.RECEIPT, **{"from": aid, "doc": args.doc})[0]
@@ -133,7 +133,7 @@ def kill_planner(g, task: str, tick: int) -> int:
     child.kill()
     child.wait()
     say(f"  planner (process {child.pid}, session s2) claimed {task}, lease until tick {tick + LEASE} ... kill -9, exit {child.returncode}")
-    for memory, _h, t, state, waiting in q(g, Q.STARTUP, me="coder"):
+    for memory, _h, t, state, waiting in rq(g, Q.STARTUP, me="coder"):
         say("  " + startup_line("coder", memory, t, state, waiting))
 
     live = tick + 2
@@ -150,17 +150,17 @@ def kill_planner(g, task: str, tick: int) -> int:
 def session2(args) -> None:
     fx = read_fixture(args.fixture)
     g = connect(args.graph)
-    must(q(g, "MATCH (t:Task) RETURN t.id LIMIT 1"), "no rework tasks yet (run `quarantine flag DOC` first)")
+    must(rq(g, "MATCH (t:Task) RETURN t.id LIMIT 1"), "no rework tasks yet (run `quarantine flag DOC` first)")
 
     # whoever authored something with a rework task, in the order their quarantined work was written
-    agents = [r[0] for r in q(g, "MATCH (a:Agent)-[:AUTHORED]->(m:Memory)<-[:REWORKS]-(:Task) "
+    agents = [r[0] for r in rq(g, "MATCH (a:Agent)-[:AUTHORED]->(m:Memory)<-[:REWORKS]-(:Task) "
                                  "RETURN a.name, min(m.tick) AS t ORDER BY t")] or list(AGENTS)
     say("session 2: fresh processes, start-up query only")
     for agent in agents:
-        for memory, _h, task, state, waiting in q(g, Q.STARTUP, me=agent):
+        for memory, _h, task, state, waiting in rq(g, Q.STARTUP, me=agent):
             say("  " + startup_line(agent, memory, task, state, waiting))
 
-    max_tick_rows = q(g, "MATCH (m:Memory) RETURN max(m.tick)")
+    max_tick_rows = rq(g, "MATCH (m:Memory) RETURN max(m.tick)")
     base_tick = max_tick_rows[0][0] if max_tick_rows and max_tick_rows[0][0] else 40
     tick, changes, killed = max(41, base_tick + 1), [], False
 
@@ -174,7 +174,7 @@ def session2(args) -> None:
             n += 1
         tick += 1
         for agent in agents:
-            for memory, _h, task, state, waiting in q(g, Q.STARTUP, me=agent):
+            for memory, _h, task, state, waiting in rq(g, Q.STARTUP, me=agent):
                 say("  " + startup_line(agent, memory, task, state, waiting))
                 if state not in ("ready", "claimed"):
                     continue
@@ -183,7 +183,7 @@ def session2(args) -> None:
                 spec = fx.get("rework", {}).get(memory) or derive_rework(g, memory)
 
                 # Check if clean replacement already exists (restart / recovery case)
-                rep_rows = q(g, "MATCH (m:Memory {id: $mid})<-[:SUPERSEDES]-(r:Memory {quarantined: false}) RETURN r.id", mid=memory)
+                rep_rows = rq(g, "MATCH (m:Memory {id: $mid})<-[:SUPERSEDES]-(r:Memory {quarantined: false}) RETURN r.id", mid=memory)
                 has_clean_rep = bool(rep_rows and rep_rows[0])
 
                 session = "s2"
@@ -213,7 +213,7 @@ def session2(args) -> None:
         say(f"round {len(changes)} changes = {n}")
         if n == 0:
             break
-    say(f"fixpoint: rounds {changes}, {q(g, Q.COUNT_MEMORIES)[0][0]} memories")
+    say(f"fixpoint: rounds {changes}, {rq(g, Q.COUNT_MEMORIES)[0][0]} memories")
 
 
 def hold(args) -> None:

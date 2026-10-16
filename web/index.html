@@ -218,8 +218,8 @@ net.on("click", async p => {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const rc = await res.json();
     if (request !== detailRequest) return;
-    if (!rc || rc.error) {
-      detail.innerHTML = `<code>${esc(id)}</code> ${esc(rc && rc.error ? rc.error : "has no path to the flagged document.")}`;
+    if (!rc || rc.shape !== "path") {                                   // not_in_graph / unknown: say which, in the guide's words
+      detail.innerHTML = `<code>${esc(id)}</code>: <b>${esc(rc ? rc.shape : "no answer")}</b>. ${esc(rc && rc.answer ? rc.answer : "")}`;
       return;
     }
     highlight(rc.hops);

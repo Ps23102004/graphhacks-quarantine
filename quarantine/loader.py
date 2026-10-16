@@ -115,10 +115,8 @@ def q(g: Graph, cypher: str, **params):
 
 
 def rq(g: Graph, cypher: str, **params):
-    """Run one read-only statement using ro_query, return result rows."""
-    if hasattr(g, "ro_query"):
-        return g.ro_query(cypher, params).result_set
-    return g.query(cypher, params, read_only=True).result_set
+    """Run one read-only statement through GRAPH.RO_QUERY, return result rows. No write-path fallback."""
+    return g.ro_query(cypher, params).result_set
 
 
 def _node(g: Graph, labels: str, props: dict) -> None:

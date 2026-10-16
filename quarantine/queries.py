@@ -19,7 +19,7 @@ RETURN d.id
 # three edge types, any depth (the graph is a DAG: reads only point backwards in time). Returns the "precise" count.
 TAINT_CLOSURE = """
 MATCH (d:Doc {id: $doc})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]-(m:Memory)
-SET m.quarantined = true, m.quarantine_tick = $tick
+SET m.quarantined = true, m.quarantine_tick = $tick, m.quarantine_doc = coalesce(m.quarantine_doc, $doc)
 RETURN count(DISTINCT m) AS precise, collect(DISTINCT m.id) AS ids
 """
 
@@ -109,14 +109,19 @@ WHERE NOT (f)<-[:SUPERSEDES]-() AND NOT e.quarantined
 WITH f, c.claim AS claim, collect(DISTINCT e) AS eps ORDER BY size(eps) DESC, claim
 WITH f, collect({claim: claim, eps: eps}) AS groups
 WITH f, groups[0].claim AS best, groups[0].eps AS agree,
-     CASE WHEN size(groups) > 1 THEN size(groups[1].eps) ELSE 0 END AS second_cnt
+     CASE WHEN size(groups) > 1 THEN size(groups[1].eps) ELSE 0 END AS second_cnt,
+     [grp IN groups[1..] | grp] AS dissent_groups
 WHERE size(agree) >= 2 AND size(agree) > second_cnt
 MATCH (f)<-[:AUTHORED]-(a:Agent)
 MERGE (s:Session {id: $session})
 CREATE (f2:Memory:Fact {id: f.id + '_v2', subject: f.subject, slot: f.slot, value: best,
                         tick: $tick, quarantined: false,
-                        support_total: size(agree), support_clean: size(agree)})
+                        support_total: size(agree), support_clean: size(agree),
+                        rule: 'strict plurality of clean episodes, at least 2', runner_up_count: second_cnt})
 CREATE (f2)-[:SUPERSEDES]->(f), (a)-[:AUTHORED]->(f2), (f2)-[:RAN_IN]->(s)
+// the clean episodes that disagreed are recorded too (rejected: true), so the vote is traceable, not just its winner
+FOREACH (grp IN dissent_groups |
+  FOREACH (e IN grp.eps | CREATE (f2)-[:CONSOLIDATED_FROM {claim: grp.claim, rejected: true}]->(e)))
 WITH f2, best, agree
 UNWIND agree AS e
 CREATE (f2)-[:CONSOLIDATED_FROM {claim: best}]->(e)

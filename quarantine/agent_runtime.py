@@ -14,9 +14,7 @@ from falkordb import Graph
 def recovery_status(g: Graph) -> dict[str, Any]:
     """Inspects FalkorDB graph state and returns an auditable recovery status dictionary."""
     def _query(cypher: str, **params) -> list:
-        if hasattr(g, "ro_query"):
-            return g.ro_query(cypher, params).result_set
-        return g.query(cypher, params, read_only=True).result_set
+        return g.ro_query(cypher, params).result_set                  # read-only path, no write fallback
 
     # Total counts
     mem_rows = _query("MATCH (m:Memory) RETURN count(m)")

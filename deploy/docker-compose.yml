@@ -20,8 +20,12 @@ services:
     ports:
       - "127.0.0.1:${WEB_PORT:-8765}:8765"
     environment:
-      - FALKORDB_HOST=falkordb
-      - FALKORDB_PORT=6379
+      # Local by default; point at FalkorDB Cloud by exporting these before `docker compose up` (same code, no edits)
+      - FALKORDB_HOST=${FALKORDB_HOST:-falkordb}
+      - FALKORDB_PORT=${FALKORDB_PORT:-6379}
+      - FALKORDB_USERNAME=${FALKORDB_USERNAME:-}
+      - FALKORDB_PASSWORD=${FALKORDB_PASSWORD:-}
+      - FALKORDB_TLS=${FALKORDB_TLS:-}
       - ALLOWED_HOSTS=localhost,127.0.0.1,web
     depends_on:
       falkordb:

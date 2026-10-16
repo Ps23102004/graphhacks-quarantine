@@ -48,11 +48,11 @@ def test_missing_graph_does_not_create_key():
     db = FalkorDB(port=PORT)
     try:
         res = srv.inspect_quarantined_memories()
-        assert res == []
+        assert res["shape"] == "not_in_graph" and res["items"] == []
         assert missing_name not in db.list_graphs()
 
         receipt_res = srv.trace_provenance_receipt("some_id")
-        assert "error" in receipt_res
+        assert receipt_res["shape"] == "unknown" and "error" in receipt_res
         assert missing_name not in db.list_graphs()
     finally:
         os.environ["QUARANTINE_GRAPH"] = GRAPH
@@ -89,8 +89,8 @@ def test_trace_provenance_receipt_clean_memory_returns_error():
     q(g, "CREATE (m:Memory:Episode {id: 'ep_clean', quarantined: false})")
 
     res = srv.trace_provenance_receipt("ep_clean")
-    assert "error" in res
-    assert "No provenance path to flagged document for ep_clean" in res["error"]
+    assert res["shape"] == "not_in_graph" and "error" not in res         # a clean memory is an answer, not an error
+    assert "no provenance path" in res["answer"]
 
 
 def test_inspect_quarantined_memories_returns_records():
@@ -100,11 +100,13 @@ def test_inspect_quarantined_memories_returns_records():
     q(g, "CREATE (m:Memory:Episode {id: 'ep_1', quarantined: true, tick: 5, text: 'content 1'})")
     q(g, "MATCH (a:Agent {name: 'researcher'}), (m:Memory {id: 'ep_1'}) CREATE (a)-[:AUTHORED]->(m)")
 
-    memories = srv.inspect_quarantined_memories()
+    res = srv.inspect_quarantined_memories()
+    assert res["shape"] == "memory"
+    memories = res["items"]
     assert len(memories) == 1
     assert memories[0]["id"] == "ep_1"
     assert memories[0]["agent"] == "researcher"
-    assert memories[0]["tick"] == 5
+    assert memories[0]["learned_tick"] == 5
     assert memories[0]["content"] == "content 1"
 
 
@@ -112,8 +114,9 @@ def test_get_recovery_status_deferred_or_delegated():
     import quarantine.mcp_server as srv
     status = srv.get_recovery_status()
     assert isinstance(status, dict)
-    assert "mode" in status
-    assert status["mode"] == "scripted"
+    assert status["shape"] in ("memory", "not_in_graph")
+    if status["shape"] == "memory":
+        assert status["mode"] == "scripted" and "learned_tick" in status
 
 
 def test_mcp_inspect_cli_stdio_handshake_and_tool_call():
@@ -147,4 +150,4 @@ def test_mcp_inspect_cli_stdio_handshake_and_tool_call():
     )
     assert proc2.returncode == 0, proc2.stderr
     status = json.loads(proc2.stdout)
-    assert "mode" in status
+    assert status["shape"] in ("memory", "not_in_graph")                  # a status answer, in one of the four shapes

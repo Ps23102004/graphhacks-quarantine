@@ -27,15 +27,12 @@ for i in $(seq 1 30); do
 done
 
 echo "== 4. Seed test graph in Compose =="
-# Seed via Python passing host explicitly so it works regardless of whether Core has completed Finding 4
+# Seed from inside the web container: connect() takes everything from the container's environment
 docker compose -p "$PROJECT" -f "$SRC/deploy/docker-compose.yml" exec -T web \
   /app/.venv/bin/python -c "
-import os
-from quarantine.loader import connect, load, read_fixture
-host = os.environ.get('FALKORDB_HOST', 'falkordb')
-g = connect('quarantine', host=host)
-load(g, read_fixture())
-print('Seeded graph quarantine on host', host)
+from quarantine.loader import connect, connection_kwargs, load, read_fixture
+load(connect('quarantine'), read_fixture())
+print('Seeded graph quarantine via', connection_kwargs())
 "
 
 echo "== 5. Verify HTTP endpoints =="

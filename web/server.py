@@ -15,7 +15,7 @@ from urllib.parse import parse_qs, urlparse
 
 from quarantine import queries as Q
 from quarantine.answers import why_quarantined
-from quarantine.loader import connect, q
+from quarantine.loader import connect
 
 HERE = Path(__file__).resolve().parent
 
@@ -33,12 +33,8 @@ RETURN a.id, type(r), b.id
 
 
 def _read_query(g, cypher: str, **params):
-    from quarantine import loader
-    if hasattr(loader, "rq"):
-        return loader.rq(g, cypher, **params)
-    if hasattr(g, "ro_query"):
-        return g.ro_query(cypher, params).result_set
-    return q(g, cypher, **params)
+    """Every page read goes through the read-only path. No write-path fallback."""
+    return g.ro_query(cypher, params).result_set
 
 
 def mark_naive(nodes: list[dict], edges: list[dict], flagged: str) -> None:
@@ -70,12 +66,12 @@ def snapshot(g) -> dict:
     return dict(nodes=nodes, docs=docs, edges=edges, flagged=flagged, counters=counters)
 
 
-def receipt(g, mid: str) -> dict | None:
-    """Page receipt: the guide's answer shape plus the fields the page already reads (hops/len/via)."""
+def receipt(g, mid: str) -> dict:
+    """Page receipt: one of the four answer shapes, plus the fields the page reads (hops/len/via) on a path."""
     out = why_quarantined(g, mid)
-    if out["shape"] != "path":
-        return None if out["shape"] == "not_in_graph" else {"error": out["answer"], "shape": out["shape"]}
-    return dict(hops=out["hops"], len=out["length"], via=out["via"], sentence=out["sentence"], shape="path")
+    if out["shape"] == "path":
+        out.update(len=out["length"])
+    return out
 
 
 def get_allowed_hosts() -> set[str]:
@@ -112,14 +108,10 @@ def make_handler(graph: str):
                 elif u.path == "/vendor/vis-network.min.js":
                     self._send((HERE / "vendor" / "vis-network.min.js").read_bytes(), "text/javascript")
                 elif u.path == "/graph":
-                    host = os.environ.get("FALKORDB_HOST", "localhost")
-                    g = connect(graph, host=host)
-                    self._send(json.dumps(snapshot(g)).encode(), "application/json")
+                    self._send(json.dumps(snapshot(connect(graph))).encode(), "application/json")
                 elif u.path == "/receipt":
                     mid = parse_qs(u.query).get("id", [""])[0]
-                    host = os.environ.get("FALKORDB_HOST", "localhost")
-                    g = connect(graph, host=host)
-                    self._send(json.dumps(receipt(g, mid)).encode(), "application/json")
+                    self._send(json.dumps(receipt(connect(graph), mid)).encode(), "application/json")
                 else:
                     self._send(b"not found", "text/plain", 404)
             except Exception as e:  # noqa: BLE001  (graph missing / FalkorDB down: tell the page, keep serving)
