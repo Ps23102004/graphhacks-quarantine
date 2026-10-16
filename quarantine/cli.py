@@ -18,7 +18,7 @@ import time
 
 from quarantine import queries as Q
 from quarantine.agent_runtime import recovery_status
-from quarantine.loader import connect, load, q, read_fixture, rework, validate_fixture
+from quarantine.loader import connect, derive_rework, load, q, read_fixture, rework, validate_fixture
 
 LEASE = 5
 AGENTS = ("planner", "coder")
@@ -150,8 +150,11 @@ def session2(args) -> None:
     g = connect(args.graph)
     must(q(g, "MATCH (t:Task) RETURN t.id LIMIT 1"), "no rework tasks yet (run `quarantine flag DOC` first)")
 
+    # whoever authored something with a rework task, in the order their quarantined work was written
+    agents = [r[0] for r in q(g, "MATCH (a:Agent)-[:AUTHORED]->(m:Memory)<-[:REWORKS]-(:Task) "
+                                 "RETURN a.name, min(m.tick) AS t ORDER BY t")] or list(AGENTS)
     say("session 2: fresh processes, start-up query only")
-    for agent in AGENTS:
+    for agent in agents:
         for memory, _h, task, state, waiting in q(g, Q.STARTUP, me=agent):
             say("  " + startup_line(agent, memory, task, state, waiting))
 
@@ -168,16 +171,14 @@ def session2(args) -> None:
             say(f"  research: healed {fid.removesuffix('_v2')} -> {fid} = {value} (support {support} clean)")
             n += 1
         tick += 1
-        for agent in AGENTS:
+        for agent in agents:
             for memory, _h, task, state, waiting in q(g, Q.STARTUP, me=agent):
                 say("  " + startup_line(agent, memory, task, state, waiting))
                 if state not in ("ready", "claimed"):
                     continue
 
-                # Check if rework is supported BEFORE claiming task (Finding 10)
-                spec = fx["rework"].get(memory)
-                if spec is None:
-                    sys.exit(f"error: no scripted rework for {memory} (the demo scripts only {ids(fx['rework'])}; flag {fx['flag']['doc']})")
+                # scripted rework for the demo's memories, graph-derived for any other flagged doc
+                spec = fx["rework"].get(memory) or derive_rework(g, memory)
 
                 # Check if clean replacement already exists (restart / recovery case)
                 rep_rows = q(g, "MATCH (m:Memory {id: $mid})<-[:SUPERSEDES]-(r:Memory {quarantined: false}) RETURN r.id", mid=memory)

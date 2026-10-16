@@ -41,6 +41,8 @@ MUTATIONS = [
     ("heal accepts a tie",                    "quarantine/queries.py", "WHEN m:Fact THEN best >= 2 AND best > second", "WHEN m:Fact THEN best >= 2 AND best >= second"),
     ("rework guard allows quarantined reads", "quarantine/loader.py",  "if quarantined is None or quarantined]", "if quarantined is None]"),
     ("rework guard allows missing reads",     "quarantine/loader.py",  "if quarantined is None or quarantined]", "if quarantined]"),
+    ("rework crashes on an empty read set", "quarantine/loader.py", "    if reads:\n        cypher = head", "    if True:\n        cypher = head"),
+    ("derived rework keeps dead reads", "quarantine/loader.py", "        if not xq:\n            reads.append(xid)\n        elif tid:", "        if True:\n            reads.append(xid)\n        elif tid:"),
     ("rework is not idempotent",              "quarantine/loader.py",  "[0][0]:\n        return new_id", "[0][0] > 99:\n        return new_id"),
     ("COMPLETE ignores the lease session",    "quarantine/queries.py", "CLAIMED_BY {session: $session}]", "CLAIMED_BY]"),
     ("COMPLETE needs no replacement",         "quarantine/queries.py", "-[:REWORKS]->(:Memory)<-[:SUPERSEDES]-(:Memory)\nMATCH (t)-[c:CLAIMED_BY", "-[:REWORKS]->(:Memory)\nMATCH (t)-[c:CLAIMED_BY"),

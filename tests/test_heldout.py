@@ -47,3 +47,30 @@ def test_baselines_overwipe_on_unseen_worlds():
     assert s["mean_precise_frac"] < s["mean_time_frac"] < s["mean_per_agent_frac"] + 0.2
     assert s["clean_lost_per_agent"] > 0.5 and s["clean_lost_time"] > 0.3   # naive wipes throw away most clean work
     assert s["clean_lost_per_agent"] > s["clean_lost_time"]
+
+
+@pytest.mark.parametrize("mode,deep", [("declared", False), ("cumulative", False), ("declared", True)])
+def test_whole_session2_pipeline_on_unseen_worlds(mode, deep):
+    """Flag, closure, heal, claim, graph-derived rework, to a fixpoint: invariants hold on every (world, doc)."""
+    from quarantine.heldout import run_pipelines
+    total, fails = run_pipelines(range(5000, 5012), mode, deep, graph=f"heldout_pipe_{mode}_{deep}")
+    assert total > 80 and not fails, fails[:2]
+
+
+def test_rework_when_every_input_is_dead_does_not_crash_and_is_marked_ungrounded():
+    """Found by held-out data: a step whose only inputs were poisoned beyond repair made the rework write raise."""
+    from quarantine.heldout import run_pipeline
+    g = connect("heldout_ungrounded_test")
+    try:
+        try:
+            g.delete()
+        except Exception:  # noqa: BLE001
+            pass
+        g = connect("heldout_ungrounded_test")
+        world = make_world(4000)
+        load(g, world)
+        assert run_pipeline(g, world, "doc_4") == []
+        assert q(g, "MATCH (m:Memory {ungrounded: true}) RETURN count(m)")[0][0] >= 1
+        assert q(g, "MATCH (m:Memory {ungrounded: true})-[r:INFLUENCED_BY]->() RETURN count(r)")[0][0] == 0
+    finally:
+        connect("heldout_ungrounded_test").delete()

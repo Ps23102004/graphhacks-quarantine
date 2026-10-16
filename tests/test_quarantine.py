@@ -355,6 +355,7 @@ def test_two_advisories_and_unscripted_docs_do_not_crash_the_cli_or_page(fx):
         assert receipt(g, "a_requirements")["hops"][-1] == "doc_7"       # receipt goes to the doc it actually reaches
         assert receipt(g, "a_fetch_py")["hops"][-1] == "doc_4"
         assert receipt(g, "a_scaffold") is None                          # clean memory: no path, not "null hops"
-        run("session2", ok=False)                                        # step_4 has no scripted rework: clear exit, no traceback
+        out = run("session2")                                            # step_4 has no scripted rework: derived from the graph
+        assert "fixpoint:" in out and "a_fetch_py_v2" in out and "step_4_v2" in out
     finally:
         connect(graph).delete()

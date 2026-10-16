@@ -179,6 +179,28 @@ def load(g: Graph, fx: dict, after_write=None) -> None:
         done(aid)
 
 
+def derive_rework(g: Graph, memory_id: str) -> dict:
+    """Rework spec for any quarantined step/artifact, computed from the graph (no scripted fixture needed):
+    keep each clean read, swap a quarantined read for its healed twin, drop a quarantined read that has no
+    twin (it can never heal). The text is the old text marked as reworked."""
+    rows = q(g, """
+        MATCH (m:Memory {id: $id})
+        OPTIONAL MATCH (m)-[:INFLUENCED_BY]->(x:Memory)
+        OPTIONAL MATCH (x)<-[:SUPERSEDES]-(t:Memory {quarantined: false})
+        RETURN m.text, x.id, x.quarantined, t.id
+    """, id=memory_id)
+    text = rows[0][0] if rows else ""
+    reads = []
+    for _, xid, xq, tid in rows:
+        if xid is None:
+            continue
+        if not xq:
+            reads.append(xid)
+        elif tid:
+            reads.append(tid)
+    return {"text": f"{text} [reworked from clean sources]", "reads": sorted(set(reads))}
+
+
 def rework(g: Graph, old_id: str, by: str, text: str, reads: list[str], tick: int, session: str, task: str | None = None) -> str:
     """An agent's rework write: a new memory of the same kind that SUPERSEDES the
     quarantined one, with its own read set. Refuses a read set that still cites
@@ -226,19 +248,28 @@ def rework(g: Graph, old_id: str, by: str, text: str, reads: list[str], tick: in
         raise ValueError(f"Original memory {old_id} not found")
     kind = kind_rows[0][0]
 
-    cypher = f"""
+    head = f"""
     MATCH (old:Memory {{id: $old}}), (a:Agent {{name: $by}})
     MERGE (s:Session {{id: $session}})
-    CREATE (m:Memory:{kind} {{id: $new, tick: $tick, text: $text, quarantined: false, reworked_from: $old}})
+    CREATE (m:Memory:{kind} {{id: $new, tick: $tick, text: $text, quarantined: false, reworked_from: $old,
+                             ungrounded: $ungrounded}})
     SET m.order = old.order, m.path = old.path
     CREATE (m)-[:SUPERSEDES]->(old), (a)-[:AUTHORED]->(m), (m)-[:RAN_IN]->(s)
+    """
+    if reads:
+        cypher = head + """
     WITH m
     UNWIND $reads AS rid
-    MATCH (x:Memory {{id: rid}})
-    CREATE (m)-[:INFLUENCED_BY {{read_tick: $tick, session: $session}}]->(x)
-    RETURN m.id
+    MATCH (x:Memory {id: rid})
+    CREATE (m)-[:INFLUENCED_BY {read_tick: $tick, session: $session}]->(x)
+    RETURN DISTINCT m.id
     """
-    res = q(g, cypher, old=old_id, by=by, session=session, new=new_id, tick=tick, text=text, reads=reads)
+    else:
+        # Every input of the old memory was poisoned beyond repair: the agent redoes it from its task alone.
+        # One statement (no UNWIND over nothing), and the twin is marked ungrounded so nobody mistakes it for sourced work.
+        cypher = head + "RETURN m.id"
+    res = q(g, cypher, old=old_id, by=by, session=session, new=new_id, tick=tick, text=text, reads=reads,
+            ungrounded=not reads)
     if not res:
         raise RuntimeError(f"Atomic rework write failed for {new_id}")
     return new_id
