@@ -57,7 +57,8 @@ async (page) => {
     const box = document.querySelector('#stage').getBoundingClientRect();
     return [...hive.cells.values()].filter(c => {
       const x = OX + c.x * S, y = OY + c.y * S;
-      return x - c.r * S < 0 || y - c.r * S < 0 || x + c.r * S > box.width || y + c.r * S > box.height;
+      const hw = (c.w || 2 * c.r) / 2 * S, hh = (c.h || 2 * c.r) / 2 * S;
+      return x - hw < 0 || y - hh < 0 || x + hw > box.width || y + hh > box.height;
     }).map(c => c.id);
   };
   const checkFit = async name => {

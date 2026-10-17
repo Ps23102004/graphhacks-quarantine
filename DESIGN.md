@@ -1,38 +1,36 @@
-# DESIGN.md — the Quarantine hive (canvas build, recorded 2026-10-17)
+# DESIGN.md — the Quarantine ledger (light editorial build, recorded 2026-10-17)
 
 ## World
 
-- **Form:** a hive plot. Five radial axes around a quiet core, one per kind of memory, in provenance order: Sources (top), Episodes, Facts, Plan steps, Files (clockwise, 72° apart). Each memory is a luminous orb (documents are hexagons) placed on its axis by write order, coloured by the agent that wrote it; a faint honeycomb lattice fades out from the core. Provenance is a curved arc with light particles flowing along it, pulled toward the core; a read between two cells on the same axis bows outward. No force layout, no physics: the picture is the same every time the same graph is loaded.
-- **Ground:** graphite night `#0b0d12` with one soft radial lift behind the hive. Chosen for the recording scene and dim demo rooms; there is no light theme.
-- **Material:** The hive is drawn on one `<canvas>` with additive blending (glow orbs, arcs, particles); a glass HUD states the headline number. Apple-style translucent layers: the sticky top bar and the inspector column use `backdrop-filter` blur over the ground; cards are one step lighter glass with a 1px hairline (`rgba(255,255,255,.08)`), radius 14px. `prefers-reduced-transparency` makes them solid.
-- **Type:** the platform system face (SF on Apple devices) at body 15px; numbers tabular; large counters 38px weight 650 tracking -0.03em; ids in the system monospace.
+- **Form:** a left-to-right provenance ledger. Five columns in write order: Sources, Episodes, Facts, Plan steps, Files. Each memory is a labelled chip; a ribbon joins what was read to the memory written after reading it. A healed replacement slots into the column directly under its original. The layout is deterministic: the same graph always draws the same picture.
+- **Ground:** warm newsprint `#f4efe5`, ink `#17140f`. Light only: it reads in a bright room and in a screen recording. No glow, no neon, no glass.
+- **Type:** serif (`ui-serif`, New York on Apple) for the title and every big numeral; system sans for UI; system mono for ids. Column headers are small caps with tracking.
+- **Material:** printed paper. Contamination is ink that bleeds (a multiply-blended red stain under red chips), the receipt is a yellow highlighter pen over a dotted ink line.
 
 ## Colour roles (meaning, never decoration)
 
 | role | value | used for |
 |---|---|---|
-| clean memory | agent colour | default orb; colour = author |
-| quarantined | `#ff453a` (system red) | red cells, hot arcs, the precise counter |
-| healed replacement | `#30d158` (system green) | twin cells beside their original, dashed SUPERSEDES arc |
-| naive casualty | `#ff9f0a` (system orange) | clean cells a naive wipe would destroy (only in the two comparison views) |
-| receipt path | `#ffd60a` (system yellow) | the selected memory's path to the source, and the chain in the inspector |
-| agent rims | `#64d2ff`, `#7d7aff`, `#da8fff`, `#66d4cf`, `#ffb340` | each author's cells carry its rim colour, assigned in order of appearance |
+| quarantined | `#d02818` vermilion | red chips, hot ribbons, the precise counter, ink stain |
+| healed replacement | `#16804a` | twin chip outline and tint, dashed SUPERSEDES ribbon |
+| naive casualty | `#c76a04` ochre, hatched | clean chips a naive wipe would destroy (comparison views only) |
+| receipt path | `#ffd23f` highlighter | the selected memory's path to the source, and the chain in the inspector |
+| agent identity | teal, indigo, plum, blue, olive | a 6px stripe on the left of each chip, assigned in order of appearance |
 
-Every state also has a non-colour marker inside the cell: `!` quarantined or flagged source, `+` healed, `×` naive casualty.
+Every state also has a non-colour marker on the chip: `!` quarantined or flagged source, `+` healed, `×` naive casualty.
 
 ## Motion
 
-- One authored moment: the **red wave**. When a source is flagged, cells turn red in the order they were written, 360 ms apart, each with a short halo burst, and the arcs into them draw on with a stroke-dash (900 ms, ease `cubic-bezier(.16,1,.3,1)`). The precise counter climbs with the wave.
-- Supporting motion: new cells settle in (scale .4 to 1, 520 ms); the receipt path draws on (700 ms); comparison bars grow with `transform: scaleX`; the live dot breathes.
-- `prefers-reduced-motion`: no wave delay, no draw-on, no bursts; colour changes only.
+- One authored moment, the **spill**: when a source is flagged, ink creeps along its ribbons and each reached chip turns red in write order, 380 ms apart, with a stain that spreads for 900 ms. The precise counter climbs with it.
+- Supporting: chips settle in on arrival, the receipt highlighter draws on, comparison bars grow with `transform: scaleX`, ink dots drift along ribbons.
+- `prefers-reduced-motion`: no wave delay, no draw-on, no drifting dots; colour changes only.
 
 ## Interaction
 
-- Click, or focus and press Enter/Space, on any cell: the inspector shows what it says, who wrote it and when, and the server's answer in one of four shapes; for a quarantined memory the path to the source lights up and reads as a sentence. Escape clears.
-- Hover or focus: the cell's neighbours stay lit, everything else recedes.
-- The three policy cards are toggles: the precise view, and two views that paint in orange what each naive wipe would lose.
-- Labels: sources and quarantined cells are labelled; every other label appears on hover, focus or selection. Labels are pills with collision avoidance. Keyboard and screen-reader access goes through a hidden button list (`#sr-cells`).
+- Click a chip (or use the hidden `#sr-cells` button list with the keyboard): the inspector shows what it says, who wrote it, and the server's answer in one of four shapes; a quarantined memory highlights its whole path and reads as a sentence. Escape clears.
+- Hover or focus: the chip's neighbours stay lit, the rest recede. The receipt path always stays lit.
+- The three policy cards are toggles: the precise view, and two views that hatch in ochre what each naive wipe would lose.
 
 ## Layout
 
-Desktop: hive on the left, 400px inspector on the right (policies, receipt, ledger, key). Below 980px: header wraps, hive becomes a square, inspector stacks under it. Checked at 1920, 1600, 960 and 375 wide (`scripts/check_browser.js`).
+Desktop: a serif headline numeral over the chart (left), 400px inspector (right: policies, receipt, quarantined list, key). Below 980px: the inspector stacks under the chart and the chart scrolls sideways inside its own frame (labels stay legible). Checked at 1920, 960 and 375 wide (`scripts/check_browser.js`).
