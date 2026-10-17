@@ -36,7 +36,6 @@ def test_wheel_build_and_contents():
         assert "web/__init__.py" in names
         assert "web/server.py" in names
         assert "web/index.html" in names
-        assert "web/vendor/vis-network.min.js" in names
         # Verify fixture.yaml under share/quarantine
         assert any(n.endswith("share/quarantine/fixture.yaml") for n in names)
 
@@ -69,7 +68,6 @@ import web.server
 # Verify web assets are present in package
 web_dir = Path(web.server.__file__).resolve().parent
 assert (web_dir / "index.html").exists(), "index.html missing from installed web package"
-assert (web_dir / "vendor" / "vis-network.min.js").exists(), "vis-network.min.js missing from installed web package"
 
 # Verify fixture.yaml is in sys.prefix / share / quarantine
 prefix_fixture = Path(sys.prefix) / "share" / "quarantine" / "fixture.yaml"

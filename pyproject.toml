@@ -31,7 +31,7 @@ build-backend = "setuptools.build_meta"
 packages = ["quarantine", "web"]
 
 [tool.setuptools.package-data]
-web = ["index.html", "vendor/*"]
+web = ["index.html"]
 
 [tool.setuptools.data-files]
 "share/quarantine" = ["fixture.yaml"]

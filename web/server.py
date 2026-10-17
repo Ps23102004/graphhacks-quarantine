@@ -105,8 +105,6 @@ def make_handler(graph: str):
             try:
                 if u.path in ("/", "/index.html"):
                     self._send((HERE / "index.html").read_bytes(), "text/html; charset=utf-8")
-                elif u.path == "/vendor/vis-network.min.js":
-                    self._send((HERE / "vendor" / "vis-network.min.js").read_bytes(), "text/javascript")
                 elif u.path == "/graph":
                     self._send(json.dumps(snapshot(connect(graph))).encode(), "application/json")
                 elif u.path == "/receipt":

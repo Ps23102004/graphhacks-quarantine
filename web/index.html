@@ -3,188 +3,623 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Quarantine</title>
-<script src="/vendor/vis-network.min.js"></script>
+<title>Quarantine · shared agent memory</title>
 <style>
   :root {
-    --bg: #0f1216; --panel: #171b21; --line: #2a313b; --text: #e6e9ee; --muted: #8b95a3;
-    --clean: #5b6675; --red: #e5484d; --green: #30a46c; --orange: #f5a524;
+    color-scheme: dark;
+    --bg: #0b0d12;
+    --bg-2: #10131a;
+    --glass: rgba(26, 30, 40, 0.72);
+    --glass-strong: rgba(30, 34, 46, 0.86);
+    --hair: rgba(255, 255, 255, 0.08);
+    --hair-strong: rgba(255, 255, 255, 0.16);
+    --text: #f2f4f8;
+    --text-2: #a7afbd;
+    --text-3: #7c8595;
+    --cell: #2a3140;
+    --cell-edge: #3a4354;
+    --edge: rgba(167, 175, 189, 0.22);
+    --red: #ff453a;
+    --red-soft: rgba(255, 69, 58, 0.16);
+    --green: #30d158;
+    --green-soft: rgba(48, 209, 88, 0.16);
+    --orange: #ff9f0a;
+    --orange-soft: rgba(255, 159, 10, 0.16);
+    --path: #ffd60a;
+    --a1: #64d2ff; --a2: #7d7aff; --a3: #da8fff; --a4: #66d4cf; --a5: #ffb340;
+    --radius: 14px;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-    font: 15px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  body { display: grid; grid-template-rows: auto auto 1fr auto; }
-  header { display: flex; align-items: baseline; gap: 16px; padding: 14px 20px 8px; }
-  h1 { margin: 0; font-size: 18px; letter-spacing: .02em; }
-  #banner { font-size: 14px; color: var(--muted); }
-  #banner b { color: var(--text); }
-  #counters { display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: 12px; padding: 4px 20px 12px; }
-  .counter { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px;
-    color: inherit; font: inherit; text-align: left; cursor: pointer; }
-  .counter:hover { border-color: var(--muted); }
-  .counter.active { border-color: var(--text); box-shadow: 0 0 0 1px var(--text); }
-  .counter .n { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .counter .l { font-size: 12px; color: var(--muted); }
-  .counter.precise .n { color: var(--red); }
-  #legend { align-self: center; font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
-  .dot { display: inline-block; width: 18px; height: 18px; border-radius: 50%; margin-right: 5px;
-    font-style: normal; font-weight: 700; line-height: 18px; text-align: center; color: var(--bg); }
-  #net { min-height: 360px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-  #detail { padding: 10px 20px 14px; font-size: 13px; min-height: 64px; color: var(--muted); }
-  #detail code { color: var(--text); }
-  #detail .path { color: var(--orange); }
-  #err { color: var(--red); }
-  @media (max-width: 700px) { #counters { grid-template-columns: 1fr; } }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(1200px 900px at 38% 52%, #141826 0%, var(--bg) 62%) fixed, var(--bg);
+    color: var(--text); font: 15px/1.45 var(--font); -webkit-font-smoothing: antialiased;
+    display: grid; grid-template-rows: auto 1fr; grid-template-columns: minmax(0, 1fr); min-height: 100vh;
+  }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--a1); outline-offset: 3px; border-radius: 8px; }
+
+  /* ---------- top bar: translucent material over the hive ---------- */
+  .bar {
+    position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px;
+    padding: 14px 24px; background: rgba(11, 13, 18, 0.62);
+    backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border-bottom: 1px solid var(--hair);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .brand svg { flex: none; }
+  .brand h1 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.015em; }
+  .brand p { margin: 0; font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .status {
+    margin-left: auto; display: flex; align-items: center; gap: 10px; padding: 7px 14px 7px 12px;
+    border-radius: 999px; background: var(--glass); border: 1px solid var(--hair); font-size: 13.5px; color: var(--text-2);
+    max-width: 52vw;
+  }
+  .status b { color: var(--text); font-weight: 600; }
+  .status span#banner { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .live { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: none; box-shadow: 0 0 0 0 rgba(48,209,88,.5); }
+  .live.down { background: var(--red); }
+  @media (prefers-reduced-motion: no-preference) { .live:not(.down) { animation: live 2.4s var(--ease) infinite; } }
+  @keyframes live { 0% { box-shadow: 0 0 0 0 rgba(48,209,88,.45); } 70%, 100% { box-shadow: 0 0 0 7px rgba(48,209,88,0); } }
+
+  /* ---------- stage ---------- */
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 0; min-height: 0; }
+  .hive { position: relative; min-height: 560px; }
+  #hive { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .empty {
+    position: absolute; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: none;
+    color: var(--text-2); font-size: 15px;
+  }
+  .empty code { font-family: var(--mono); color: var(--text); background: var(--glass); border: 1px solid var(--hair); padding: 3px 8px; border-radius: 8px; }
+  .empty[hidden] { display: none; }
+
+  /* hive svg */
+  .axis line { stroke: var(--hair-strong); stroke-width: 1.5; stroke-linecap: round; }
+  .axis text { fill: var(--text-2); font: 600 15px var(--font); letter-spacing: 0.01em; }
+  .axis .count { fill: var(--text-3); font-weight: 500; }
+  .core-hex { fill: #161a24; stroke: var(--hair-strong); stroke-width: 1.5; }
+  .core-text { fill: var(--text-3); font: 500 12.5px var(--font); text-anchor: middle; }
+
+  .arc { fill: none; stroke: var(--edge); stroke-width: 1.4; transition: stroke 400ms var(--ease), opacity 400ms var(--ease); }
+  .arc.sup { stroke: var(--green); stroke-dasharray: 4 5; opacity: .75; }
+  .arc.hot { stroke: var(--red); stroke-width: 2.2; opacity: .9; }
+  .arc.path { stroke: var(--path); stroke-width: 3.6; opacity: 1; }
+  @media (prefers-reduced-motion: no-preference) {
+    .arc.hot.drawing { stroke-dasharray: var(--len) var(--len); animation: draw 900ms var(--ease) both; }
+    .arc.path { stroke-dasharray: var(--len) var(--len); animation: draw 700ms var(--ease) both; }
+  }
+  @keyframes draw { from { stroke-dashoffset: var(--len); } to { stroke-dashoffset: 0; } }
+  svg.has-focus .arc:not(.near):not(.path) { opacity: .18; }
+  svg.has-focus .arc.near { stroke: var(--text-2); stroke-width: 2; }
+  svg.has-focus .arc.near.hot { stroke: var(--red); }
+
+  .cell { cursor: pointer; outline: none; }
+  .cell .hex { fill: var(--cell); stroke: var(--ring, var(--cell-edge)); stroke-width: 2.2; transition: fill 450ms var(--ease), stroke 450ms var(--ease), opacity 300ms var(--ease); }
+  .cell .halo { fill: none; stroke: transparent; stroke-width: 9; opacity: 0; transition: opacity 450ms var(--ease); }
+  .cell .mark { fill: #0b0d12; font: 700 11px var(--font); text-anchor: middle; dominant-baseline: central; opacity: 0; pointer-events: none; }
+  .cell .lbl { fill: var(--text-2); font: 500 13px var(--font); pointer-events: none; transition: fill 300ms var(--ease), opacity 300ms var(--ease); }
+  .cell .lbl-bg { fill: var(--bg); opacity: .78; }
+  .cell .lblg { transition: opacity 250ms var(--ease); }
+  .cell.quiet .lblg { opacity: 0; }
+  .cell.quiet:hover .lblg, .cell.quiet:focus-visible .lblg, .cell.quiet.selected .lblg, svg.has-focus .cell.quiet.near .lblg, svg.labels .cell.quiet .lblg { opacity: 1; }
+  .cell:hover .hex, .cell:focus-visible .hex { stroke: var(--text); }
+  .cell:focus-visible .halo { stroke: var(--a1); opacity: .55; }
+  .cell.doc .hex { fill: #1c2130; stroke-dasharray: 3 3; }
+  .cell.flagged .hex { fill: #4a1512; stroke: var(--red); stroke-dasharray: none; }
+  .cell.red .hex { fill: var(--red); stroke: var(--red); }
+  .cell.red .halo { stroke: var(--red-soft); opacity: 1; }
+  .cell.red .mark, .cell.twin .mark, .cell.collateral .mark { opacity: 1; }
+  .cell.red .lbl, .cell.twin .lbl, .cell.selected .lbl { fill: var(--text); }
+  .cell.twin .hex { fill: var(--green); stroke: var(--green); }
+  .cell.twin .halo { stroke: var(--green-soft); opacity: 1; }
+  .cell.collateral .hex { fill: var(--orange); stroke: var(--orange); }
+  .cell.collateral .halo { stroke: var(--orange-soft); opacity: 1; }
+  .cell.dim .hex { opacity: .35; }
+  .cell.dim .lbl { opacity: .45; }
+  .cell.selected .halo { stroke: var(--path); opacity: .9; stroke-width: 5; }
+  svg.has-focus .cell:not(.near):not(.selected) .hex { opacity: .4; }
+  svg.has-focus .cell:not(.near):not(.selected) .lbl { opacity: .35; }
+  @media (prefers-reduced-motion: no-preference) {
+    .cell.enter .hex { animation: settle 520ms var(--ease) both; transform-box: fill-box; transform-origin: center; }
+    .cell.burst .halo { animation: burst 900ms var(--ease) both; transform-box: fill-box; transform-origin: center; }
+  }
+  @keyframes settle { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  @keyframes burst { 0% { transform: scale(.6); opacity: 1; stroke-width: 14; } 100% { transform: scale(1.5); opacity: 0; stroke-width: 2; } }
+
+  /* ---------- inspector: one translucent column ---------- */
+  .inspector {
+    border-left: 1px solid var(--hair); background: linear-gradient(180deg, rgba(16,19,26,.55), rgba(11,13,18,.75));
+    backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+    overflow-y: auto; padding: 22px 22px 28px; display: flex; flex-direction: column; gap: 22px;
+  }
+  .inspector h2 { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--text-2); letter-spacing: 0.02em; }
+  .policies { display: flex; flex-direction: column; gap: 8px; }
+  .policy {
+    display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 4px 12px; width: 100%; text-align: left;
+    padding: 12px 14px 13px; border-radius: var(--radius); background: var(--glass); border: 1px solid var(--hair);
+    cursor: pointer; transition: border-color 200ms var(--ease), background 200ms var(--ease), transform 100ms ease-out;
+  }
+  .policy:hover { border-color: var(--hair-strong); }
+  .policy:active { transform: scale(0.985); }
+  .policy.active { background: var(--glass-strong); border-color: rgba(255,255,255,.28); }
+  .policy .name { font-size: 14.5px; font-weight: 600; letter-spacing: -0.005em; }
+  .policy .how { grid-column: 1; font-size: 12.5px; color: var(--text-2); }
+  .policy .n { grid-row: 1 / span 2; grid-column: 2; font-size: 38px; font-weight: 650; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .policy .n small { font-size: 14px; font-weight: 500; color: var(--text-3); letter-spacing: 0; margin-left: 2px; }
+  .policy.precise .n { color: var(--red); }
+  .policy .track { grid-column: 1 / -1; height: 6px; border-radius: 99px; background: rgba(255,255,255,.06); overflow: hidden; margin-top: 8px; }
+  .policy .fill { display: block; height: 100%; width: 100%; transform: scaleX(0); transform-origin: left center; border-radius: inherit; background: var(--text-3); transition: transform 700ms var(--ease); }
+  .policy.precise .fill { background: var(--red); }
+  .policy.active:not(.precise) .fill { background: var(--orange); }
+  .note { margin: 8px 2px 0; font-size: 12.5px; color: var(--text-2); min-height: 1.4em; }
+
+  .card { padding: 14px 16px; border-radius: var(--radius); background: var(--glass); border: 1px solid var(--hair); }
+  #detail { font-size: 14px; color: var(--text-2); }
+  #detail .kind { display: inline-block; font-size: 12px; font-weight: 600; color: var(--text); background: rgba(255,255,255,.08); padding: 2px 8px; border-radius: 99px; margin-right: 6px; }
+  #detail .id { font-family: var(--mono); font-size: 14px; color: var(--text); }
+  #detail .text { color: var(--text); margin: 8px 0 6px; font-size: 14.5px; line-height: 1.5; }
+  #detail .meta { font-size: 12.5px; color: var(--text-3); }
+  #detail .shape { display: inline-block; margin-top: 10px; font-size: 12px; font-weight: 650; padding: 2px 8px; border-radius: 99px; }
+  #detail .shape.path { background: rgba(255,214,10,.14); color: var(--path); }
+  #detail .shape.not_in_graph { background: rgba(255,255,255,.08); color: var(--text); }
+  #detail .shape.unknown { background: var(--red-soft); color: var(--red); }
+  #detail .answer { margin-top: 8px; color: var(--text); }
+  .chain { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
+  .chain li { position: relative; padding: 0 0 12px 22px; font-size: 13.5px; }
+  .chain li::before { content: ""; position: absolute; left: 6px; top: 6px; width: 8px; height: 8px; border-radius: 2px; background: var(--path); transform: rotate(45deg); }
+  .chain li:not(:last-child)::after { content: ""; position: absolute; left: 9.5px; top: 16px; bottom: 0; width: 1px; background: rgba(255,214,10,.4); }
+  .chain .via { display: block; color: var(--text-3); font-size: 12px; }
+  .chain code { font-family: var(--mono); color: var(--text); }
+  #detail .err { color: var(--red); }
+
+  .ledger { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .ledger button {
+    width: 100%; display: grid; grid-template-columns: 16px 1fr auto; gap: 10px; align-items: center; text-align: left;
+    padding: 8px 10px; border-radius: 10px; border: 1px solid transparent; background: transparent; cursor: pointer; font-size: 13.5px;
+  }
+  .ledger button:hover { background: rgba(255,255,255,.05); }
+  .ledger button[aria-pressed="true"] { border-color: rgba(255,214,10,.5); background: rgba(255,214,10,.06); }
+  .ledger .sw { width: 12px; height: 12px; clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%); }
+  .ledger code { font-family: var(--mono); color: var(--text); }
+  .ledger .what { color: var(--text-3); font-size: 12px; }
+  .ledger-empty { font-size: 13px; color: var(--text-3); margin: 0; }
+
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; font-size: 12.5px; color: var(--text-2); }
+  .legend span { display: flex; align-items: center; gap: 8px; }
+  .legend i { width: 13px; height: 13px; flex: none; clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%); }
+  .legend .ring { background: transparent !important; box-shadow: inset 0 0 0 2px currentColor; clip-path: none; border-radius: 50%; }
+  .foot { font-size: 12px; color: var(--text-3); margin: 0; }
+
+  @media (max-width: 980px) {
+    body { grid-template-rows: auto auto; }
+    main { grid-template-columns: 1fr; }
+    .hive { min-height: 0; aspect-ratio: 1 / 1; }
+    .inspector { border-left: 0; border-top: 1px solid var(--hair); }
+    .brand p { display: none; }
+    .bar { flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
+    .status { margin-left: 0; width: 100%; max-width: 100%; min-width: 0; }
+    .status span#banner { white-space: normal; }
+    .inspector { padding: 18px 16px 24px; }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .bar, .inspector, .policy, .card, .status { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg-2); }
+  }
 </style>
 </head>
 <body>
-<header><h1>QUARANTINE</h1><div id="banner">connecting...</div></header>
-<section id="counters">
-  <button class="counter precise active" data-view="precise"><div class="n" id="c-precise">-</div><div class="l">graph-precise: memories quarantined</div></button>
-  <button class="counter" data-view="agent"><div class="n" id="c-agent">-</div><div class="l">naive: wipe every compromised agent (click to see)</div></button>
-  <button class="counter" data-view="time"><div class="n" id="c-time">-</div><div class="l">naive: forget everything after the bad doc (click to see)</div></button>
-  <div id="legend">
-    <span><i class="dot" style="background:var(--clean)"></i>clean</span>
-    <span><i class="dot" style="background:var(--red)">!</i>quarantined</span>
-    <span><i class="dot" style="background:var(--green)">+</i>healed twin (SUPERSEDES)</span>
-    <span><i class="dot" style="background:var(--orange)">x</i>clean work a naive wipe would lose</span>
+<!--
+THESIS: shared agent memory drawn as a hive plot, one radial axis per kind of memory, so "this bad source reached these six cells and no others" is visible as a wave travelling outward along provenance arcs; refuses the force-directed hairball and the grey-dots page it replaces.
+OWN-WORLD: graphite night ground, translucent Apple-style material panels, hexagonal cells on five axes around a quiet core, system red for quarantined, green for healed twins, orange for clean work a naive wipe would destroy, agents as coloured cell rims, gold for the receipt path.
+STORY: the visitor sees memory being written, sees one flagged source turn exactly six cells red, compares that with the 25 and 19 a naive wipe would take by clicking the policies, clicks any red cell to read why in words, and watches the crew heal.
+FIRST VIEWPORT: the hive fills the left two thirds; the right column leads with the three ways to forget (6 / 25 / 19) as selectable bars, then the selected memory's receipt, then the ledger.
+FORM: hive plot (founder-pinned, beats the roll); no seed key (pinned direction).
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+-->
+<header class="bar">
+  <div class="brand">
+    <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path d="M15 2 26.3 8.5v13L15 28 3.7 21.5v-13Z" fill="none" stroke="#ff453a" stroke-width="2"/><path d="M15 9.5 20 12.4v5.2L15 20.5 10 17.6v-5.2Z" fill="#ff453a"/></svg>
+    <div><h1>Quarantine</h1><p>Precise forgetting for shared agent memory · FalkorDB</p></div>
   </div>
-</section>
-<div id="net"></div>
-<footer id="detail">Click a quarantined (!) memory to see its source path.</footer>
+  <div class="status" role="status"><i class="live" id="live"></i><span id="banner">connecting…</span></div>
+</header>
+
+<main>
+  <section class="hive" aria-label="Hive plot of the crew's shared memory">
+    <svg id="hive" viewBox="-80 -10 1160 1020" preserveAspectRatio="xMidYMid meet" role="group" aria-label="Memory hive: sources, episodes, facts, plan steps and files on five axes">
+      <defs>
+        <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6"/></filter>
+      </defs>
+      <g id="axes"></g>
+      <g id="arcs"></g>
+      <g id="core"></g>
+      <g id="cells"></g>
+    </svg>
+    <div class="empty" id="empty" hidden><div>No memory in this graph yet.<br><br>Run <code>uv run quarantine session1</code></div></div>
+  </section>
+
+  <aside class="inspector" aria-label="Inspector">
+    <section>
+      <h2 id="forget-h">Three ways to forget a poisoned source</h2>
+      <div class="policies" role="group" aria-labelledby="forget-h">
+        <button class="policy precise active" data-view="precise" aria-pressed="true">
+          <span class="name">Graph-precise quarantine</span>
+          <span class="how">only what the source actually reached</span>
+          <span class="n"><span id="c-precise">–</span><small id="t-precise"></small></span>
+          <span class="track"><span class="fill" id="f-precise"></span></span>
+        </button>
+        <button class="policy" data-view="agent" aria-pressed="false">
+          <span class="name">Wipe every agent it touched</span>
+          <span class="how">reset the compromised agents</span>
+          <span class="n"><span id="c-agent">–</span><small id="t-agent"></small></span>
+          <span class="track"><span class="fill" id="f-agent"></span></span>
+        </button>
+        <button class="policy" data-view="time" aria-pressed="false">
+          <span class="name">Roll back after the bad source</span>
+          <span class="how">forget everything written since</span>
+          <span class="n"><span id="c-time">–</span><small id="t-time"></small></span>
+          <span class="track"><span class="fill" id="f-time"></span></span>
+        </button>
+      </div>
+      <p class="note" id="view-note" aria-live="polite"></p>
+    </section>
+
+    <section>
+      <h2>Why is it red?</h2>
+      <div class="card" id="detail" aria-live="polite">Select a cell in the hive, or a memory in the ledger below.</div>
+    </section>
+
+    <section>
+      <h2>Ledger</h2>
+      <ul class="ledger" id="ledger"></ul>
+      <p class="ledger-empty" id="ledger-empty">Nothing is quarantined. Flag a source with <code>quarantine flag doc_7</code>.</p>
+    </section>
+
+    <section>
+      <h2>Key</h2>
+      <div class="legend" id="legend">
+        <span><i style="background:var(--cell)"></i>clean memory</span>
+        <span><i style="background:var(--red)"></i>quarantined</span>
+        <span><i style="background:var(--green)"></i>healed replacement</span>
+        <span><i style="background:var(--orange)"></i>clean work a naive wipe loses</span>
+        <span><i style="background:var(--path)"></i>receipt path</span>
+        <span><i style="background:#1c2130;outline:1px dashed var(--text-3)"></i>source document</span>
+      </div>
+      <div class="legend" id="agents" style="margin-top:10px"></div>
+    </section>
+    <p class="foot">Agents in this demo are scripted. Every cell, arc and number is read live from FalkorDB.</p>
+  </aside>
+</main>
 
 <script>
-const C = { clean: "#5b6675", red: "#e5484d", green: "#30a46c", orange: "#f5a524", text: "#e6e9ee", edge: "#3b4552" };
-const ROW = { Doc: 0, Episode: 1, Fact: 2, PlanStep: 3, Artifact: 4 };
-const GAP_X = 118, GAP_Y = 150, TWIN_DY = 78;
-
+"use strict";
+const SVGNS = "http://www.w3.org/2000/svg";
+const AXES = [ // order around the hive; provenance flows from each kind to the previous one
+  { kind: "Doc", label: "Sources" }, { kind: "Episode", label: "Episodes" }, { kind: "Fact", label: "Facts" },
+  { kind: "PlanStep", label: "Plan steps" }, { kind: "Artifact", label: "Files" },
+];
+const C = { x: 500, y: 500, r0: 104, r1: 418 };
+const AGENT_VARS = ["--a1", "--a2", "--a3", "--a4", "--a5"];
+const MARK = { red: "!", twin: "+", collateral: "×" };
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const esc = t => String(t ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const tip = text => { const d = document.createElement("div"); d.textContent = text; d.style.whiteSpace = "pre-wrap"; return d; };  // textContent: node text is agent output, never HTML
+const $ = id => document.getElementById(id);
+const el = (tag, attrs = {}, parent) => {
+  const n = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (parent) parent.appendChild(n);
+  return n;
+};
+const hexPath = r => {
+  const p = [];
+  for (let i = 0; i < 6; i++) { const a = Math.PI / 3 * i; p.push(`${(r * Math.cos(a)).toFixed(2)},${(r * Math.sin(a)).toFixed(2)}`); }
+  return `M${p.join("L")}Z`;
+};
 
-const nodes = new vis.DataSet(), edges = new vis.DataSet();
-const net = new vis.Network(document.getElementById("net"), { nodes, edges }, {
-  physics: false, interaction: { hover: true },
-  nodes: { shape: "dot", size: 17, font: { color: C.text, size: 13, face: "ui-monospace, Menlo, monospace" },
-           borderWidth: 2, color: { background: C.clean, border: "#0f1216" } },
-  edges: { arrows: { to: { enabled: true, scaleFactor: 0.45 } }, color: { color: C.edge }, width: 1, smooth: false },
-});
+// ---------- state ----------
+const state = { red: new Set(), pending: new Map(), seen: false, view: "precise", selected: null, total: null,
+                lastData: null, agents: new Map(), request: 0, known: new Set() };
+const meta = new Map();          // id -> node (memory or doc) from the latest snapshot
+const cellEls = new Map();       // id -> <g>
+const arcEls = new Map();        // edge key -> <path>
 
-// vis-network adjusts zoom during resize; fit after that camera update finishes.
-net.on("resize", () => requestAnimationFrame(() => net.fit({ animation: false })));
-
-const DETAIL_HINT = "Click a quarantined (!) memory to see its source path.";
-let detailRequest = 0;             // invalidates in-flight receipts on a new click or reset
-let state = { red: new Set(), seen: false, count: 0 };
-let pending = new Map();           // id -> timeout, for the staggered red wave
-let view = "precise";            // precise | agent | time: which policy's casualties are painted
-const meta = new Map();         // id -> latest snapshot node, so a view change can repaint without a fetch
-let total = null;                  // precise count from the server; the counter climbs to it as the wave lands
-const showPrecise = () => { document.getElementById("c-precise").textContent = total === null ? "-" : Math.min(state.red.size, total); };
-
+// ---------- geometry ----------
+const angleOf = i => (-90 + 72 * i) * Math.PI / 180;
+const at = (i, r) => ({ x: C.x + r * Math.cos(angleOf(i)), y: C.y + r * Math.sin(angleOf(i)) });
 function layout(data) {
-  const rows = {};
-  const base = [...data.docs.map(d => ({ id: d.id, kind: "Doc", tick: 0 })),
-                ...data.nodes.filter(n => !n.twin_of)];
-  for (const n of base) (rows[n.kind] ||= []).push(n);
-  const pos = {};
-  for (const [kind, list] of Object.entries(rows)) {
-    list.sort((a, b) => (a.tick - b.tick) || a.id.localeCompare(b.id));
-    list.forEach((n, i) => { pos[n.id] = { x: (i - (list.length - 1) / 2) * GAP_X, y: ROW[kind] * GAP_Y }; });
-  }
+  const pos = new Map();
+  const groups = new Map(AXES.map(a => [a.kind, []]));
+  data.docs.forEach((d, i) => groups.get("Doc").push({ id: d.id, order: i }));
+  data.nodes.filter(n => !n.twin_of && groups.has(n.kind)).forEach(n => groups.get(n.kind).push({ id: n.id, order: n.tick }));
+  AXES.forEach((a, i) => {
+    const list = groups.get(a.kind).sort((p, q) => (p.order - q.order) || p.id.localeCompare(q.id));
+    list.forEach((n, k) => {
+      const r = C.r0 + (k + 1) / (list.length + 1) * (C.r1 - C.r0);
+      pos.set(n.id, { ...at(i, r), axis: i, r });
+    });
+  });
   for (const n of data.nodes.filter(n => n.twin_of)) {
-    const p = pos[n.twin_of] || { x: 0, y: ROW[n.kind] * GAP_Y };
-    pos[n.id] = { x: p.x + 38, y: p.y + TWIN_DY };
+    const p = pos.get(n.twin_of);
+    if (!p) continue;
+    const a = angleOf(p.axis) + Math.PI / 2;      // beside its original, across the axis from the labels
+    pos.set(n.id, { x: p.x - 30 * Math.cos(a), y: p.y - 30 * Math.sin(a), axis: p.axis, r: p.r, twin: true });
   }
-  return pos;
+  return { pos, counts: AXES.map(a => groups.get(a.kind).length) };
+}
+function arcPath(p, q) {
+  if (p.axis === q.axis) {                        // same-axis read (a step reading an earlier step): bow outward
+    const a = angleOf(p.axis) + Math.PI / 2, bend = 34 + Math.abs(p.r - q.r) * 0.25;
+    const mx = (p.x + q.x) / 2 + bend * Math.cos(a), my = (p.y + q.y) / 2 + bend * Math.sin(a);
+    return `M${p.x},${p.y} Q${mx},${my} ${q.x},${q.y}`;
+  }
+  const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;   // hive-plot arc: pulled toward the core
+  const cx = mx + (C.x - mx) * 0.42, cy = my + (C.y - my) * 0.42;
+  return `M${p.x},${p.y} Q${cx},${cy} ${q.x},${q.y}`;
 }
 
-function look(n) {
+// ---------- static frame ----------
+function drawFrame(counts) {
+  const g = $("axes"); g.replaceChildren();
+  AXES.forEach((a, i) => {
+    const ax = el("g", { class: "axis" }, g);
+    const s = at(i, C.r0 - 22), e = at(i, C.r1 + 18);
+    el("line", { x1: s.x, y1: s.y, x2: e.x, y2: e.y }, ax);
+    const t = at(i, C.r1 + 52), anchor = Math.abs(t.x - C.x) < 30 ? "middle" : t.x > C.x ? "start" : "end";
+    const label = el("text", { x: t.x, y: t.y, "text-anchor": anchor, "dominant-baseline": "central" }, ax);
+    label.textContent = a.label + " ";
+    const c = el("tspan", { class: "count" }, label); c.textContent = counts[i];
+  });
+  const core = $("core"); core.replaceChildren();
+  el("path", { d: hexPath(58), transform: `translate(${C.x} ${C.y}) rotate(30)`, class: "core-hex" }, core);
+  const t1 = el("text", { x: C.x, y: C.y - 7, class: "core-text" }, core); t1.textContent = "one shared";
+  const t2 = el("text", { x: C.x, y: C.y + 11, class: "core-text" }, core); t2.textContent = "graph memory";
+}
+
+// ---------- classification ----------
+function cellClass(n) {
   const red = n.red && state.red.has(n.id);
-  const twin = n.twin_of && !red;
-  if (view !== "precise" && !twin) {                                     // a naive policy's casualties
-    const wiped = view === "agent" ? n.naive_agent : n.naive_time;
-    if (wiped && !n.red) return { label: `x ${n.id}`, color: { background: C.orange, border: C.orange }, borderWidth: 3,
-      shapeProperties: { borderDashes: false }, font: { color: n.kind === "Artifact" ? "#0f1216" : C.text } };
-    if (!wiped) return { label: n.id, color: { background: "#2a313b", border: "#0f1216" }, borderWidth: 1,
-      shapeProperties: { borderDashes: false }, font: { color: C.muted } };
+  if (n.twin_of) return "twin";
+  if (state.view !== "precise" && !red) {
+    const wiped = state.view === "agent" ? n.naive_agent : n.naive_time;
+    return wiped ? "collateral" : "dim";
   }
-  const color = red ? C.red : twin ? C.green : C.clean;
-  return { label: `${red ? "! " : twin ? "+ " : ""}${n.id}`,
-    color: { background: color, border: red || twin ? color : "#0f1216" },
-    borderWidth: red || twin ? 3 : 2, shapeProperties: { borderDashes: red ? [4, 3] : false },
-    font: { color: n.kind === "Artifact" && (red || twin) ? "#0f1216" : C.text } };
+  return red ? "red" : "";
+}
+function agentColor(name) {
+  if (!state.agents.has(name)) state.agents.set(name, `var(${AGENT_VARS[state.agents.size % AGENT_VARS.length]})`);
+  return state.agents.get(name);
 }
 
-function setView(v) {
-  view = v;
-  document.querySelectorAll(".counter").forEach(b => b.classList.toggle("active", b.dataset.view === v));
-  nodes.update([...meta.values()].map(n => ({ id: n.id, ...look(n) })));
-  const lost = [...meta.values()].filter(n => v !== "precise" && !n.red && (v === "agent" ? n.naive_agent : n.naive_time)).length;
-  document.getElementById("detail").textContent = v === "precise" ? DETAIL_HINT
-    : `${v === "agent" ? "Wiping every compromised agent" : "Forgetting everything after the bad document"} throws away ${lost} clean memories (x, orange) along with the poisoned ones (!, red). The graph keeps those ${lost}.`;
-}
-document.querySelectorAll(".counter").forEach(b => b.addEventListener("click", () => setView(view === b.dataset.view ? "precise" : b.dataset.view)));
-
+// ---------- render ----------
 function render(data) {
-  // a reset (session1 rebuilds the graph) must clear the page too: stale twins, stale red state, pending wave timers
-  const liveNodes = new Set([...data.docs.map(d => d.id), ...data.nodes.map(n => n.id)]);
-  const liveEdges = new Set(data.edges.map(e => `${e.src}|${e.type}|${e.dst}`));
-  nodes.remove(nodes.getIds().filter(id => !liveNodes.has(id)));
-  edges.remove(edges.getIds().filter(id => !liveEdges.has(id)));
-  if (!data.nodes.some(n => n.red)) {
-    if (state.red.size || pending.size) {
-      detailRequest++;
-      highlight(null); net.unselectAll();
-      document.getElementById("detail").textContent = DETAIL_HINT;
-    }
-    pending.forEach(t => clearTimeout(t)); pending.clear(); state.red.clear();
-    nodes.update(data.nodes.map(n => ({ id: n.id, ...look(n) })));
+  const live = new Set([...data.docs.map(d => d.id), ...data.nodes.map(n => n.id)]);
+  const reset = !data.nodes.some(n => n.red);
+  if (reset && (state.red.size || state.pending.size)) {
+    state.pending.forEach(t => clearTimeout(t)); state.pending.clear(); state.red.clear();
+    clearSelection();
   }
-  for (const n of data.nodes) meta.set(n.id, n);
-  for (const id of [...meta.keys()]) if (!liveNodes.has(id)) meta.delete(id);
-  const pos = layout(data);
-  const newlyRed = data.nodes.filter(n => n.red && !state.red.has(n.id) && !pending.has(n.id))
-                             .sort((a, b) => a.tick - b.tick);
-  // the first poll after load shows existing red at once; later red appears as a wave
-  const wave = state.seen;
+  for (const [id, g] of cellEls) if (!live.has(id)) { g.remove(); cellEls.delete(id); meta.delete(id); }
+  data.docs.forEach(d => meta.set(d.id, { ...d, kind: "Doc", isDoc: true }));
+  data.nodes.forEach(n => meta.set(n.id, n));
+  state.lastData = data;
+
+  const { pos, counts } = layout(data);
+  drawFrame(counts);
+  $("empty").hidden = data.nodes.length > 0;
+
+  // arcs
+  const liveArcs = new Set();
+  for (const e of data.edges) {
+    const p = pos.get(e.src), q = pos.get(e.dst);
+    if (!p || !q) continue;
+    const key = `${e.src}|${e.type}|${e.dst}`;
+    liveArcs.add(key);
+    let a = arcEls.get(key);
+    if (!a) { a = el("path", { class: "arc" }, $("arcs")); a.dataset.src = e.src; a.dataset.dst = e.dst; a.dataset.type = e.type; arcEls.set(key, a); }
+    a.setAttribute("d", arcPath(p, q));
+    a.classList.toggle("sup", e.type === "SUPERSEDES");
+    if (!a.style.getPropertyValue("--len")) a.style.setProperty("--len", Math.ceil(a.getTotalLength()) + "px");
+    const hot = state.red.has(e.src) && (state.red.has(e.dst) || meta.get(e.dst)?.flagged);
+    a.classList.toggle("hot", !!hot && e.type !== "SUPERSEDES");
+  }
+  for (const [k, a] of arcEls) if (!liveArcs.has(k)) { a.remove(); arcEls.delete(k); }
+
+  // cells
+  const all = [...data.docs.map(d => meta.get(d.id)), ...data.nodes];
+  for (const n of all) {
+    const p = pos.get(n.id);
+    if (!p) continue;
+    let g = cellEls.get(n.id);
+    const fresh = !g;
+    if (fresh) {
+      g = el("g", { class: "cell", tabindex: "0", role: "button" }, $("cells"));
+      g.dataset.id = n.id;
+      el("path", { class: "halo", d: hexPath(n.isDoc ? 16 : 17) }, g);
+      el("path", { class: "hex", d: hexPath(n.isDoc ? 12 : 13) }, g);
+      el("text", { class: "mark" }, g);
+      const lg = el("g", { class: "lblg" }, g);
+      el("rect", { class: "lbl-bg", rx: 4 }, lg);
+      el("text", { class: "lbl" }, lg);
+      g.addEventListener("click", () => select(n.id));
+      g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(n.id); } });
+      g.addEventListener("pointerenter", () => focusNear(n.id));
+      g.addEventListener("pointerleave", () => focusNear(null));
+      g.addEventListener("focus", () => focusNear(n.id));
+      g.addEventListener("blur", () => focusNear(null));
+      cellEls.set(n.id, g);
+      if (state.seen && !reduced) { g.classList.add("enter"); setTimeout(() => g.classList.remove("enter"), 700); }
+    }
+    g.setAttribute("transform", `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`);
+    const cls = n.isDoc ? "" : cellClass(n);
+    g.setAttribute("class", ["cell", n.isDoc ? "doc" : "", n.flagged ? "flagged" : "", cls, n.id === state.selected ? "selected" : ""].filter(Boolean).join(" "));
+    g.querySelector(".hex").style.setProperty("--ring", n.isDoc ? "" : agentColor(n.agent));
+    g.querySelector(".mark").textContent = n.isDoc ? (n.flagged ? "!" : "") : (MARK[cls] || "");
+    if (n.isDoc && n.flagged) g.querySelector(".mark").style.opacity = 1;
+    const status = n.isDoc ? (n.flagged ? "flagged source" : "source") : cls === "red" ? "quarantined" : cls === "twin" ? "healed replacement" : cls === "collateral" ? "clean, but this wipe would lose it" : "clean";
+    g.setAttribute("aria-label", `${n.id}, ${n.isDoc ? "document" : n.kind} by ${n.agent || "source"}, ${status}`);
+    // label: perpendicular to its axis, so neighbours on the same axis can never collide; flipped to stay upright
+    const lg = g.querySelector(".lblg"), lbl = g.querySelector(".lbl"), bg = g.querySelector(".lbl-bg");
+    lbl.textContent = n.id;
+    let deg = (angleOf(p.axis) * 180 / Math.PI + 90 + (p.twin ? 180 : 0) + 360) % 360;
+    const flip = deg > 90 && deg < 270;
+    if (flip) deg -= 180;
+    const dx = flip ? -21 : 21;
+    lg.setAttribute("transform", `rotate(${deg.toFixed(1)})`);
+    lbl.setAttribute("x", dx); lbl.setAttribute("y", 4.5); lbl.setAttribute("text-anchor", flip ? "end" : "start");
+    const w = n.id.length * 7.4 + 8;
+    bg.setAttribute("x", flip ? dx - w + 4 : dx - 4); bg.setAttribute("y", -9); bg.setAttribute("width", w.toFixed(1)); bg.setAttribute("height", 18);
+    g.classList.toggle("quiet", !n.isDoc && cls !== "red");                // only quarantined cells and sources carry labels; the rest on hover
+  }
+
+  // the red wave: cells turn red in the order they were written, the arcs into them draw on as they land
+  const newlyRed = data.nodes.filter(n => n.red && !state.red.has(n.id) && !state.pending.has(n.id)).sort((p, q) => p.tick - q.tick);
   newlyRed.forEach((n, i) => {
-    const go = () => { state.red.add(n.id); pending.delete(n.id); nodes.update({ id: n.id, ...look(n) }); showPrecise(); };
-    if (wave) pending.set(n.id, setTimeout(go, 420 * (i + 1))); else state.red.add(n.id);
+    const land = () => {
+      state.red.add(n.id); state.pending.delete(n.id);
+      const g = cellEls.get(n.id);
+      if (g) { g.classList.add("red"); g.classList.remove("quiet"); g.querySelector(".mark").textContent = MARK.red; if (!reduced) { g.classList.add("burst"); setTimeout(() => g.classList.remove("burst"), 950); } }
+      for (const a of arcEls.values()) {
+        if (a.dataset.src === n.id && a.dataset.type !== "SUPERSEDES" && (state.red.has(a.dataset.dst) || meta.get(a.dataset.dst)?.flagged)) {
+          a.classList.add("hot", "drawing");
+        }
+      }
+      updateCounters(); updateLedger();
+    };
+    if (state.seen && !reduced) state.pending.set(n.id, setTimeout(land, 360 * (i + 1))); else land();
   });
 
-  for (const d of data.docs) {
-    nodes.update({ id: d.id, label: `${d.flagged ? "! " : ""}${d.id}`, shape: "square", size: 15, title: tip(d.title), ...pos[d.id],
-      color: { background: d.flagged ? "#7a1d22" : "#2a313b", border: d.flagged ? C.red : "#566070" },
-      borderWidth: d.flagged ? 3 : 2 });
-  }
-  for (const n of data.nodes) {
-    nodes.update({ id: n.id, label: n.id, title: tip(`${n.kind} by ${n.agent}\n${n.text || n.value || ""}`),
-      note: `${n.kind} by ${n.agent} - ${n.text || n.value || ""}`, ...pos[n.id], ...look(n),
-      shape: n.kind === "Fact" ? "diamond" : n.kind === "Episode" ? "dot" : n.kind === "PlanStep" ? "triangle" : "box" });
-  }
-  for (const e of data.edges) {
-    const id = `${e.src}|${e.type}|${e.dst}`;
-    if (edges.get(id)) continue;
-    const sup = e.type === "SUPERSEDES";
-    edges.add({ id, from: e.src, to: e.dst, dashes: sup || e.type === "EXTRACTED_FROM",
-                color: { color: sup ? C.green : C.edge }, width: sup ? 2 : 1 });
-  }
-
   const c = data.counters;
-  total = c ? c.precise : null; showPrecise();
-  document.getElementById("c-agent").textContent = c ? c.per_agent : "-";
-  document.getElementById("c-time").textContent = c ? c.time_based : "-";
-
-  const twins = data.nodes.filter(n => n.twin_of).length;
-  document.getElementById("banner").innerHTML =
-    !data.nodes.length ? "empty graph - run <b>quarantine session1</b>"
-    : !data.flagged ? "<b>Session 1</b> - crew writing memory, read sets recorded as edges"
-    : twins === 0 ? `<b>Session 2</b> - advisory: <b>${esc(data.flagged)}</b> is prompt-injected`
-    : `<b>Session 2</b> - healing: ${twins} memor${twins === 1 ? "y" : "ies"} rewritten from clean support`;
-  if (nodes.length !== state.count) { state.count = nodes.length; net.fit({ animation: false }); }
+  state.total = data.nodes.filter(n => !n.twin_of).length;
+  state.counters = c;
+  updateCounters(); updateLedger(); updateAgents(); updateBanner(data);
+  if (state.selected && !meta.has(state.selected)) clearSelection();
   state.seen = true;
 }
 
+function updateCounters() {
+  const c = state.counters, total = state.total || 0;
+  const precise = c ? Math.min(state.red.size, c.precise) : null;
+  const set = (key, v) => {
+    $(`c-${key}`).textContent = v === null ? "–" : v;
+    $(`t-${key}`).textContent = v === null || !total ? "" : `/${total}`;
+    $(`f-${key}`).style.transform = `scaleX(${v === null || !total ? 0 : (v / total).toFixed(4)})`;
+  };
+  set("precise", precise); set("agent", c ? c.per_agent : null); set("time", c ? c.time_based : null);
+}
+
+function updateBanner(data) {
+  const twins = data.nodes.filter(n => n.twin_of).length;
+  $("banner").innerHTML =
+    !data.nodes.length ? "Empty graph · run <b>quarantine session1</b>"
+    : !data.flagged ? "<b>Session 1</b> · the crew is writing memory; every read is recorded as an edge"
+    : twins === 0 ? `<b>Session 2</b> · advisory: <b>${esc(data.flagged)}</b> was prompt-injected`
+    : `<b>Healing</b> · ${twins} memor${twins === 1 ? "y" : "ies"} rebuilt from clean sources`;
+  $("live").classList.remove("down");
+}
+
+function updateLedger() {
+  const items = [...meta.values()].filter(n => !n.isDoc && (state.red.has(n.id) || n.twin_of)).sort((p, q) => p.tick - q.tick);
+  const ul = $("ledger"); ul.replaceChildren();
+  $("ledger-empty").hidden = items.length > 0;
+  for (const n of items) {
+    const li = document.createElement("li"), b = document.createElement("button");
+    b.type = "button"; b.setAttribute("aria-pressed", String(n.id === state.selected));
+    const twin = !!n.twin_of;
+    b.innerHTML = `<span class="sw" style="background:${twin ? "var(--green)" : "var(--red)"}"></span>` +
+      `<span><code>${esc(n.id)}</code> <span class="what">${twin ? "replaces " + esc(n.twin_of) : esc(n.kind)}</span></span>` +
+      `<span class="what">${esc(n.agent)}</span>`;
+    b.addEventListener("click", () => select(n.id));
+    li.appendChild(b); ul.appendChild(li);
+  }
+}
+
+function updateAgents() {
+  const box = $("agents"); box.replaceChildren();
+  const names = [...new Set([...meta.values()].filter(n => !n.isDoc).map(n => n.agent))].filter(Boolean).sort();
+  for (const name of names) {
+    const s = document.createElement("span");
+    s.innerHTML = `<i class="ring" style="color:${agentColor(name)}"></i>${esc(name)}`;
+    box.appendChild(s);
+  }
+}
+
+// ---------- views: what would each policy throw away? ----------
+function setView(v) {
+  state.view = v;
+  document.querySelectorAll(".policy").forEach(b => {
+    const on = b.dataset.view === v; b.classList.toggle("active", on); b.setAttribute("aria-pressed", String(on));
+  });
+  if (state.lastData) render(state.lastData);
+  const lost = [...meta.values()].filter(n => !n.isDoc && !n.twin_of && !n.red && (v === "agent" ? n.naive_agent : n.naive_time)).length;
+  $("view-note").textContent = v === "precise" ? "" :
+    !state.counters ? "Flag a source first to compare." :
+    `${v === "agent" ? "Wiping every compromised agent" : "Rolling back to before the bad source"} throws away ${lost} clean memories (orange ×) with the poisoned ones. The graph keeps them.`;
+}
+document.querySelectorAll(".policy").forEach(b => b.addEventListener("click", () => setView(state.view === b.dataset.view && b.dataset.view !== "precise" ? "precise" : b.dataset.view)));
+
+// ---------- focus: neighbours light up, the rest recedes ----------
+function focusNear(id) {
+  const svg = $("hive");
+  svg.classList.toggle("has-focus", !!id);
+  for (const a of arcEls.values()) a.classList.toggle("near", !!id && (a.dataset.src === id || a.dataset.dst === id));
+  for (const [cid, g] of cellEls) {
+    const near = !!id && (cid === id || [...arcEls.values()].some(a => (a.dataset.src === id && a.dataset.dst === cid) || (a.dataset.dst === id && a.dataset.src === cid)));
+    g.classList.toggle("near", near);
+  }
+}
+
+// ---------- selection: the receipt ----------
+function clearPath() { for (const a of arcEls.values()) a.classList.remove("path"); }
+function clearSelection() {
+  state.request++; state.selected = null; clearPath();
+  for (const g of cellEls.values()) g.classList.remove("selected");
+  $("detail").textContent = "Select a cell in the hive, or a memory in the ledger below.";
+  updateLedger();
+}
+async function select(id) {
+  const n = meta.get(id); if (!n) return;
+  const req = ++state.request;
+  state.selected = id; clearPath();
+  for (const [cid, g] of cellEls) g.classList.toggle("selected", cid === id);
+  updateLedger();
+  const d = $("detail");
+  if (n.isDoc) {
+    d.innerHTML = `<span class="kind">Source</span><span class="id">${esc(n.id)}</span><div class="text">${esc(n.title)}</div>` +
+      `<div class="meta">${n.flagged ? "Flagged: " + esc(n.reason || "prompt-injected") : "Not flagged"}</div>`;
+    return;
+  }
+  const head = `<span class="kind">${esc(n.kind)}</span><span class="id">${esc(n.id)}</span>` +
+    `<div class="text">${esc(n.text || n.value || "")}</div>` +
+    `<div class="meta">written by ${esc(n.agent)} at tick ${esc(n.tick)}${n.twin_of ? " · replaces " + esc(n.twin_of) : ""}</div>`;
+  d.innerHTML = head + `<div class="meta" style="margin-top:10px">Tracing provenance…</div>`;
+  try {
+    const res = await fetch("/receipt?id=" + encodeURIComponent(id));
+    if (!res.ok && res.status !== 503) throw new Error(`HTTP ${res.status}`);
+    const rc = await res.json();
+    if (req !== state.request) return;                                 // a newer click or a reset won
+    if (rc && rc.shape === "path") {
+      for (let i = 0; i + 1 < rc.hops.length; i++) {
+        const a = arcEls.get(`${rc.hops[i]}|${rc.via[i]}|${rc.hops[i + 1]}`);
+        if (a) { a.classList.remove("path"); void a.getBoundingClientRect(); a.classList.add("path"); }
+      }
+      const steps = rc.hops.map((h, i) => `<li><code>${esc(h)}</code>${i < rc.via.length ? `<span class="via">${esc(rc.via[i].toLowerCase().replace(/_/g, " "))}</span>` : ""}</li>`).join("");
+      d.innerHTML = head + `<span class="shape path">quarantined · ${esc(rc.len)} hops</span>` +
+        `<div class="answer">${esc(rc.sentence || "")}</div><ol class="chain">${steps}</ol>`;
+    } else if (rc && rc.shape) {
+      d.innerHTML = head + `<span class="shape ${esc(rc.shape)}">${rc.shape === "not_in_graph" ? "not in the graph" : esc(rc.shape)}</span><div class="answer">${esc(rc.answer || "")}</div>`;
+    } else {
+      d.innerHTML = head + `<div class="err">${esc(rc && rc.error ? rc.error : "No answer from the server.")}</div>`;
+    }
+  } catch (err) {
+    if (req !== state.request) return;
+    d.innerHTML = head + `<div class="err">Receipt request failed: ${esc(err.message)}</div>`;
+  }
+}
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") clearSelection(); });
+
+// ---------- polling ----------
 async function poll() {
   try {
     const r = await fetch("/graph");
@@ -192,45 +627,11 @@ async function poll() {
     if (data.error) throw new Error(data.error);
     render(data);
   } catch (e) {
-    document.getElementById("banner").innerHTML = `<span id="err">graph unreachable: ${esc(e.message)}</span>`;
+    $("banner").innerHTML = `Graph unreachable · ${esc(e.message)}`;
+    $("live").classList.add("down");
   }
 }
-
-function highlight(hops) {
-  edges.forEach(e => edges.update({ id: e.id, color: { color: e.dashes && e.id.includes("SUPERSEDES") ? C.green : C.edge }, width: e.id.includes("SUPERSEDES") ? 2 : 1 }));
-  if (!hops) return;
-  for (let i = 0; i + 1 < hops.length; i++) {
-    edges.get().filter(e => e.from === hops[i] && e.to === hops[i + 1])
-      .forEach(e => edges.update({ id: e.id, color: { color: C.orange }, width: 4 }));
-  }
-}
-
-net.on("click", async p => {
-  const request = ++detailRequest;
-  const detail = document.getElementById("detail");
-  const id = p.nodes[0];
-  if (!id) { highlight(null); detail.textContent = DETAIL_HINT; return; }
-  const n = nodes.get(id);
-  const isRed = state.red.has(id);
-  if (!isRed) { highlight(null); detail.innerHTML = `<code>${esc(id)}</code> - ${esc(n.note || "")}`; return; }
-  try {
-    const res = await fetch("/receipt?id=" + encodeURIComponent(id));
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const rc = await res.json();
-    if (request !== detailRequest) return;
-    if (!rc || rc.shape !== "path") {                                   // not_in_graph / unknown: say which, in the guide's words
-      detail.innerHTML = `<code>${esc(id)}</code>: <b>${esc(rc ? rc.shape : "no answer")}</b>. ${esc(rc && rc.answer ? rc.answer : "")}`;
-      return;
-    }
-    highlight(rc.hops);
-    const chain = rc.hops.map((h, i) => i ? ` <span class="path">-${esc(rc.via[i - 1])}-&gt;</span> ${esc(h)}` : esc(h)).join("");
-    detail.innerHTML = `<code>${esc(id)}</code> is quarantined: ${esc(rc.len)} hops (shortestPath)<br><code>${chain}</code>`;
-  } catch (err) {
-    if (request !== detailRequest) return;
-    detail.innerHTML = `<span id="err">receipt fetch failed: ${esc(err.message)}</span>`;
-  }
-});
-
+window.hive = { state, meta, cellEls, arcEls, select, setView, clearSelection, poll };   // used by scripts/check_browser.js
 poll();
 setInterval(poll, 1000);
 </script>

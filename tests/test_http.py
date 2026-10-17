@@ -51,18 +51,20 @@ def test_http_root_and_index_html(running_server):
             assert resp.status == 200
             assert "text/html" in resp.headers.get("Content-Type", "")
             body = resp.read().decode()
-            assert "QUARANTINE" in body
-            assert "vis-network" in body
+            assert "Quarantine" in body and "id=\"hive\"" in body
 
 
-def test_http_vendor_asset(running_server):
+def test_http_page_is_self_contained(running_server):
+    """The hive page loads no script or stylesheet from anywhere: it works offline and on a judge's locked-down laptop."""
     base_url, _ = running_server
-    req = Request(f"{base_url}/vendor/vis-network.min.js")
-    with urlopen(req) as resp:
-        assert resp.status == 200
-        assert "text/javascript" in resp.headers.get("Content-Type", "")
-        body = resp.read().decode("utf-8", errors="replace")
-        assert len(body) > 1000
+    with urlopen(Request(f"{base_url}/")) as resp:
+        body = resp.read().decode()
+    assert "<script src=" not in body and "<link rel=\"stylesheet\"" not in body
+    try:
+        urlopen(Request(f"{base_url}/vendor/vis-network.min.js"))
+        raise AssertionError("the old vendored library should be gone")
+    except HTTPError as e:
+        assert e.code == 404
 
 
 def test_http_graph_snapshot(running_server):

@@ -47,7 +47,7 @@ playwright-cli -s=quarantine-ui-check run-code --filename scripts/check_browser.
 playwright-cli -s=quarantine-ui-check close
 ```
 
-Expect eleven checks with `passed: true`. This runs the real page and vendored vis-network, substitutes only `/graph` and `/receipt` responses, and never writes to FalkorDB. It covers recording-size resize, non-colour status markers, clicked path highlighting, all three healed twins fitting after insertion and resizing, reset cleanup, and a receipt response arriving after reset. It supplements the live CLI run; it does not prove graph queries or process recovery. The Python suite does not require Playwright.
+Expect 19 checks with `passed: true`. This runs the real hive page (plain SVG, no chart library), substitutes only `/graph` and `/receipt` responses, and never writes to FalkorDB. It covers every cell staying visible at 1920, 960 and 375 px, no horizontal scroll on a phone, the precise counter climbing with the red wave, non-colour markers (`!`, `+`, `×`), the receipt drawing four arcs and reading as a sentence, the two naive-wipe views painting 13 and 19 clean casualties, healed twins fitting, keyboard selection, reset cleanup, and a receipt arriving after reset. It supplements the live CLI run; it does not prove graph queries or process recovery. The Python suite does not require Playwright.
 
 ## What each claim is tested by
 
