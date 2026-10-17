@@ -45,6 +45,18 @@ async (page) => {
   const torn = copy(flagged);                                        // doc flagged, closure never applied
   torn.nodes.forEach(n => { n.red = false; n.naive_agent = false; });
   torn.counters = { precise: 0, per_agent: 25, time_based: 19 };
+  const second = copy(healed);                                       // doc_2 flagged after the heal: the twins read ep_2
+  second.docs.find(d => d.id === 'doc_2').flagged = true; second.counters = null; second.flagged = 'doc_2';
+  second.edges.push({ src: 'f_http_client_v2', type: 'CONSOLIDATED_FROM', dst: 'ep_2' },
+                    { src: 'step_3_v2', type: 'INFLUENCED_BY', dst: 'f_http_client_v2' }, { src: 'a_requirements_v2', type: 'INFLUENCED_BY', dst: 'step_3_v2' });
+  second.nodes.forEach(n => { delete n.naive_agent; delete n.naive_time; if (n.twin_of || n.id === 'ep_2') n.red = true; });
+  second.nodes.push({ ...copy(clean.nodes.find(n => n.id === 'f_http_client')), id: 'f_http_client_v2_v2', twin_of: 'f_http_client_v2', tick: 60 },
+                    { ...copy(clean.nodes.find(n => n.id === 'step_3')), id: 'step_3_v2_v2', twin_of: 'step_3_v2', tick: 61, needs_regeneration: true });
+  second.edges.push({ src: 'f_http_client_v2_v2', type: 'SUPERSEDES', dst: 'f_http_client_v2' }, { src: 'step_3_v2_v2', type: 'SUPERSEDES', dst: 'step_3_v2' });
+  const placeholders = copy(healed);                                 // twins the graph wrote with no clean content yet
+  placeholders.nodes.forEach(n => { if (n.id === 'step_3_v2' || n.id === 'a_requirements_v2') n.needs_regeneration = true; });
+  const stale = copy(flagged);                                       // unflag doc_5 ran, its reconcile did not: ep_5 reaches no flagged doc
+  stale.nodes.find(n => n.id === 'ep_5').red = true; stale.counters = { precise: 7, per_agent: 25, time_based: 19 };
   const solo = copy(clean); solo.nodes.forEach(n => { n.agent = 'planner'; });
   const receipt8 = { shape: 'path', hops: ['a_fetch_py', 'step_4', 'f_http_usage', 'ep_8', 'doc_8'], len: 4, length: 4,
     via: ['INFLUENCED_BY', 'INFLUENCED_BY', 'CONSOLIDATED_FROM', 'EXTRACTED_FROM'],
@@ -167,6 +179,25 @@ async (page) => {
     await page.evaluate(() => hive.setView('precise'));
     await show(torn);
     check('torn flag: no "reached by" claim, counters blank', !(await text('hud-line')).includes('reached by') && /not been applied/.test(await text('hud-line')) && (await text('c-agent')) === '–', await text('hud-line'));
+    await show(placeholders);
+    check('placeholder twins are drawn as placeholders, not healed', await page.evaluate(() => ['step_3_v2', 'a_requirements_v2'].every(id => hive.cells.get(id).cls === 'pending' && hive.cells.get(id).glyph === '?') && hive.cells.get('f_http_client_v2').cls === 'twin'));
+    check('banner counts only grounded twins as rebuilt', /1 memory rebuilt from clean sources · 2 placeholders awaiting regeneration/.test(await text('banner')), await text('banner'));
+    check('ledger labels placeholders', (await text('ledger')).includes('placeholder for step_3, needs regeneration'), await text('ledger'));
+    await show(second);
+    const redN = second.nodes.filter(n => n.red).length;
+    await page.waitForFunction(n => hive.state.red.size === n, redN, { timeout: 12000 }).catch(() => {});
+    check('a twin a later advisory reaches is drawn red, never green', await page.evaluate(() => ['f_http_client_v2', 'step_3_v2', 'a_requirements_v2'].every(id => hive.cells.get(id).cls === 'red' && hive.cells.get(id).glyph === '!')));
+    check('banner never calls a quarantined twin rebuilt', /1 memory rebuilt from clean sources · 1 placeholder awaiting regeneration · 3 replacements quarantined/.test(await text('banner')), await text('banner'));
+    check('ledger swatch and label follow red for twins', await page.evaluate(() => [...document.querySelectorAll('#ledger li')].filter(li => li.textContent.includes('quarantined') && li.querySelector('.sw').style.background.includes('red')).length === 3));
+    const originals = second.nodes.filter(n => !n.twin_of), redOrig = originals.filter(n => n.red).length;
+    check('headline counts originals against originals', (await text('hud-n')) === String(redOrig) && (await text('hud-of')) === `of ${originals.length} memories` && /3<\/b> healed replacements/.test(await page.evaluate(() => document.getElementById('hud-line').innerHTML)), `${await text('hud-n')} ${await text('hud-of')} ${await text('hud-line')}`);
+    check('twins of twins get a chip next to their chain', await page.evaluate(() => {
+      const c = id => hive.cells.get(id), a = c('f_http_client'), b = c('f_http_client_v2'), t = c('f_http_client_v2_v2'), s = c('step_3_v2_v2');
+      return t && s && t.axis === a.axis && t.ty > b.ty && b.ty > a.ty && t.ty - a.ty < 3 * 58 && s.cls === 'pending';
+    }));
+    await checkFit('second advisory graph fits at 1920px');
+    await show(stale);
+    check('interrupted retraction: no count, notice shown', (await text('hud-n')) === '–' && /reach(es)? no flagged source/.test(await text('hud-line')) && (await text('c-precise')) === '–' && (await text('c-agent')) === '–', await text('hud-line'));
     await show({ nodes: [], docs: [], edges: [], flagged: null, counters: null });   // a graph that does not exist yet
     check('missing graph shows the empty-state hint', await page.evaluate(() => !document.getElementById('empty').hidden && !document.getElementById('live').classList.contains('down')) && (await text('banner')).includes('Empty graph'), await text('banner'));
     await show(solo);

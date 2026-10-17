@@ -207,6 +207,7 @@ FORM: left-to-right layered flow (Sankey-like ribbons), canvas; labels are alway
         <span><i style="background:#fffdf8"></i>clean memory (stripe = agent)</span>
         <span><i style="background:var(--red);border-color:var(--red)"></i>quarantined</span>
         <span><i style="background:#dcefe3;border-color:var(--green)"></i>healed replacement</span>
+        <span><i style="background:#fffdf8;border-color:var(--green);border-style:dashed"></i>placeholder: needs regeneration (?)</span>
         <span><i style="background:repeating-linear-gradient(135deg,#f3d9b4 0 3px,#fffdf8 3px 6px);border-color:var(--orange)"></i>clean work a naive wipe loses</span>
         <span><i style="background:var(--hl);border-color:var(--ink)"></i>receipt path</span>
         <span><i style="background:#ebe5d8;border-style:dashed"></i>source document</span>
@@ -236,7 +237,7 @@ const SANS = getComputedStyle(document.body).fontFamily, MONO = getComputedStyle
 
 const canvas = $("stage"), ctx = canvas.getContext("2d"), scroller = $("scroller");
 const state = { red: new Set(), pending: new Map(), arcing: new Set(), seen: false, view: "precise", selected: null, hover: null,
-                counters: null, torn: [], total: 0, lastData: null, agents: new Map(), request: 0, counts: [0, 0, 0, 0, 0], flagKey: "" };
+                counters: null, torn: [], stale: [], total: 0, lastData: null, agents: new Map(), request: 0, counts: [0, 0, 0, 0, 0], flagKey: "" };
 const meta = new Map();              // id -> snapshot node (memory or document)
 const cells = new Map();             // id -> visual chip
 const arcs = new Map();              // key -> visual ribbon
@@ -252,7 +253,8 @@ function layout(data) {
   AXES.forEach((a, i) => {
     const list = groups.get(a.kind).sort((p, q) => (p.order - q.order) || p.id.localeCompare(q.id));
     const rows = [];                                           // a healed twin slots in right under its original
-    for (const n of list) { rows.push({ id: n.id }); for (const t of twins) if (t.twin_of === n.id) rows.push({ id: t.id, twin: true }); }
+    const under = id => { for (const t of twins) if (t.twin_of === id) { rows.push({ id: t.id, twin: true }); under(t.id); } };   // twins of twins too
+    for (const n of list) { rows.push({ id: n.id }); under(n.id); }
     const gap = Math.min(58, (L.bottom - L.top) / Math.max(rows.length, 1));
     const y0 = L.top + ((L.bottom - L.top) - gap * (rows.length - 1)) / 2 - 8;
     rows.forEach((r, k) => pos.set(r.id, { x: colX(i), y: y0 + k * gap, axis: i, twin: !!r.twin }));
@@ -302,7 +304,7 @@ function hatchPattern() {
 function kindOf(n) {
   if (n.isDoc) return "doc";
   const red = n.red && state.red.has(n.id);
-  if (n.twin_of) return "twin";
+  if (n.twin_of && !n.red) return placeholder(n) ? "pending" : "twin";   // a twin a later advisory reaches is just quarantined
   if (state.view !== "precise" && state.counters && !red) return (state.view === "agent" ? n.naive_agent : n.naive_time) ? "collateral" : "dim";
   return red ? "red" : "";
 }
@@ -310,11 +312,14 @@ function agentRGB(name) {
   if (!state.agents.has(name)) state.agents.set(name, AGENT_RGB[state.agents.size % AGENT_RGB.length]);
   return state.agents.get(name);
 }
-const GLYPH = { red: "!", twin: "+", collateral: "×" };
+const GLYPH = { red: "!", twin: "+", pending: "?", collateral: "×" };
+const placeholder = n => !!(n.twin_of && (n.needs_regeneration || n.ungrounded));    // written, but no clean content yet
+const healed = n => !!(n.twin_of && !n.red && !placeholder(n));                      // a clean, grounded replacement
 function targetLook(n, cls) {
   if (n.isDoc) return n.flagged ? { rgb: RED, a: 1, fill: 0.95 } : { rgb: INK, a: 1, fill: 0 };
   if (cls === "red") return { rgb: RED, a: 1, fill: 1 };
   if (cls === "twin") return { rgb: GREEN, a: 1, fill: 0.16 };
+  if (cls === "pending") return { rgb: GREEN, a: 1, fill: 0 };
   if (cls === "collateral") return { rgb: ORANGE, a: 1, fill: 0 };
   if (cls === "dim") return { rgb: INK, a: 0.32, fill: 0 };
   return { rgb: INK, a: 1, fill: 0 };
@@ -330,8 +335,8 @@ function render(data) {
   if (!red.size && had) clearSelection(true);
   const sel = state.selected && meta.get(state.selected), selWas = sel && `${!!sel.red}|${!!sel.flagged}|${state.flagKey}`;
   state.flagKey = data.docs.filter(d => d.flagged).map(d => d.id).join(",");
-  state.torn = tornDocs(data);
-  state.counters = state.torn.length ? null : data.counters;        // a closure that was never applied has nothing to compare
+  state.torn = tornDocs(data); state.stale = staleRed(data);
+  state.counters = state.torn.length || state.stale.length ? null : data.counters;        // a closure that was never applied has nothing to compare
   for (const id of [...cells.keys()]) if (!live.has(id)) { cells.delete(id); meta.delete(id); }
   data.docs.forEach(d => meta.set(d.id, { ...d, kind: "Doc", isDoc: true }));
   data.nodes.forEach(n => meta.set(n.id, n));
@@ -395,6 +400,13 @@ function tornDocs(data) {
   const red = new Set(data.nodes.filter(n => n.red).map(n => n.id));
   return data.docs.filter(d => d.flagged && data.edges.some(e => e.dst === d.id && e.type !== "SUPERSEDES" && !red.has(e.src))).map(d => d.id);
 }
+// quarantined memories that reach no flagged doc: a retraction (UNFLAG_DOC) ran, its reconcile did not
+function staleRed(data) {
+  const reach = new Set(flaggedIds(data)), reads = data.edges.filter(e => e.type !== "SUPERSEDES");
+  for (let grew = true; grew;) { grew = false; for (const e of reads) if (reach.has(e.dst) && !reach.has(e.src)) { reach.add(e.src); grew = true; } }
+  return data.nodes.filter(n => n.red && !reach.has(n.id)).map(n => n.id);
+}
+const redOriginals = () => [...state.red].filter(id => !meta.get(id)?.twin_of).length;   // same population as state.total
 const flaggedIds = d => d.docs.filter(x => x.flagged).map(x => x.id);
 const list = ids => ids.map(i => `<b>${esc(i)}</b>`).join(", ");
 function updateCounters() {
@@ -404,7 +416,7 @@ function updateCounters() {
     $(`t-${key}`).textContent = v === null || !total ? "" : `/${total}`;
     $(`f-${key}`).style.transform = `scaleX(${v === null || !total ? 0 : (v / total).toFixed(4)})`;
   };
-  set("precise", c ? Math.min(state.red.size, c.precise) : null); set("agent", c ? c.per_agent : null); set("time", c ? c.time_based : null);
+  set("precise", c ? Math.min(redOriginals(), c.precise) : null); set("agent", c ? c.per_agent : null); set("time", c ? c.time_based : null);
 }
 function updateHud() {
   const c = state.counters, hud = $("hud"), d = state.lastData;
@@ -412,20 +424,28 @@ function updateHud() {
   const flagged = flaggedIds(d), agents = new Set(d.nodes.map(n => n.agent).filter(Boolean)).size;
   if (state.torn.length) { $("hud-n").textContent = "–"; $("hud-of").textContent = ""; hud.classList.remove("hot");
     $("hud-line").innerHTML = `${list(state.torn)} ${state.torn.length === 1 ? "is" : "are"} flagged, but the quarantine closure has not been applied, so no count is shown.`; return; }
+  if (state.stale.length) { $("hud-n").textContent = "–"; $("hud-of").textContent = ""; hud.classList.remove("hot");
+    $("hud-line").innerHTML = `${list(state.stale)} ${state.stale.length === 1 ? "is quarantined but reaches" : "are quarantined but reach"} no flagged source: a retraction was interrupted (run <b>quarantine session2</b>), so no count is shown.`; return; }
+  const rt = d.nodes.filter(n => n.twin_of && n.red).length, also = rt ? ` Also quarantined: <b>${rt}</b> healed replacement${rt === 1 ? "" : "s"} that a later advisory reached.` : "";
   if (!flagged.length) { $("hud-n").textContent = state.total; $("hud-of").textContent = "memories"; $("hud-line").innerHTML = `written by <b>${agents} agent${agents === 1 ? "" : "s"}</b> across <b>${d.docs.length} sources</b>. Every read is a ribbon; no source is flagged.`; hud.classList.remove("hot"); return; }
-  if (!c) { const n = state.red.size; $("hud-n").textContent = n; $("hud-of").textContent = `of ${state.total} memories`; hud.classList.toggle("hot", n > 0);
-    $("hud-line").innerHTML = `quarantined by <b>${flagged.length} advisor${flagged.length === 1 ? "y" : "ies"}</b>: ${list(flagged)}.`; return; }
-  const n = Math.min(state.red.size, c.precise);
+  if (!c) { const n = redOriginals(); $("hud-n").textContent = n; $("hud-of").textContent = `of ${state.total} memories`; hud.classList.toggle("hot", n > 0);
+    $("hud-line").innerHTML = `quarantined by <b>${flagged.length} advisor${flagged.length === 1 ? "y" : "ies"}</b>: ${list(flagged)}.` + also; return; }
+  const n = Math.min(redOriginals(), c.precise);
   $("hud-n").textContent = n; $("hud-of").textContent = `of ${state.total} memories`; hud.classList.toggle("hot", n > 0);
-  $("hud-line").innerHTML = `reached by <b>${esc(d.flagged)}</b>. A rollback would have lost <b>${c.time_based}</b>; wiping the agents, <b>${c.per_agent}</b>.`;
+  $("hud-line").innerHTML = `reached by <b>${esc(d.flagged)}</b>. A rollback would have lost <b>${c.time_based}</b>; wiping the agents, <b>${c.per_agent}</b>.` + also;
 }
 function updateBanner(data) {
-  const twins = data.nodes.filter(n => n.twin_of).length;
+  const plural = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+  const rebuilt = data.nodes.filter(healed).length, pend = data.nodes.filter(n => n.twin_of && !n.red && placeholder(n)).length,
+        redTw = data.nodes.filter(n => n.twin_of && n.red).length;
+  const twins = [rebuilt && `${plural(rebuilt, "memory", "memories")} rebuilt from clean sources`,
+                 pend && `${plural(pend, "placeholder", "placeholders")} awaiting regeneration`,
+                 redTw && `${plural(redTw, "replacement", "replacements")} quarantined`].filter(Boolean).join(" · ");
   $("banner").innerHTML =
     !data.nodes.length ? "Empty graph · run <b>quarantine session1</b>"
     : !data.flagged ? "<b>Memory</b> · no source is flagged; every read is recorded as an edge"
     : `<b>${flaggedIds(data).length > 1 ? "Advisories" : "Advisory"}</b> · ${list(flaggedIds(data))} flagged` +
-      (twins ? ` · ${twins} memor${twins === 1 ? "y" : "ies"} rebuilt from clean sources` : "");
+      (twins ? ` · ${twins}` : "");
   $("live").classList.remove("down");
 }
 function updateLedger() {
@@ -435,10 +455,12 @@ function updateLedger() {
     : state.torn.length ? `Nothing is quarantined from ${list(state.torn)} yet: its closure has not been applied.`
     : d.nodes.some(n => n.red) ? "Quarantining…" : `Nothing is quarantined: no memory was derived from ${list(flagged)}.`;
   for (const n of items) {
-    const li = document.createElement("li"), b = document.createElement("button"), twin = !!n.twin_of;
+    const li = document.createElement("li"), b = document.createElement("button"), red = state.red.has(n.id), twin = !!n.twin_of;
+    const what = !twin ? esc(n.kind) : red ? "replacement for " + esc(n.twin_of) + ", quarantined"
+      : placeholder(n) ? "placeholder for " + esc(n.twin_of) + ", needs regeneration" : "replaces " + esc(n.twin_of);
     b.type = "button"; b.setAttribute("aria-pressed", String(n.id === state.selected));
-    b.innerHTML = `<span class="sw" style="background:${twin ? "var(--green)" : "var(--red)"}"></span>` +
-      `<span><code>${esc(n.id)}</code> <span class="what">${twin ? "replaces " + esc(n.twin_of) : esc(n.kind)}</span></span><span class="what">${esc(n.agent)}</span>`;
+    b.innerHTML = `<span class="sw" style="${red ? "background:var(--red)" : placeholder(n) ? "border:1.5px dashed var(--green)" : "background:var(--green)"}"></span>` +
+      `<span><code>${esc(n.id)}</code> <span class="what">${what}</span></span><span class="what">${esc(n.agent)}</span>`;
     b.addEventListener("click", () => select(n.id)); li.appendChild(b); ul.appendChild(li);
   }
 }
@@ -471,6 +493,7 @@ function updateNote() {                       // recomputed on every render, fro
   const v = state.view, n = state.lastData ? flaggedIds(state.lastData).length : 0;
   const lost = [...meta.values()].filter(n => !n.isDoc && !n.twin_of && !n.red && (v === "agent" ? n.naive_agent : n.naive_time)).length;
   $("view-note").textContent = v === "precise" ? "" : state.torn.length ? "The flagged source's closure has not been applied, so there is nothing to compare yet."
+    : state.stale.length ? "A retraction was interrupted, so there is nothing to compare yet."
     : n > 1 ? `The comparison covers one advisory at a time; ${n} sources are flagged, so the counters stay blank.`
     : !state.counters ? "Flag a source first to compare." :
     `${v === "agent" ? "Wiping every compromised agent" : "Rolling back to before the bad source"} throws away ${lost} clean memories (hatched ×) along with the poisoned ones. The graph keeps them.`;
@@ -492,7 +515,7 @@ async function select(id) {
     return;
   }
   const head = `<span class="kind">${esc(n.kind)}</span><span class="id">${esc(n.id)}</span><div class="text">${esc(n.text || n.value || "")}</div>` +
-    `<div class="meta">written by ${esc(n.agent)} at tick ${esc(n.tick)}${n.twin_of ? " · replaces " + esc(n.twin_of) : ""}</div>`;
+    `<div class="meta">written by ${esc(n.agent)} at tick ${esc(n.tick)}${n.twin_of ? (placeholder(n) ? " · placeholder for " : " · replaces ") + esc(n.twin_of) : ""}</div>`;
   d.innerHTML = head + `<div class="meta" style="margin-top:10px">Tracing provenance…</div>`;
   try {
     const res = await fetch("/receipt?id=" + encodeURIComponent(id));
@@ -652,9 +675,9 @@ function draw(ts) {
     chipPath(c);
     if (c.cls === "collateral") { ctx.fillStyle = hatchPattern(); } else ctx.fillStyle = rgba(mix(pale, c.rgb, c.fill > 0.5 ? c.fill : 0), 1);
     ctx.fill();
-    ctx.strokeStyle = c.fill > 0.5 ? rgba(mix(RED, INK, 0.25), 1) : c.cls === "twin" ? rgba(GREEN, 1) : c.cls === "collateral" ? rgba(ORANGE, 1) : rgba(INK, doc ? 0.5 : 0.3);
-    ctx.lineWidth = c.cls === "twin" || c.cls === "collateral" || c.fill > 0.5 ? 1.8 : 1.2;
-    if (doc && c.fill < 0.5) ctx.setLineDash([4, 3]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = c.fill > 0.5 ? rgba(mix(RED, INK, 0.25), 1) : c.cls === "twin" || c.cls === "pending" ? rgba(GREEN, 1) : c.cls === "collateral" ? rgba(ORANGE, 1) : rgba(INK, doc ? 0.5 : 0.3);
+    ctx.lineWidth = c.cls === "twin" || c.cls === "pending" || c.cls === "collateral" || c.fill > 0.5 ? 1.8 : 1.2;
+    if ((doc || c.cls === "pending") && c.fill < 0.5) ctx.setLineDash([4, 3]); ctx.stroke(); ctx.setLineDash([]);
     if (c.stripe) {                                         // agent identity: a stripe on the left, clipped to the chip
       ctx.save(); chipPath(c); ctx.clip(); ctx.fillStyle = rgba(mix(c.stripe, [255, 255, 255], c.fill * 0.6), 1); ctx.fillRect(c.x - c.w / 2, c.y - c.h / 2, 6, c.h); ctx.restore();
     }
@@ -662,7 +685,7 @@ function draw(ts) {
     ctx.fillStyle = onRed ? "#fff" : rgba(INK, doc ? 0.78 : 0.95); ctx.font = `${onRed ? 700 : 600} 12.5px ${MONO}`; ctx.textAlign = "left"; ctx.textBaseline = "middle";
     ctx.fillText(c.id, c.x - c.w / 2 + (c.stripe ? 14 : 10), c.y + 0.5, c.w - 40);
     if (c.glyph) {                                          // non-colour marker: a badge on the right edge
-      const bx = c.x + c.w / 2 - 14, col = c.cls === "twin" ? GREEN : c.cls === "collateral" ? ORANGE : RED;
+      const bx = c.x + c.w / 2 - 14, col = c.cls === "twin" || c.cls === "pending" ? GREEN : c.cls === "collateral" ? ORANGE : RED;
       ctx.fillStyle = onRed ? "#fff" : rgba(col, 1); ctx.beginPath(); ctx.arc(bx, c.y, 8, 0, 6.283); ctx.fill();
       ctx.fillStyle = onRed ? rgba(RED, 1) : "#fff"; ctx.font = `800 12px ${SANS}`; ctx.textAlign = "center"; ctx.fillText(c.glyph, bx, c.y + 0.7);
     }
