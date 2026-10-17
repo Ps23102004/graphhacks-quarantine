@@ -74,8 +74,29 @@ def recovery_status(g: Graph) -> dict[str, Any]:
     warnings = []
     if quarantined_count > 0 and unfinished_tasks > 0:
         warnings.append(f"{unfinished_tasks} rework task(s) remaining to reach fixpoint")
+    # drift and unfinished repair: any of these means the graph is NOT in a state to call recovered
+    provenance = "EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY"
+    checks = (
+        (f"MATCH (:Doc {{flagged: true}})<-[:{provenance}*1..]-(m:Memory {{quarantined: false}}) RETURN count(DISTINCT m)",
+         "memory(ies) reach a flagged doc but are not quarantined (torn write; run `quarantine session2`)"),
+        (f"MATCH (m:Memory {{quarantined: true}}) WHERE NOT (m)-[:{provenance}*1..]->(:Doc {{flagged: true}}) RETURN count(m)",
+         "quarantined memory(ies) reach no flagged doc (torn write; run `quarantine session2`)"),
+        ("MATCH (m:Memory) WHERE (m:PlanStep OR m:Artifact) AND NOT (m)-[:INFLUENCED_BY]->() AND NOT (m)-[:SUPERSEDES]->() "
+         "RETURN count(m)", "step(s) or artifact(s) have no read set (session 1 may have crashed; rerun it)"),
+        ("MATCH (f:Fact {quarantined: true, healable: true}) WHERE NOT (f)<-[:SUPERSEDES]-() RETURN count(f)",
+         "healable fact(s) not healed yet"),
+        ("MATCH (m:Memory {quarantined: false}) WHERE (m.needs_regeneration = true OR m.ungrounded = true) "
+         "AND NOT (m)<-[:SUPERSEDES]-() RETURN count(m)",
+         "replacement(s) are placeholders that an agent must regenerate (needs regeneration)"),
+    )
+    drift = 0
+    for cypher, what in checks:
+        n = _query(cypher)[0][0]
+        if n:
+            drift += n
+            warnings.append(f"{n} {what}")
 
-    is_complete = (quarantined_count == 0) or (len(tasks) > 0 and unfinished_tasks == 0)
+    is_complete = drift == 0 and ((quarantined_count == 0) or (len(tasks) > 0 and unfinished_tasks == 0))
 
     return {
         "mode": "scripted",

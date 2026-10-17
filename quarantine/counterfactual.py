@@ -1,10 +1,15 @@
-"""Evidence that does not share the specification: replay each world WITHOUT the poisoned document.
+"""Counterfactual replay: run each world again WITHOUT the poisoned document and see what really changes.
 
 The held-out oracle (worldgen.py) restates the quarantine rule in Python, so it can only show the Cypher implements
-the rule. This module asks whether the rule is right. It gives every memory a symbolic content (an episode is its
-text, a fact is the plurality claim of its support, a step or artifact is its text plus the contents of what it read),
-recomputes every content in the world with the flagged document removed, and calls a memory *truly affected* if its
-content differs or it can no longer exist.
+the rule. This module asks a different question: which memories would actually have been different? Every memory gets
+a symbolic content (an episode is its text; a fact is its stored value, and in the replay the plurality claim of the
+support that remains; a step or artifact is its text plus the contents of what it read). A memory is *truly affected*
+if its content differs, or it can no longer exist, in the replay without the document.
+
+Limit, stated plainly: the replay follows the same declared read sets as the closure, so "0 false negatives" holds by
+construction on the declared model. It measures how conservative the closure is, not whether the read sets are
+complete. `hidden` mode measures that second question: the graph only gets the declared reads, while the truth uses
+each agent's whole context (worldgen "cumulative"), i.e. influence nobody recorded.
 
 Two directions, very different in cost:
   - false negative: truly affected but left clean. Poison keeps being used. Must be zero.
@@ -25,16 +30,22 @@ from quarantine.worldgen import make_world
 KINDS = ("episodes", "facts", "steps", "artifacts")
 
 
+def norm(claim: str) -> str:
+    return claim.strip().lower()                                       # the heal vote groups claims the same way
+
+
 def plurality(claims: list[str]) -> str | None:
     if not claims:
         return None
-    ranked = Counter(claims).most_common()
+    ranked = Counter(norm(c) for c in claims).most_common()
     top = [c for c, n in ranked if n == ranked[0][1]]
     return min(top)                                                    # deterministic tie-break
 
 
 def contents(world: dict, drop_doc: str | None = None) -> dict[str, object]:
-    """Symbolic content of every memory that can exist in this world, optionally with one document never ingested."""
+    """Symbolic content of every memory that can exist in this world, optionally with one document never ingested.
+    A fact keeps its stored value unless the replay removes part of its support; then the consolidator would have
+    written the plurality of what remains."""
     out: dict[str, object] = {}
     for eid, e in world["episodes"].items():
         if e["doc"] != drop_doc:
@@ -42,7 +53,7 @@ def contents(world: dict, drop_doc: str | None = None) -> dict[str, object]:
     for fid, f in world["facts"].items():
         live = [s["claim"] for s in f["support"] if s["ep"] in out]
         if live:
-            out[fid] = ("fact", plurality(live))
+            out[fid] = ("fact", norm(f["value"]) if len(live) == len(f["support"]) else plurality(live))
     later = sorted(((m["tick"], mid) for k in ("steps", "artifacts") for mid, m in world[k].items()))
     for _, mid in later:
         m = world["steps"].get(mid) or world["artifacts"][mid]
@@ -96,10 +107,12 @@ def check_receipt(world: dict, edges: set, mid: str, doc: str, got: dict) -> str
     return None
 
 
-def evaluate_counterfactual(g, world: dict, seed: int = 0, mode: str = "declared") -> Tally:
+def evaluate_counterfactual(g, world: dict, seed: int = 0, mode: str = "declared", truth_world: dict | None = None) -> Tally:
+    """truth_world: the world as it really was (default: the one the graph was given)."""
     from web.server import snapshot                                   # the page's own read path
 
     t = Tally()
+    truth_world = truth_world or world
     load(g, world)
     edges = provenance_edges(world)
     total = sum(len(world[k]) for k in KINDS)
@@ -115,7 +128,7 @@ def evaluate_counterfactual(g, world: dict, seed: int = 0, mode: str = "declared
         q(g, Q.FLAG_DOC, doc=doc, reason="counterfactual", tick=900)
         _, ids = q(g, Q.TAINT_CLOSURE, doc=doc, tick=900)[0]
         flagged = set(ids)
-        truth = truly_affected(world, doc)
+        truth = truly_affected(truth_world, doc)
         flags = {r[0]: r[2] for r in q(g, Q.SUPPORT_AND_HEALABLE)}
 
         t.runs += 1; t.memories += total; t.affected += len(truth); t.flagged += len(flagged)
@@ -163,6 +176,7 @@ def merge(a: Tally, b: Tally) -> Tally:
 
 
 def run(seeds, mode: str = "declared", deep: bool = False, graph: str = "counterfactual_scratch") -> Tally:
+    """mode "hidden": the graph gets the declared reads, the truth is each agent's whole context (unrecorded influence)."""
     total = Tally()
     for seed in seeds:
         g = connect(graph)
@@ -171,6 +185,10 @@ def run(seeds, mode: str = "declared", deep: bool = False, graph: str = "counter
         except Exception:  # noqa: BLE001
             pass
         g = connect(graph)
-        merge(total, evaluate_counterfactual(g, make_world(seed, mode, deep), seed, mode))
+        if mode == "hidden":
+            merge(total, evaluate_counterfactual(g, make_world(seed, "declared", deep), seed, mode,
+                                                 truth_world=make_world(seed, "cumulative", deep)))
+        else:
+            merge(total, evaluate_counterfactual(g, make_world(seed, mode, deep), seed, mode))
     connect(graph).delete()
     return total
