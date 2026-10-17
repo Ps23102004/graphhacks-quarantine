@@ -1,6 +1,6 @@
 # TESTING — how to know Quarantine works
 
-Three layers, from fastest to most convincing. Anyone on the team (or a judge) can run all of them.
+Several layers, from fastest to most convincing. Anyone on the team (or a judge) can run all of them.
 
 ## 0. Prerequisites
 
@@ -13,29 +13,31 @@ docker run -d --name quarantine-falkordb -p 6379:6379 -p 3000:3000 \
 uv sync --all-extras                      # --all-extras installs the optional MCP SDK the MCP tests need
 ```
 
-## 1. Unit and integration tests (about 5 s)
+## 1. Unit and integration tests (about 1 to 2 min)
 
 ```bash
-uv run pytest -q          # expect: 52 passed
+uv run pytest -q          # expect: all tests pass, 0 failed
 ```
+
+The number of tests changes as tests are added, so no doc states it: read the count from pytest's summary line.
 
 Tests use their own graphs (`quarantine_test`, `quarantine_cli_test`, `quarantine_web_test`) and delete them afterwards. They never touch the demo graph named `quarantine`.
 
-## 2. Fresh-clone validation (about 1 min): what a stranger would see
+## 2. Working-tree validation (a few minutes): close to what a stranger would see
 
 ```bash
-scripts/validate.sh       # expect: "validation: 22 passed, 0 failed"
+scripts/validate.sh       # expect: "validation: N passed, 0 failed" (N changes as checks are added)
 ```
 
-Clones the committed HEAD into a temp dir, starts a throwaway FalkorDB on :6390, installs from the lockfile, runs pytest, then runs the real CLI and checks the exact lines the video says (6 vs 25 vs 19, the receipt, the heal, the kill-Planner takeover, the control closure for doc_5, the page JSON and its Host check). Uncommitted work is not validated: commit first.
+Copies the working tree, uncommitted edits included (`.git` and `.venv` excluded), into a temp dir, starts a throwaway FalkorDB on :6390, installs from the lockfile, runs pytest, then runs the real CLI and checks the exact lines the video says (6 vs 25 vs 19, the receipt, the heal, the kill-Planner takeover, the control closure for doc_5, the page JSON and its Host check). Because it copies the working tree, it is not a fresh clone: run it on a clean tree (`git status` empty) to validate a commit, and note that it cannot catch a needed file that was never committed.
 
-## 3. Mutation check (about 3 min): do the tests actually catch breakage?
+## 3. Mutation check (slow: one pytest run per mutation): do the tests actually catch breakage?
 
 ```bash
 uv run python scripts/mutation_check.py     # expect: "0 unexpected survivor(s)"
 ```
 
-Breaks one thing at a time in a throwaway clone (22 mutations: closure edge types and depth, heal threshold and tie rule, episodes healable, blockers, lease expiry and holder, claim ownership, COMPLETE session and replacement checks, rework guard and idempotence, baselines, a fixture read set, page counters, twin detection, receipts). pytest must go red each time. One documented equivalent mutant survives (the heal query's `clean_total >= 2` duplicates the `healable` flag guard).
+Breaks one thing at a time in a throwaway clone of the committed HEAD (the `MUTATIONS` list in `scripts/mutation_check.py`: closure edge types and depth, heal threshold and tie rule, episodes healable, blockers, lease expiry and holder, claim ownership, COMPLETE session and replacement checks, rework guard and idempotence, baselines, a fixture read set, page counters, twin detection, receipts). pytest must go red each time. Two documented equivalent mutants survive and are excluded from the count (the heal query's `>= 2` check and its tie check, both already guarded by the `healable` flag).
 
 ## 4. Browser regressions (optional, installed Playwright CLI)
 
@@ -47,7 +49,7 @@ playwright-cli -s=quarantine-ui-check run-code --filename scripts/check_browser.
 playwright-cli -s=quarantine-ui-check close
 ```
 
-Expect 19 checks with `passed: true`. This runs the real hive page (plain canvas ledger, no chart library), substitutes only `/graph` and `/receipt` responses, and never writes to FalkorDB. It covers every cell staying visible at 1920, 960 and 375 px, no horizontal scroll on a phone, the precise counter climbing with the red wave, non-colour markers (`!`, `+`, `×`), the receipt drawing four arcs and reading as a sentence, the two naive-wipe views painting 13 and 19 clean casualties, healed twins fitting, keyboard selection, reset cleanup, and a receipt arriving after reset. It supplements the live CLI run; it does not prove graph queries or process recovery. The Python suite does not require Playwright.
+Expect every check to report `passed: true`. This runs the real ledger page (no chart library), substitutes only `/graph` and `/receipt` responses, and never writes to FalkorDB. It covers every cell staying visible at 1920, 960 and 375 px, no horizontal scroll on a phone, the precise counter climbing with the red wave, non-colour markers (`!`, `+`, `×`), the receipt highlighting four ribbons and reading as a sentence, the two naive-wipe views painting 13 and 19 clean casualties, healed twins fitting, keyboard selection, reset cleanup, and a receipt arriving after reset. It supplements the live CLI run; it does not prove graph queries or process recovery. The Python suite does not require Playwright.
 
 ## What each claim is tested by
 
@@ -74,9 +76,9 @@ Expect 19 checks with `passed: true`. This runs the real hive page (plain canvas
 
 ## Manual checks (the human part: do these before recording)
 
-1. `uv run python web/server.py`, open http://localhost:8765, then `uv run quarantine session1 --slow 0.4`: nodes appear grey. `flag doc_7`: six turn red one by one, counters read 6 / 25 / 19. Click `a_requirements`: orange path to doc_7. `session2`: green twins appear.
-2. Projector test: counters readable from 3 m. Quarantined memories have `!` labels and dashed borders; healed twins have `+` labels; flagged documents have `!` labels. Check these cues on the actual recording setup; browser emulation is not a physical projector test.
-3. Reset between takes: `uv run quarantine session1` rebuilds the graph from the fixture. Confirm twins, status markers, selected receipt and orange path all clear. A delayed receipt response must not restore the old path.
+1. `uv run python web/server.py`, open http://localhost:8765, then `uv run quarantine session1 --slow 0.4`: chips appear in five columns. `flag doc_7`: red ink spills along the ribbons and six chips turn red one by one, counters read 6 / 25 / 19. Click `a_requirements`: a yellow highlighter path runs back to doc_7. `session2`: green twins appear under their originals.
+2. Projector test: counters readable from 3 m. Quarantined memories have `!` labels; healed twins have `+` labels; flagged documents have `!` labels. Check these cues on the actual recording setup; browser emulation is not a physical projector test.
+3. Reset between takes: `uv run quarantine session1` rebuilds the graph from the fixture. Confirm twins, status markers, selected receipt and yellow highlighter path all clear. A delayed receipt response must not restore the old path.
 4. Say the numbers from the terminal, never from memory.
 
 ## Known limits (say them in the README, do not hide them)
@@ -86,5 +88,5 @@ Expect 19 checks with `passed: true`. This runs the real hive page (plain canvas
 - The read set is written as edges right after the memory node, in separate queries, and checked by audit queries; it is not one atomic transaction.
 - The kill-Planner beat is a real `kill -9` of a separate process; the "new Planner" is the CLI process itself in session s2b.
 - Healing is a majority vote over clean episodes, not semantic reasoning.
-- One graph per crew; variable-length traversals are bounded at depth 10.
-- FalkorDB 6.0.2 limits we hit (see DAY1-SPIKES.md): no `EXISTS {}`, `shortestPath` only in WITH/RETURN, no `CREATE (n $props)`.
+- One graph per crew. The closure and receipt are unbounded (the graph is a DAG; a 10-hop cap was removed, see `docs/EVAL-HELDOUT.md`).
+- FalkorDB 6.0.2 limits we hit (see `spikes/day1-results.txt`): no `EXISTS {}`, `shortestPath` only in WITH/RETURN, no `CREATE (n $props)`.

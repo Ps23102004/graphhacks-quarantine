@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Fresh-clone and working-tree validation.
+# Working-tree validation (not a fresh clone).
 #   scripts/validate.sh
-# Validates working-tree changes as well as clean repo state.
+# Copies the working tree, uncommitted edits included (.git/.venv excluded): run it on a clean tree to validate a commit.
 # Starts a throwaway FalkorDB on port 6390, runs tests, demo commands, MCP bridge, and web.
 set -euo pipefail
 
