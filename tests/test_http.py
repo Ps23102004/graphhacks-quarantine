@@ -164,3 +164,26 @@ def test_http_db_unavailable_returns_503():
     finally:
         srv.shutdown()
         os.environ["FALKORDB_PORT"] = str(PORT)
+
+
+def test_http_missing_graph_is_an_empty_snapshot_not_an_error():
+    """The page shows its empty-state hint for a graph that was never loaded, not "Graph unreachable"."""
+    name = "quarantine_http_never_created"
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(name))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        with urlopen(Request(f"http://127.0.0.1:{srv.server_port}/graph")) as resp:
+            assert resp.status == 200
+            assert json.loads(resp.read().decode()) == dict(nodes=[], docs=[], edges=[], flagged=None, counters=None)
+    finally:
+        srv.shutdown()
+
+
+def test_http_two_advisories_send_every_flagged_doc_and_no_counters(running_server):
+    """The page builds its headline and banner from docs[].flagged; the counters only tell one advisory's story."""
+    base_url, _ = running_server
+    q(connect(GRAPH, port=PORT), "CREATE (:Doc {id: 'doc_2', title: 'Second', flagged: true})")
+    with urlopen(Request(f"{base_url}/graph")) as resp:
+        data = json.loads(resp.read().decode())
+    assert sorted(d["id"] for d in data["docs"] if d["flagged"]) == ["doc_1", "doc_2"]
+    assert data["counters"] is None

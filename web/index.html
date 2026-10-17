@@ -198,7 +198,7 @@ FORM: left-to-right layered flow (Sankey-like ribbons), canvas; labels are alway
     <section>
       <h2>Quarantined</h2>
       <ul class="ledger" id="ledger"></ul>
-      <p class="ledger-empty" id="ledger-empty">Nothing is quarantined. Flag a source with <code>quarantine flag doc_7</code>.</p>
+      <p class="ledger-empty" id="ledger-empty">Nothing is quarantined. Flag a source with <code>quarantine flag DOC</code>.</p>
     </section>
 
     <section>
@@ -236,7 +236,7 @@ const SANS = getComputedStyle(document.body).fontFamily, MONO = getComputedStyle
 
 const canvas = $("stage"), ctx = canvas.getContext("2d"), scroller = $("scroller");
 const state = { red: new Set(), pending: new Map(), arcing: new Set(), seen: false, view: "precise", selected: null, hover: null,
-                counters: null, total: 0, lastData: null, agents: new Map(), request: 0, counts: [0, 0, 0, 0, 0] };
+                counters: null, torn: [], total: 0, lastData: null, agents: new Map(), request: 0, counts: [0, 0, 0, 0, 0], flagKey: "" };
 const meta = new Map();              // id -> snapshot node (memory or document)
 const cells = new Map();             // id -> visual chip
 const arcs = new Map();              // key -> visual ribbon
@@ -303,7 +303,7 @@ function kindOf(n) {
   if (n.isDoc) return "doc";
   const red = n.red && state.red.has(n.id);
   if (n.twin_of) return "twin";
-  if (state.view !== "precise" && !red) return (state.view === "agent" ? n.naive_agent : n.naive_time) ? "collateral" : "dim";
+  if (state.view !== "precise" && state.counters && !red) return (state.view === "agent" ? n.naive_agent : n.naive_time) ? "collateral" : "dim";
   return red ? "red" : "";
 }
 function agentRGB(name) {
@@ -323,9 +323,15 @@ function targetLook(n, cls) {
 // ---------------------------------------------------------------- render (data -> visual objects)
 function render(data) {
   const live = new Set([...data.docs.map(d => d.id), ...data.nodes.map(n => n.id)]);
-  if (!data.nodes.some(n => n.red) && (state.red.size || state.pending.size || state.arcing.size)) {
-    state.pending.forEach(t => clearTimeout(t)); state.pending.clear(); state.red.clear(); state.arcing.clear(); clearSelection(true);
+  const red = new Set(data.nodes.filter(n => n.red).map(n => n.id)), had = state.red.size || state.pending.size || state.arcing.size;
+  for (const id of new Set([...state.red, ...state.pending.keys(), ...state.arcing])) if (!red.has(id)) {   // no longer red: back to clean, no replay
+    clearTimeout(state.pending.get(id)); state.pending.delete(id); state.red.delete(id); state.arcing.delete(id);
   }
+  if (!red.size && had) clearSelection(true);
+  const sel = state.selected && meta.get(state.selected), selWas = sel && `${!!sel.red}|${!!sel.flagged}|${state.flagKey}`;
+  state.flagKey = data.docs.filter(d => d.flagged).map(d => d.id).join(",");
+  state.torn = tornDocs(data);
+  state.counters = state.torn.length ? null : data.counters;        // a closure that was never applied has nothing to compare
   for (const id of [...cells.keys()]) if (!live.has(id)) { cells.delete(id); meta.delete(id); }
   data.docs.forEach(d => meta.set(d.id, { ...d, kind: "Doc", isDoc: true }));
   data.nodes.forEach(n => meta.set(n.id, n));
@@ -375,15 +381,22 @@ function render(data) {
   });
   if (!state.seen) arcs.forEach(a => { a.hotP = a.hotRule ? 1 : 0; });
 
-  state.counters = data.counters;
   state.total = data.nodes.filter(n => !n.twin_of).length;
   refreshAll(); updateAgents(); updateBanner(data); buildSr(data);
   if (state.selected && !meta.has(state.selected)) clearSelection(true);
+  else if (state.selected) { const n = meta.get(state.selected); if (`${!!n.red}|${!!n.flagged}|${state.flagKey}` !== selWas) select(state.selected); }   // re-ask: the receipt may be stale
   state.seen = true;
   paintNow();
 }
 
-function refreshAll() { updateCounters(); updateLedger(); updateHud(); }
+function refreshAll() { updateCounters(); updateLedger(); updateHud(); updateNote(); }
+// flagged docs that something was extracted from, yet nothing that read them is quarantined: FLAG_DOC ran, TAINT_CLOSURE did not
+function tornDocs(data) {
+  const red = new Set(data.nodes.filter(n => n.red).map(n => n.id));
+  return data.docs.filter(d => d.flagged && data.edges.some(e => e.dst === d.id && e.type !== "SUPERSEDES" && !red.has(e.src))).map(d => d.id);
+}
+const flaggedIds = d => d.docs.filter(x => x.flagged).map(x => x.id);
+const list = ids => ids.map(i => `<b>${esc(i)}</b>`).join(", ");
 function updateCounters() {
   const c = state.counters, total = state.total || 0;
   const set = (key, v) => {
@@ -395,8 +408,13 @@ function updateCounters() {
 }
 function updateHud() {
   const c = state.counters, hud = $("hud"), d = state.lastData;
-  if (!d || !d.nodes.length) { $("hud-n").textContent = "–"; $("hud-of").textContent = ""; $("hud-line").textContent = "Waiting for the crew to write memory."; hud.classList.remove("hot"); return; }
-  if (!c) { $("hud-n").textContent = state.total; $("hud-of").textContent = "memories"; $("hud-line").innerHTML = `written by <b>${state.agents.size || 3} agents</b> across <b>${d.docs.length} sources</b>. Every read is a ribbon; no source is flagged.`; hud.classList.remove("hot"); return; }
+  if (!d || !d.nodes.length) { $("hud-n").textContent = "–"; $("hud-of").textContent = ""; $("hud-line").textContent = "No memory in this graph yet."; hud.classList.remove("hot"); return; }
+  const flagged = flaggedIds(d), agents = new Set(d.nodes.map(n => n.agent).filter(Boolean)).size;
+  if (state.torn.length) { $("hud-n").textContent = "–"; $("hud-of").textContent = ""; hud.classList.remove("hot");
+    $("hud-line").innerHTML = `${list(state.torn)} ${state.torn.length === 1 ? "is" : "are"} flagged, but the quarantine closure has not been applied, so no count is shown.`; return; }
+  if (!flagged.length) { $("hud-n").textContent = state.total; $("hud-of").textContent = "memories"; $("hud-line").innerHTML = `written by <b>${agents} agent${agents === 1 ? "" : "s"}</b> across <b>${d.docs.length} sources</b>. Every read is a ribbon; no source is flagged.`; hud.classList.remove("hot"); return; }
+  if (!c) { const n = state.red.size; $("hud-n").textContent = n; $("hud-of").textContent = `of ${state.total} memories`; hud.classList.toggle("hot", n > 0);
+    $("hud-line").innerHTML = `quarantined by <b>${flagged.length} advisor${flagged.length === 1 ? "y" : "ies"}</b>: ${list(flagged)}.`; return; }
   const n = Math.min(state.red.size, c.precise);
   $("hud-n").textContent = n; $("hud-of").textContent = `of ${state.total} memories`; hud.classList.toggle("hot", n > 0);
   $("hud-line").innerHTML = `reached by <b>${esc(d.flagged)}</b>. A rollback would have lost <b>${c.time_based}</b>; wiping the agents, <b>${c.per_agent}</b>.`;
@@ -405,14 +423,17 @@ function updateBanner(data) {
   const twins = data.nodes.filter(n => n.twin_of).length;
   $("banner").innerHTML =
     !data.nodes.length ? "Empty graph · run <b>quarantine session1</b>"
-    : !data.flagged ? "<b>Session 1</b> · the crew is writing memory; every read is recorded as an edge"
-    : twins === 0 ? `<b>Session 2</b> · advisory: <b>${esc(data.flagged)}</b> was prompt-injected`
-    : `<b>Healing</b> · ${twins} memor${twins === 1 ? "y" : "ies"} rebuilt from clean sources`;
+    : !data.flagged ? "<b>Memory</b> · no source is flagged; every read is recorded as an edge"
+    : `<b>${flaggedIds(data).length > 1 ? "Advisories" : "Advisory"}</b> · ${list(flaggedIds(data))} flagged` +
+      (twins ? ` · ${twins} memor${twins === 1 ? "y" : "ies"} rebuilt from clean sources` : "");
   $("live").classList.remove("down");
 }
 function updateLedger() {
   const items = [...meta.values()].filter(n => !n.isDoc && (state.red.has(n.id) || n.twin_of)).sort((p, q) => p.tick - q.tick);
-  const ul = $("ledger"); ul.replaceChildren(); $("ledger-empty").hidden = items.length > 0;
+  const ul = $("ledger"), d = state.lastData, flagged = d ? flaggedIds(d) : []; ul.replaceChildren(); $("ledger-empty").hidden = items.length > 0;
+  $("ledger-empty").innerHTML = !flagged.length ? "Nothing is quarantined. Flag a source with <code>quarantine flag DOC</code>."
+    : state.torn.length ? `Nothing is quarantined from ${list(state.torn)} yet: its closure has not been applied.`
+    : d.nodes.some(n => n.red) ? "Quarantining…" : `Nothing is quarantined: no memory was derived from ${list(flagged)}.`;
   for (const n of items) {
     const li = document.createElement("li"), b = document.createElement("button"), twin = !!n.twin_of;
     b.type = "button"; b.setAttribute("aria-pressed", String(n.id === state.selected));
@@ -445,8 +466,13 @@ function setView(v) {
   state.view = v;
   document.querySelectorAll(".policy").forEach(b => { const on = b.dataset.view === v; b.classList.toggle("active", on); b.setAttribute("aria-pressed", String(on)); });
   if (state.lastData) render(state.lastData);
+}
+function updateNote() {                       // recomputed on every render, from the same data as the counters
+  const v = state.view, n = state.lastData ? flaggedIds(state.lastData).length : 0;
   const lost = [...meta.values()].filter(n => !n.isDoc && !n.twin_of && !n.red && (v === "agent" ? n.naive_agent : n.naive_time)).length;
-  $("view-note").textContent = v === "precise" ? "" : !state.counters ? "Flag a source first to compare." :
+  $("view-note").textContent = v === "precise" ? "" : state.torn.length ? "The flagged source's closure has not been applied, so there is nothing to compare yet."
+    : n > 1 ? `The comparison covers one advisory at a time; ${n} sources are flagged, so the counters stay blank.`
+    : !state.counters ? "Flag a source first to compare." :
     `${v === "agent" ? "Wiping every compromised agent" : "Rolling back to before the bad source"} throws away ${lost} clean memories (hatched ×) along with the poisoned ones. The graph keeps them.`;
 }
 document.querySelectorAll(".policy").forEach(b => b.addEventListener("click", () =>
@@ -462,7 +488,7 @@ async function select(id) {
   const req = ++state.request; state.selected = id; arcs.forEach(a => { a.path = false; a.pathP = 0; }); updateLedger();
   const d = $("detail");
   if (n.isDoc) {
-    d.innerHTML = `<span class="kind">Source</span><span class="id">${esc(n.id)}</span><div class="text">${esc(n.title)}</div><div class="meta">${n.flagged ? "Flagged: " + esc(n.reason || "prompt-injected") : "Not flagged"}</div>`;
+    d.innerHTML = `<span class="kind">Source</span><span class="id">${esc(n.id)}</span><div class="text">${esc(n.title)}</div><div class="meta">${n.flagged ? "Flagged" + (n.reason ? ": " + esc(n.reason) : "") : "Not flagged"}</div>`;
     return;
   }
   const head = `<span class="kind">${esc(n.kind)}</span><span class="id">${esc(n.id)}</span><div class="text">${esc(n.text || n.value || "")}</div>` +

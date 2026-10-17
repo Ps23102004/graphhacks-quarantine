@@ -37,11 +37,26 @@ async (page) => {
   const receipt = { shape: 'path', hops: ['a_requirements', 'step_3', 'f_http_client', 'ep_7a', 'doc_7'], len: 4, length: 4,
     via: ['INFLUENCED_BY', 'INFLUENCED_BY', 'CONSOLIDATED_FROM', 'EXTRACTED_FROM'],
     sentence: 'a_requirements was written after reading step_3, which was written after reading f_http_client, which was consolidated from ep_7a, which was extracted from doc_7.' };
+  const redIds8 = ['ep_8', 'f_http_usage', 'step_4', 'step_5', 'a_fetch_py'];
+  const two = copy(flagged);                                         // two advisories: the server sends no counters
+  two.nodes.forEach(n => { n.red = redIds.includes(n.id) || redIds8.includes(n.id); delete n.naive_agent; delete n.naive_time; });
+  two.docs.find(d => d.id === 'doc_8').flagged = true;
+  two.counters = null;
+  const torn = copy(flagged);                                        // doc flagged, closure never applied
+  torn.nodes.forEach(n => { n.red = false; n.naive_agent = false; });
+  torn.counters = { precise: 0, per_agent: 25, time_based: 19 };
+  const solo = copy(clean); solo.nodes.forEach(n => { n.agent = 'planner'; });
+  const receipt8 = { shape: 'path', hops: ['a_fetch_py', 'step_4', 'f_http_usage', 'ep_8', 'doc_8'], len: 4, length: 4,
+    via: ['INFLUENCED_BY', 'INFLUENCED_BY', 'CONSOLIDATED_FROM', 'EXTRACTED_FROM'],
+    sentence: 'a_fetch_py was written after reading step_4, which was written after reading f_http_usage, which was consolidated from ep_8, which was extracted from doc_8.' };
   let current = clean, holdReceipt = false, releaseReceipt, receiptStarted;
   const graphRoute = route => route.fulfill({ json: current });
-  const receiptRoute = async route => {
+  const receiptRoute = async route => {                              // answers from the graph the page is being shown
     if (holdReceipt) await new Promise(resolve => { releaseReceipt = resolve; receiptStarted(); });
-    await route.fulfill({ json: receipt });
+    const id = decodeURIComponent(route.request().url().split('id=')[1] || '');
+    const red = current.nodes.find(n => n.id === id)?.red;
+    await route.fulfill({ json: !red ? { shape: 'not_in_graph', answer: `${id} has no provenance path to any flagged document.` }
+                                     : id === 'a_fetch_py' ? receipt8 : receipt });
   };
   const checks = [];
   const check = (name, ok, detail) => checks.push({ name, passed: !!ok, detail });
@@ -126,6 +141,36 @@ async (page) => {
     await (await response).finished();
     await page.evaluate(() => new Promise(requestAnimationFrame));
     check('late receipt cannot overwrite reset', !(await page.evaluate(receiptShown)));
+
+    holdReceipt = false;
+    const text = id => page.evaluate(id => document.getElementById(id).textContent, id);
+    await page.evaluate(() => hive.setView('agent'));
+    await show(flagged);
+    await page.waitForFunction(() => hive.state.red.size === 6, undefined, { timeout: 8000 });
+    await show(two);
+    await page.waitForFunction(() => hive.state.red.size === 11, undefined, { timeout: 8000 }).catch(() => {});
+    check('two advisories: headline counts 11 and names both', (await text('hud-n')) === '11' && /doc_7.*doc_8/.test(await text('hud-line')) && !(await text('hud-line')).includes('no source is flagged'), await text('hud-line'));
+    check('two advisories: banner names both', /doc_7.*doc_8/.test(await text('banner')), await text('banner'));
+    check('two advisories: counters blank, note says why', (await text('c-agent')) === '–' && /one advisory/.test(await text('view-note')), await text('view-note'));
+    check('two advisories: no chip dimmed for a comparison that is not shown', (await count('dim')) === 0 && (await count('collateral')) === 0);
+    await page.evaluate(() => hive.setView('precise'));
+    await clickMemory('a_fetch_py');
+    await page.waitForFunction(() => document.querySelector('#detail').textContent.includes('doc_8'), undefined, { timeout: 4000 }).catch(() => {});
+    check('receipt for a memory only doc_8 reached', (await text('detail')).includes('extracted from doc_8'), await text('detail'));
+    await show(flagged);                                             // doc_8 retracted
+    check('partial unflag: red set and ledger follow the data', await page.evaluate(() => hive.state.red.size === 6 && document.querySelectorAll('#ledger li').length === 6 && hive.cells.get('ep_8').cls === '' && !hive.state.arcing.has('ep_8')));
+    await page.waitForFunction(() => document.querySelector('#detail').textContent.includes('not in the graph'), undefined, { timeout: 4000 }).catch(() => {});
+    check('partial unflag: stale receipt and path are replaced', await page.evaluate(() => !document.querySelector('#detail').textContent.includes('hops') && ![...hive.arcs.values()].some(a => a.path)), await text('detail'));
+    await page.evaluate(() => hive.setView('agent'));
+    await show(clean);
+    check('policy note follows the poll', !(await text('view-note')).includes('19'), await text('view-note'));
+    await page.evaluate(() => hive.setView('precise'));
+    await show(torn);
+    check('torn flag: no "reached by" claim, counters blank', !(await text('hud-line')).includes('reached by') && /not been applied/.test(await text('hud-line')) && (await text('c-agent')) === '–', await text('hud-line'));
+    await show({ nodes: [], docs: [], edges: [], flagged: null, counters: null });   // a graph that does not exist yet
+    check('missing graph shows the empty-state hint', await page.evaluate(() => !document.getElementById('empty').hidden && !document.getElementById('live').classList.contains('down')) && (await text('banner')).includes('Empty graph'), await text('banner'));
+    await show(solo);
+    check('agent count follows the data', (await text('hud-line')).includes('1 agent ') && (await text('banner')).includes('no source is flagged'), await text('hud-line'));
   } finally {
     if (releaseReceipt) releaseReceipt();
     await page.unroute('**/graph', graphRoute);
