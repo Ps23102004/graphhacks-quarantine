@@ -207,7 +207,7 @@ def test_rule4_every_answer_is_one_of_four_shapes(g):
 
     out = answers.recall(g, "f_http_client")
     assert out["shape"] == "memory" and out["learned_tick"] == 11 and out["learned_session"] == "s1"
-    assert out["learned_by"] == "research" and out["answer"] == "reqeusts" and out["quarantined"] is True
+    assert out["learned_by"] == "research" and "withheld" in out["answer"] and out["quarantined"] is True
     shapes.add(out["shape"])
 
     out = answers.why_quarantined(g, "a_fetch_py")                     # a real, clean memory

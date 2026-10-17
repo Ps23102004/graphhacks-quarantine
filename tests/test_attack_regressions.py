@@ -350,3 +350,18 @@ def test_fixture_path_falls_back_to_the_installed_share_directory(tmp_path, monk
 
     monkeypatch.chdir(tmp_path)                                          # not a checkout: relative path does not exist here
     assert L.read_fixture("fixtures/support-crew.yaml")["docs"]
+
+
+def test_tools_never_hand_quarantined_text_to_an_agent():
+    """Security review: a quarantined memory's text may be the injection itself; recall and inspect withhold it."""
+    from quarantine.answers import WITHHELD, recall
+
+    g = _demo("reg_withhold")
+    try:
+        assert "reqeusts" in recall(g, "f_http_client")["answer"]                  # before the advisory it is just memory
+        q(g, Q.FLAG_AND_CLOSE, doc="doc_7", reason="t", tick=40)
+        r = recall(g, "f_http_client")
+        assert r["answer"] == WITHHELD and r["quarantined"] is True
+        assert recall(g, "f_goal")["answer"] != WITHHELD                             # clean memory still answers
+    finally:
+        connect("reg_withhold").delete()

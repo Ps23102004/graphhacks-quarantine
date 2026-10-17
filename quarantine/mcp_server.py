@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 from mcp.server.fastmcp import FastMCP
-from quarantine.answers import blast_radius as _blast_radius
+from quarantine.answers import WITHHELD, blast_radius as _blast_radius
 from quarantine.answers import recall as _recall
 from quarantine.answers import why_connected as _why_connected
 from quarantine.answers import why_quarantined
@@ -44,11 +44,12 @@ def inspect_quarantined_memories() -> dict:
     query = """
     MATCH (m:Memory {quarantined: true})<-[:AUTHORED]-(a:Agent)
     OPTIONAL MATCH (m)-[:SUPERSEDES]->(old:Memory)
-    RETURN m.id, labels(m)[1], a.name, m.tick, m.text, m.value
+    RETURN m.id, labels(m)[1], a.name, m.tick
     ORDER BY m.tick
     """
     rows = _ro_query(g, query)
-    items = [{"id": r[0], "kind": r[1], "agent": r[2], "learned_tick": r[3], "content": r[4] or r[5]} for r in rows]
+    # ids and provenance only: the quarantined text itself may be the injection, so it never reaches an agent
+    items = [{"id": r[0], "kind": r[1], "agent": r[2], "learned_tick": r[3], "content": WITHHELD} for r in rows]
     if not items:
         return {"shape": "not_in_graph", "answer": "no memory in this graph is quarantined (the graph says so; it is not a clean bill of health)", "items": []}
     return {"shape": "memory", "answer": f"{len(items)} quarantined memories, each with the tick it was learned", "items": items}

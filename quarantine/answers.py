@@ -163,9 +163,14 @@ def recall(g, memory_id: str) -> dict:
     m = resolve_memory(g, memory_id)
     if m is None:
         return shape_unknown(memory_id, "memory")
-    out = shape_memory(m["content"], m["id"], m["tick"], m["session"], m["agent"])
+    # a quarantined memory's text may BE the injection: an agent asking "what does X say?" must not be handed it
+    content = WITHHELD if m["quarantined"] else m["content"]
+    out = shape_memory(content, m["id"], m["tick"], m["session"], m["agent"])
     out["quarantined"] = m["quarantined"]
     return out
+
+
+WITHHELD = "[withheld: this memory is quarantined; its text may carry the injection. Ask trace_provenance_receipt why.]"
 
 
 def blast_radius(g, doc_id: str) -> dict:

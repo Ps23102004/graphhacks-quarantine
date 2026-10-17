@@ -111,7 +111,7 @@ def test_inspect_quarantined_memories_returns_records():
     assert memories[0]["id"] == "ep_1"
     assert memories[0]["agent"] == "researcher"
     assert memories[0]["learned_tick"] == 5
-    assert memories[0]["content"] == "content 1"
+    assert "withheld" in memories[0]["content"] and "content 1" not in str(res)   # quarantined text never reaches the agent
 
 
 def test_get_recovery_status_deferred_or_delegated():
