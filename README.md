@@ -1,153 +1,217 @@
-# QUARANTINE — Shared Agent Memory That Heals Itself
+# QUARANTINE
+## Trace affected agent memory. Rebuild only what needs rework.
 
-**Graph Hacks 2026 (FalkorDB × WeMakeDevs)**  
-**Track 02:** Agent Memory and Coordination  
-**Team:** Team Parth Singh (Parth Singh, Amandeep Kaushik, Aashna Tyagi)
+QUARANTINE is a prototype for recovering shared agent memory after a source is flagged as untrustworthy. It records where memories came from, follows those connections across agents, and preserves unrelated work while affected items are quarantined and reworked.
 
----
+**The current demo uses scripted research, planner, and coder actions.** The FalkorDB graph, dependency queries, task leases, and recovery writes are real. The project does not automatically detect prompt injections or demonstrate recovery for arbitrary LLM workflows.
 
-## 1. What Problem Does It Solve?
+Built for **Graph Hacks 2026 (FalkorDB × WeMakeDevs)**, Track 02: Agent Memory and Coordination.
 
-When autonomous multi-agent crews collaborate, they share memory across sessions. But what happens when an ingested external source (web page, forum comment, user upload) contains a **prompt injection** or malicious hallucination?
+**Team:** Parth Singh, Amandeep Kaushik, and Aashna Tyagi.
 
-Today, teams do one of two bad things:
-1. **Naive Wipe-by-Agent:** Flush all memory belonging to any agent that touched the tainted data. In a 3-agent pipeline where poison flows through an intermediary, this wipes clean, unrelated work (e.g. 25 of 25 memories).
-2. **Naive Invalidate-by-Time (Graphiti/Vector TTL):** Drop all memories created at or after the timestamp of the bad input. This blindly discards clean, concurrent work written after that tick (e.g. 19 memories wiped).
+## Why we built it
 
-**Quarantine solves this:** Memory is a graph. Before every write, the harness captures the agent's explicit **read set** as directed `INFLUENCED_BY` edges. Taint becomes a graph traversal. Repair becomes a monotone DAG rewriting loop.
+A bad source can travel further than the agent that first reads it. A researcher may turn it into a fact, a planner may use that fact, and a coder may produce an artifact based on the plan.
 
----
+Once the source is flagged, which work should be revisited?
 
-## 2. The Core Numbers (6 vs 25 vs 19)
+Resetting every involved agent or discarding everything written after the source arrived can remove unrelated work. QUARANTINE explores a narrower approach: record dependencies as the work is created, then use those connections to identify what needs attention.
 
-When Document 7 (`doc_7`) is flagged as a prompt injection (tricking agents into using typosquatted package `reqeusts` instead of `requests`):
-- **Graph-Precise Quarantine:** **6** memories quarantined.
-- **Naive Per-Agent Wipe:** **25** memories wiped (destroys 19 clean units).
-- **Naive Time-Based Invalidation:** **19** memories wiped (destroys 13 clean units).
-- **Receipt:** A verifiable 4-hop `shortestPath` explains exactly why the Coder's final `requirements.txt` is poisoned even though Coder never read `doc_7`.
-- **Monotone Fixpoint Rework:** Rounds `[1, 2, 2, 0]` heal facts with clean support (`requests`), unpin orphaned dead ends, unblock dependent tasks in strict topological order, and converge.
+A recorded dependency means an item may have been affected. It does not prove the item's contents are wrong.
 
----
+## What the demo shows
 
-## 3. Architecture & Graph Schema
+The fixture includes a document that instructs agents to use the misspelled package `reqeusts` instead of `requests`. That instruction reaches a `requirements.txt` artifact through intermediate memories, even though the coder never reads the original document.
 
-```mermaid
-graph TD
-    classDef doc fill:#2a313b,stroke:#566070,color:#e6e9ee,stroke-width:2px;
-    classDef episode fill:#5b6675,stroke:#2a313b,color:#e6e9ee;
-    classDef fact fill:#414d5c,stroke:#2a313b,color:#e6e9ee;
-    classDef step fill:#353f4d,stroke:#2a313b,color:#e6e9ee;
-    classDef artifact fill:#202630,stroke:#2a313b,color:#e6e9ee;
-    classDef poisoned fill:#e5484d,stroke:#e5484d,color:#ffffff,stroke-width:3px;
-    classDef healed fill:#30a46c,stroke:#30a46c,color:#ffffff,stroke-width:2px;
+When you flag `doc_7`, the demo:
 
-    EP7A[Episode: ep_7a<br/>Rename requests]:::poisoned -->|EXTRACTED_FROM| D7[Doc: doc_7<br/>Prompt Injection]:::poisoned
-    EP7B[Episode: ep_7b<br/>Pin v2.31]:::poisoned -->|EXTRACTED_FROM| D7
+1. Quarantines memories connected to that source through recorded dependencies.
+2. Shows a path explaining how the source reaches an affected artifact.
+3. Rebuilds eligible facts from remaining, unquarantined supporting episodes.
+4. Reworks dependent plans and artifacts in dependency order.
+5. Demonstrates recovery after a planner process is killed and its task lease expires.
 
-    F_CLIENT[Fact: f_http_client]:::poisoned -->|CONSOLIDATED_FROM| EP1[Episode: ep_1]:::episode
-    F_CLIENT -->|CONSOLIDATED_FROM| EP2[Episode: ep_2]:::episode
-    F_CLIENT -->|CONSOLIDATED_FROM| EP3[Episode: ep_3]:::episode
-    F_CLIENT -->|CONSOLIDATED_FROM| EP7A
-    F_PIN[Fact: f_http_pin]:::poisoned -->|CONSOLIDATED_FROM| EP7B
+Old memories remain in the graph. Replacements link back through `SUPERSEDES`, so the recovery history can be inspected.
 
-    S3[PlanStep: step_3<br/>Add HTTP dep]:::poisoned -->|INFLUENCED_BY| F_CLIENT
-    S3 -->|INFLUENCED_BY| F_PIN
-    
-    A_REQ[Artifact: a_requirements<br/>requirements.txt]:::poisoned -->|INFLUENCED_BY| S3
+### Results for the bundled fixture
 
-    %% Healing in Session 2
-    F_CLIENT_V2[Fact: f_http_client_v2<br/>requests - 3 clean votes]:::healed -.->|SUPERSEDES| F_CLIENT
-    S3_V2[PlanStep: step_3_v2<br/>unpinned]:::healed -.->|SUPERSEDES| S3
-    A_REQ_V2[Artifact: a_requirements_v2<br/>clean]:::healed -.->|SUPERSEDES| A_REQ
+| Strategy | Memories selected for quarantine or invalidation |
+| --- | ---: |
+| Follow recorded dependencies | 6 |
+| Invalidate all memories authored by involved agents | 25 |
+| Invalidate memories written at or after the affected episode | 19 |
+
+These are results for **one constructed scenario**, not a general benchmark. The two broad invalidation strategies are comparison queries; the demo does not need to delete those memories to count them.
+
+The documented run also shows a four-hop explanation path, recovery rounds of `[1, 2, 2, 0]`, and 28 memory nodes after replacements are created. These outcomes describe the fixture, not expected performance on other workloads.
+
+## Run it locally
+
+You need Git, Python 3.12 or later, [uv](https://docs.astral.sh/uv/), and a running Docker installation. No LLM API key is required for the scripted demo.
+
+### Get the code
+
+```bash
+git clone https://github.com/Ps23102004/graphhacks-quarantine.git
+cd graphhacks-quarantine
+uv sync
 ```
 
-### Schema Elements
-- **Nodes:** `Doc`, `Memory:Episode`, `Memory:Fact`, `Memory:PlanStep`, `Memory:Artifact`, `Agent`, `Session`, `Task`.
-- **Edges:**
-  - `EXTRACTED_FROM`: Episode → Doc.
-  - `CONSOLIDATED_FROM`: Fact → Episode (carries `claim`).
-  - `INFLUENCED_BY`: PlanStep/Artifact → Memory (the captured read set).
-  - `SUPERSEDES`: Memory → Memory (replacement pointers; old poisoned nodes stay as history).
-  - `BLOCKED_BY`: Task → Memory (task readiness gates).
-  - `CLAIMED_BY`: Task → Agent (leases with tick timeouts).
+### Start FalkorDB
 
----
+The project uses this pinned FalkorDB 6.0.2 image:
 
-## 4. Hero Cypher Queries (FalkorDB 6.0.2)
+```bash
+docker run -d --name quarantine-falkordb \
+  -p 127.0.0.1:6379:6379 -p 127.0.0.1:3000:3000 \
+  falkordb/falkordb:6.0.2@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6
+```
 
-### Taint Closure (One Traversal)
+If you already created this container, start it with `docker start quarantine-falkordb`. The default database connection is `localhost:6379`; `FALKORDB_HOST` and `FALKORDB_PORT` override it.
+
+### Open the viewer
+
+In one terminal:
+
+```bash
+uv run python web/server.py
+```
+
+Open [localhost:8765](http://localhost:8765).
+
+### Run the scenario
+
+In a second terminal, from the repository directory:
+
+```bash
+uv run quarantine session1 --slow 0.4
+uv run quarantine flag doc_7
+uv run quarantine session2 --kill-planner
+uv run quarantine status
+```
+
+**Running `session1` resets the selected graph** before loading the fixture. The default graph is named `quarantine`; use a dedicated demo database. CLI commands accept `--graph NAME` if you need a different graph.
+
+After flagging, expect `precise 6 | per-agent 25 | time-based 19`. Session 2 prints the recovery steps and lease takeover. The viewer lets you inspect memories and their provenance.
+
+The `--kill-planner` option terminates a separate demo worker process. It demonstrates task recovery; the agents' decisions and replacement contents are still scripted.
+
+## How the graph works
+
+Connections point from an output toward its inputs.
+
+```mermaid
+flowchart TD
+    Artifact["Artifact: requirements.txt"] -->|INFLUENCED_BY| Plan["Plan: add HTTP dependency"]
+    Plan -->|INFLUENCED_BY| Fact["Fact: HTTP client"]
+    Fact -->|CONSOLIDATED_FROM| BadEpisode["Episode from flagged source"]
+    Fact -->|CONSOLIDATED_FROM| OtherEpisodes["Other supporting episodes"]
+    BadEpisode -->|EXTRACTED_FROM| Doc["Flagged document"]
+```
+
+| Relationship | What it records |
+| --- | --- |
+| `EXTRACTED_FROM` | The document an episode came from |
+| `CONSOLIDATED_FROM` | Episodes supporting a fact, with a claim on each edge |
+| `INFLUENCED_BY` | Explicit memory inputs recorded for a plan or artifact |
+| `SUPERSEDES` | A replacement memory and the older memory it replaces |
+| `BLOCKED_BY` | A dependency that must be resolved before a rework task proceeds |
+| `CLAIMED_BY` | The agent holding a task lease and its expiry |
+
+Nodes represent documents, memory episodes, facts, plan steps, artifacts, agents, sessions, and tasks.
+
+### Find affected memories
+
+This query follows recorded dependencies back to a flagged document and marks connected memories:
+
 ```cypher
 MATCH (d:Doc {id: $doc})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..10]-(m:Memory)
 SET m.quarantined = true, m.quarantine_tick = $tick
 RETURN count(DISTINCT m) AS precise, collect(DISTINCT m.id) AS ids
 ```
 
-### The Receipt (`shortestPath` Explanation)
+### Explain an affected artifact
+
 ```cypher
 MATCH (a:Memory {id: $from}), (d:Doc {id: $doc})
 WITH shortestPath((a)-[:INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM*..10]->(d)) AS p
-RETURN [n IN nodes(p) | n.id] AS hops, length(p) AS len, [r IN relationships(p) | type(r)] AS via
+RETURN [n IN nodes(p) | n.id] AS hops,
+       length(p) AS len,
+       [r IN relationships(p) | type(r)] AS via
 ```
 
-### Plurality Healing from Clean Support
-```cypher
-MATCH (f:Memory:Fact {quarantined: true})
-WHERE f.healable = true
-MATCH (f)-[r:CONSOLIDATED_FROM]->(e:Episode)
-WHERE NOT e.quarantined = true
-WITH f, r.claim AS val, count(e) AS cnt
-ORDER BY cnt DESC
-WITH f, collect(val)[0] AS win_val, collect(cnt)[0] AS win_cnt
-MERGE (f2:Memory:Fact {id: f.id + '_v2'})
-ON CREATE SET f2.value = win_val, f2.quarantined = false, f2.tick = $tick
-MERGE (f2)-[:SUPERSEDES]->(f)
-RETURN f2.id, f2.value, win_cnt
-```
+The complete recovery queries live in [quarantine/queries.py](quarantine/queries.py).
 
----
+### Rebuild and resume
 
-## 5. Quickstart & Verification
+A fact can be rebuilt when at least two unquarantined supporting episodes agree and that claim has more votes than any competing claim. A tie or insufficient support leaves the fact unresolved.
 
-### 1. Start FalkorDB
+Tasks wait for dependencies marked as healable to receive replacements. The fixture specifies how to rework plans and artifacts, including how to omit an unsupported dependency. Replacement writes reject missing or quarantined inputs. Leases coordinate task ownership and allow takeover after expiry.
+
+Here, **unquarantined means not marked as affected by the recorded flags**. It does not mean independently verified, accurate, or safe. Agreement between episodes is a recovery rule, not proof of truth.
+
+## Connecting real agents
+
+There is no turnkey integration for arbitrary agent frameworks in this version. Session 1 loads explicit inputs from [fixture.yaml](fixture.yaml); Session 2 uses scripted replacement text and read sets from that fixture.
+
+A real integration would need to:
+
+- Record the source of retrieved material and the memory IDs supplied to each agent action.
+- Route memory writes through a controlled interface that records those inputs.
+- Prevent quarantined inputs from being reused, including in retained context and summaries.
+- Re-run affected work using permitted inputs and validate the result.
+- Handle external actions separately; changing a memory cannot undo an email or data disclosure.
+
+Recording inputs establishes provenance. It does not reveal exactly which input caused an LLM to produce a particular statement.
+
+### Optional MCP inspection
+
+The MCP server exposes read-only inspection tools, not a general agent memory read/write API:
+
 ```bash
-docker run -d --name quarantine-falkordb -p 6379:6379 -p 3000:3000 \
-  falkordb/falkordb:6.0.2@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6
+uv sync --extra mcp
+uv run python -m quarantine.mcp_server
 ```
 
-### 2. Install & Run Tests
+Available tools:
+
+- `inspect_quarantined_memories`
+- `trace_provenance_receipt`
+- `get_recovery_status`
+
+## Verification
+
+With FalkorDB running, run:
+
 ```bash
-uv sync
-uv run pytest -q                              # 52 passed in ~3s
+git rev-parse HEAD
+uv run pytest -q
 ```
 
-### 3. Run the 3-Minute Demo Commands
-```bash
-# Terminal 1: Run the web viewer
-uv run python web/server.py                   # open http://localhost:8765
+Record the commit SHA alongside your results so another person can reproduce the same version.
 
-# Terminal 2: Run the crew sessions
-uv run quarantine session1 --slow 0.4         # Session 1: agents write memories & read sets
-uv run quarantine flag doc_7                  # Advisory lands: precise 6 | per-agent 25 | time-based 19
-uv run quarantine session2 --kill-planner     # Session 2: heal facts, SIGKILL planner, recover lease, fixpoint
-```
+The team recorded 52 passing Python tests in its October 15, 2026 validation notes. Those notes also distinguish earlier fresh-clone and mutation checks from later working-tree and browser checks. They are historical evidence, not a claim that every check has been rerun against the current HEAD.
 
----
+See [docs/VALIDATION.md](docs/VALIDATION.md) for recorded results and open items, [docs/TESTING.md](docs/TESTING.md) for testing details, and [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md) for the walkthrough.
 
-## 6. Honest Limits
+## Limits to keep in mind
 
-1. **Scripted Agent Traces:** Agents execute deterministic fixture actions; read sets and provenance captures are real FalkorDB edges. No non-deterministic LLM variance during the demo loop.
-2. **Read-Set Granularity:** Edges track explicit inputs read prior to a write, not an unbounded dump of all prior chat history.
-3. **Healing Method:** Fact healing uses topological voting over clean episodes (≥2 clean agreement required).
-4. **Depth Bounds:** Variable-length reachability queries cap at depth 10.
+- **Flagging is external.** A person or another system must identify the suspicious source.
+- **Tracking is only as complete as the recorded inputs.** Untracked context, summaries, or tool results can carry influence the graph cannot see.
+- **Reading is not proof of contamination.** Dependency-based quarantine can include outputs that did not adopt the bad instruction.
+- **Unflagged sources can still be wrong.** Agreeing episodes may share the same underlying source.
+- **Traversal is capped at 10 hops.** Longer dependency chains are outside the current queries' reach.
+- **Recovery is scripted.** Repeated attacks, arbitrary LLM decisions, and production-scale workloads need further evaluation.
+- **External effects remain external.** Memory repair cannot reverse actions already taken outside the graph.
 
----
+The next useful test is a real agent workflow with independently assessed contamination, compared against restarting that workflow from a trusted checkpoint.
 
-## 7. AI Use Disclosure
+## AI assistance
 
-Architectural framing, Day-1 Cypher spikes, fixture generation, and test scaffolding were developed with assistance from Anthropic Claude and OpenAI models. All Cypher queries, graph schemas, harness code, mutations, and browser verification tests were executed, debugged, and validated by the team against local FalkorDB 6.0.2.
+The team used Anthropic Claude and OpenAI models for architectural exploration, Cypher experiments, fixture generation, test scaffolding, and documentation. The repository includes validation notes describing the team's execution and review of the implementation against FalkorDB 6.0.2.
 
----
+## License
 
-## 8. License
+QUARANTINE's code is MIT-licensed. See [LICENSE](LICENSE) for the copyright notice and terms.
 
-MIT License. See [LICENSE](LICENSE) for details. FalkorDB is source-available under SSPL.
+FalkorDB is a separate dependency licensed under SSPLv1. Review its [licensing guidance](https://docs.falkordb.com/references/license) before distributing it or offering a hosted service. QUARANTINE's MIT license does not replace dependency license obligations.
