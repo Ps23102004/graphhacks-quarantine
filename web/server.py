@@ -33,8 +33,15 @@ RETURN a.id, type(r), b.id
 
 
 def _read_query(g, cypher: str, **params):
-    """Every page read goes through the read-only path. No write-path fallback."""
-    return g.ro_query(cypher, params).result_set
+    """Every page read goes through the read-only path. No write-path fallback. A graph that does not exist yet
+    reads as empty (RO_QUERY never creates a key), so the page shows its empty state, not "unreachable"."""
+    try:
+        return g.ro_query(cypher, params).result_set
+    except Exception as e:  # noqa: BLE001
+        msg = str(e).lower()
+        if "empty key" in msg or "not exist" in msg:
+            return []
+        raise
 
 
 def mark_naive(nodes: list[dict], edges: list[dict], flagged: str) -> None:

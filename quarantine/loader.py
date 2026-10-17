@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -27,15 +28,81 @@ def read_fixture(path: Path | str | None = None) -> dict:
         p = FIXTURE_INSTALLED
     else:
         p = FIXTURE_CHECKOUT
-    return yaml.safe_load(p.read_text())
+    try:
+        fx = yaml.load(p.read_text(encoding="utf-8"), Loader=_UniqueKeyLoader)   # noqa: S506  (a SafeLoader subclass)
+    except (OSError, UnicodeDecodeError) as e:
+        raise ValueError(f"cannot read fixture {p}: {e}") from None
+    except yaml.YAMLError as e:
+        raise ValueError(f"fixture {p} is not valid YAML: {str(e).splitlines()[0]}") from None
+    if not isinstance(fx, dict):
+        raise ValueError(f"fixture {p} must be a mapping of sections, got {type(fx).__name__}")
+    return fx
+
+
+class _UniqueKeyLoader(yaml.SafeLoader):
+    """SafeLoader that refuses a key repeated inside one mapping (plain YAML keeps the last one silently,
+    which would let a second `ep_2:` replace a clean episode without any error)."""
+
+    def construct_mapping(self, node, deep=False):
+        seen = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in seen:
+                raise yaml.constructor.ConstructorError(None, None, f"duplicate key {key!r}", key_node.start_mark)
+            seen.add(key)
+        return super().construct_mapping(node, deep)
+
+
+TWIN_SUFFIX = re.compile(r"_v\d+$")                      # healed and reworked twins are named <id>_v2
+RESERVED = {"Doc": ("id", "flagged", "flag_reason", "flag_tick"), "Agent": ("name",), "Session": ("id",)}
+REQUIRED = {"episodes": (("doc", str), ("tick", int), ("text", str)),
+            "facts": (("subject", str), ("slot", str), ("value", str), ("tick", int), ("support", list)),
+            "steps": (("order", int), ("tick", int), ("text", str), ("reads", list)),
+            "artifacts": (("path", str), ("tick", int), ("text", str), ("reads", list))}
+DEFAULT_AGENT = {"episodes": "research", "facts": "research", "steps": "planner", "artifacts": "coder"}
 
 
 def validate_fixture(fx: dict) -> None:
-    """Validate fixture structure, references, and temporal monotone properties."""
+    """Validate fixture structure, references, and temporal monotone properties. Everything load() relies on is
+    checked here, so a bad world is refused before the CLI deletes or writes anything."""
+    if not isinstance(fx, dict):
+        raise ValueError("fixture must be a mapping of sections")
     required = ("sessions", "agents", "docs", "episodes", "facts", "steps", "artifacts")
     for sec in required:
         if sec not in fx or not isinstance(fx[sec], dict):
             raise ValueError(f"Fixture missing required dictionary section: {sec!r}")
+    if "s1" not in fx["sessions"]:
+        raise ValueError("Fixture sessions must include 's1' (Session 1 writes every memory)")
+    for sec, label in (("sessions", "Session"), ("agents", "Agent"), ("docs", "Doc")):
+        for key, props in fx[sec].items():
+            if not isinstance(props, dict):
+                raise ValueError(f"{label} {key!r} must be a mapping")
+            clash = [k for k in RESERVED[label] if k in props]
+            if clash:
+                raise ValueError(f"{label} {key!r} sets reserved key(s) {clash}; they are written by the harness")
+    for sec, fields in REQUIRED.items():
+        for mid, m in fx[sec].items():
+            if not isinstance(mid, str) or not mid:
+                raise ValueError(f"{sec}: memory id {mid!r} must be a non-empty string")
+            if TWIN_SUFFIX.search(mid):
+                raise ValueError(f"{sec}: id {mid!r} ends in the reserved suffix _v<n> used for healed and reworked twins")
+            if not isinstance(m, dict):
+                raise ValueError(f"{sec}: {mid!r} must be a mapping")
+            for field_name, typ in fields:
+                if not isinstance(m.get(field_name), typ) or isinstance(m.get(field_name), bool):
+                    raise ValueError(f"{sec}: {mid!r} needs {field_name!r} as {typ.__name__}, got {m.get(field_name)!r}")
+            agent = m.get("agent", DEFAULT_AGENT[sec])
+            if agent not in fx["agents"]:
+                raise ValueError(f"{sec}: {mid!r} names unknown agent {agent!r}")
+        if sec == "facts":
+            for fid, f in fx["facts"].items():
+                for s in f["support"]:
+                    if not isinstance(s, dict) or not isinstance(s.get("ep"), str) or not isinstance(s.get("claim"), str):
+                        raise ValueError(f"facts: {fid!r} support entries need 'ep' and 'claim' strings, got {s!r}")
+        if sec in ("steps", "artifacts"):
+            for mid, m in fx[sec].items():
+                if not all(isinstance(r, str) for r in m["reads"]):
+                    raise ValueError(f"{sec}: {mid!r} reads must be memory ids, got {m['reads']!r}")
 
     known_docs = set(fx["docs"].keys())
     known_memories: dict[str, int] = {}
@@ -270,7 +337,12 @@ def rework(g: Graph, old_id: str, by: str, text: str, reads: list[str], tick: in
         raise ValueError(f"read set cites missing or quarantined memory: {bad}")
 
     # 3. Idempotent check: if replacement already exists, check that it has complete provenance
-    existing = q(g, "MATCH (m:Memory {id: $new}) RETURN m.id", new=new_id)
+    existing = q(g, "MATCH (m:Memory {id: $new}) OPTIONAL MATCH (m)-[s:SUPERSEDES]->(:Memory {id: $old}) "
+                    "RETURN m.id, count(s)", new=new_id, old=old_id)
+    if existing and not existing[0][1]:
+        # never delete or reuse a memory this rework did not create (validate_fixture reserves the suffix; this guards
+        # graphs written by anything else)
+        raise ValueError(f"a memory named {new_id!r} already exists and is not a replacement of {old_id!r}")
     if existing:
         current_reads = set(r[0] for r in q(g, "MATCH (m:Memory {id: $new})-[:INFLUENCED_BY]->(x) RETURN x.id", new=new_id))
         if current_reads == set(reads):

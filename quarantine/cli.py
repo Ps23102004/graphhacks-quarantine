@@ -168,7 +168,8 @@ def kill_planner(g, task: str, tick: int, lease: int = LEASE) -> int:
 def session2(args) -> None:
     fx = read_fixture(args.fixture)
     g = connect(args.graph)
-    must(rq(g, "MATCH (t:Task) RETURN t.id LIMIT 1"), "no rework tasks yet (run `quarantine flag DOC` first)")
+    must(rq(g, "MATCH (m:Memory {quarantined: true}) RETURN m.id LIMIT 1"),
+         "nothing is quarantined (run `quarantine flag DOC` first)")
 
     # whoever authored something with a rework task, in the order their quarantined work was written
     agents = [r[0] for r in rq(g, "MATCH (a:Agent)-[:AUTHORED]->(m:Memory)<-[:REWORKS]-(:Task) "
@@ -287,7 +288,10 @@ def main(argv: list[str] | None = None) -> None:
     p.set_defaults(run=status_cmd)
 
     args = ap.parse_args(argv)
-    args.run(args)
+    try:
+        args.run(args)
+    except (ValueError, KeyError, OSError) as e:                       # bad fixture, unknown id, unreadable file
+        raise SystemExit(f"quarantine: {e.args[0] if e.args else e}") from None
 
 
 if __name__ == "__main__":

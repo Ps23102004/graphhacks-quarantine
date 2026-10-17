@@ -285,8 +285,8 @@ def test_every_decision_is_explainable_by_a_graph_path(fx):
         q(g, "MATCH (:Fact {id: 'f_http_client'})-[c:CONSOLIDATED_FROM]->(:Episode {id: 'ep_5'}) SET c.claim = 'httpx'")
         q(g, Q.SUPPORT_AND_HEALABLE)
         assert q(g, Q.HEAL_FACTS, session="s2", tick=41) == [["f_http_client_v2", "requests", 2]]
-        agree = rq(g, "MATCH (:Fact {id: 'f_http_client_v2'})-[c:CONSOLIDATED_FROM]->(e) WHERE c.rejected IS NULL RETURN collect(e.id)")[0][0]
-        dissent = rq(g, "MATCH (:Fact {id: 'f_http_client_v2'})-[c:CONSOLIDATED_FROM {rejected: true}]->(e) RETURN collect([e.id, c.claim])")[0][0]
+        agree = rq(g, "MATCH (:Fact {id: 'f_http_client_v2'})-[c:CONSOLIDATED_FROM]->(e) RETURN collect(e.id)")[0][0]
+        dissent = rq(g, "MATCH (:Fact {id: 'f_http_client_v2'})-[c:OUTVOTED]->(e) RETURN collect([e.id, c.claim])")[0][0]
         assert sorted(agree) == ["ep_2", "ep_8"] and dissent == [["ep_5", "httpx"]]
         assert rq(g, "MATCH (f:Fact {id: 'f_http_client_v2'}) RETURN f.rule, f.runner_up_count")[0] == ["strict plurality of clean episodes, at least 2", 1]
         # a rework with no usable inputs still has provenance: what it replaces, and the task it was done for

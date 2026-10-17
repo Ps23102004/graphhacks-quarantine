@@ -16,7 +16,7 @@ After the first version of these tests passed, twelve independent read-only skep
 - `algo.SPpaths` was called with `maxLen: 50`, so a 63-hop chain silently fell back to `shortestPath` (fixed: unbounded; the fallback runs only if the procedure raises, and `method` says which answered);
 - `blast_radius` claimed shape "path" with no path (fixed: one chain per member plus the longest, each as a sentence); `sentence()` silently dropped hops on malformed input (fixed: raises);
 - the read path had a write-path fallback in the page and the CLI's agents read through the write path (fixed: `ro_query` only, proven at runtime with the write path monkeypatched to raise);
-- a contested heal recorded only the winner (fixed: dissenting clean episodes are linked with `rejected: true`, and the rule and runner-up count are stored on the healed fact);
+- a contested heal recorded only the winner (fixed: outvoted clean episodes are linked with their own `OUTVOTED` edge type, which the closure and receipts do not follow, and the rule and runner-up count are stored on the healed fact);
 - a memory's receipt vanished if its document was later un-flagged (fixed: the advisory is recorded on the memory);
 - "procedural memory" was only plan steps (fixed: the recovery procedure is a `Procedure` node every incident's tasks `FOLLOWS`, authored, with its rules as data; the harness reads the lease length from it; the second world follows the same node).
 

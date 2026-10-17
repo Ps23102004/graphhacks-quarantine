@@ -301,9 +301,9 @@ def test_heal_takes_a_strict_plurality_and_counts_only_agreeing_episodes(g, fx):
     assert [rows[f][2] for f in ("f_plural", "f_tie", "f_lone", "f_tie22")] == [True, False, False, False]
     healed = q(g, Q.HEAL_FACTS, session="s2", tick=41)
     assert healed == [["f_plural_v2", "zzz", 2]]                        # support is the two that agree, not all three
-    assert q(g, "MATCH (:Fact {id: 'f_plural_v2'})-[c:CONSOLIDATED_FROM]->() WHERE c.rejected IS NULL RETURN count(c)")[0][0] == 2
-    # the clean dissent is recorded too, marked rejected, so the vote is traceable (review finding)
-    assert q(g, "MATCH (:Fact {id: 'f_plural_v2'})-[c:CONSOLIDATED_FROM {rejected: true}]->(e) RETURN c.claim, e.id")[0] == ["aaa", "f_plural_2"]
+    assert q(g, "MATCH (:Fact {id: 'f_plural_v2'})-[c:CONSOLIDATED_FROM]->() RETURN count(c)")[0][0] == 2
+    # the clean dissent is recorded too, as OUTVOTED (not provenance), so the vote is traceable (review finding)
+    assert q(g, "MATCH (:Fact {id: 'f_plural_v2'})-[c:OUTVOTED]->(e) RETURN c.claim, e.id")[0] == ["aaa", "f_plural_2"]
     assert q(g, "MATCH (f:Fact {id: 'f_plural_v2'}) RETURN f.runner_up_count, f.rule")[0] == [1, "strict plurality of clean episodes, at least 2"]
     assert q(g, "MATCH (m:Memory {id: 'f_tie_v2'}) RETURN count(m)")[0][0] == 0
 

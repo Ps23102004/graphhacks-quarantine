@@ -89,7 +89,7 @@ RETURN [n IN nodes(path) | n.id] AS hops, pathWeight AS len
 SUPPORT_AND_HEALABLE = """
 MATCH (m:Memory)
 OPTIONAL MATCH (m)-[c:CONSOLIDATED_FROM]->(e:Episode) WHERE NOT e.quarantined
-WITH m, c.claim AS claim, count(DISTINCT e) AS n ORDER BY n DESC
+WITH m, toLower(trim(c.claim)) AS claim, count(DISTINCT e) AS n ORDER BY n DESC
 WITH m, collect(n) AS ns
 WITH m, reduce(t = 0, x IN ns | t + x) AS clean, head(ns) AS best,
      CASE WHEN size(ns) > 1 THEN ns[1] ELSE 0 END AS second
@@ -132,7 +132,9 @@ RETURN t.id, collect(x.id) AS blocked_by ORDER BY t.id
 HEAL_FACTS = """
 MATCH (f:Fact {quarantined: true, healable: true})-[c:CONSOLIDATED_FROM]->(e:Episode)
 WHERE NOT (f)<-[:SUPERSEDES]-() AND NOT e.quarantined
-WITH f, c.claim AS claim, collect(DISTINCT e) AS eps ORDER BY size(eps) DESC, claim
+// claims that differ only in case or surrounding spaces are one vote; the winner is shown in its smallest spelling
+WITH f, c, e ORDER BY c.claim
+WITH f, toLower(trim(c.claim)) AS key, head(collect(c.claim)) AS claim, collect(DISTINCT e) AS eps ORDER BY size(eps) DESC, key
 WITH f, collect({claim: claim, eps: eps}) AS groups
 WITH f, groups[0].claim AS best, groups[0].eps AS agree,
      CASE WHEN size(groups) > 1 THEN size(groups[1].eps) ELSE 0 END AS second_cnt,
@@ -145,9 +147,10 @@ CREATE (f2:Memory:Fact {id: f.id + '_v2', subject: f.subject, slot: f.slot, valu
                         support_total: size(agree), support_clean: size(agree),
                         rule: 'strict plurality of clean episodes, at least 2', runner_up_count: second_cnt})
 CREATE (f2)-[:SUPERSEDES]->(f), (a)-[:AUTHORED]->(f2), (f2)-[:RAN_IN]->(s)
-// the clean episodes that disagreed are recorded too (rejected: true), so the vote is traceable, not just its winner
+// the clean episodes that were outvoted are recorded too, so the vote is traceable, not just its winner. OUTVOTED is
+// its own edge type, not provenance: the healed value did not come from them, so the closure and receipts never follow it
 FOREACH (grp IN dissent_groups |
-  FOREACH (e IN grp.eps | CREATE (f2)-[:CONSOLIDATED_FROM {claim: grp.claim, rejected: true}]->(e)))
+  FOREACH (e IN grp.eps | CREATE (f2)-[:OUTVOTED {claim: grp.claim}]->(e)))
 WITH f2, best, agree
 UNWIND agree AS e
 CREATE (f2)-[:CONSOLIDATED_FROM {claim: best}]->(e)
