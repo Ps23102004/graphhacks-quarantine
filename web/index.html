@@ -462,7 +462,8 @@ function render(data) {
     // label: perpendicular to its axis, so neighbours on the same axis can never collide; flipped to stay upright
     const lg = g.querySelector(".lblg"), lbl = g.querySelector(".lbl"), bg = g.querySelector(".lbl-bg");
     lbl.textContent = n.id;
-    let deg = (angleOf(p.axis) * 180 / Math.PI + 90 + (p.twin ? 180 : 0) + 360) % 360;
+    // sources take their labels on the left: their arcs arrive from the Episodes axis on the right
+    let deg = (angleOf(p.axis) * 180 / Math.PI + 90 + ((p.twin || p.axis === 0) ? 180 : 0) + 360) % 360;
     const flip = deg > 90 && deg < 270;
     if (flip) deg -= 180;
     const dx = flip ? -21 : 21;
