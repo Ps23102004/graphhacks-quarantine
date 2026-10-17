@@ -52,7 +52,8 @@ def recovery_status(g: Graph) -> dict[str, Any]:
 
     # Agents state
     agents_state = {}
-    for agent_name in ("research", "planner", "coder"):
+    names = [r[0] for r in _query("MATCH (a:Agent)-[:AUTHORED]->(:Memory) RETURN DISTINCT a.name ORDER BY a.name")]
+    for agent_name in names:                                            # whoever wrote memory, in any world
         memories = _query("""
             MATCH (a:Agent {name: $me})-[:AUTHORED]->(m:Memory)
             OPTIONAL MATCH (m)<-[:SUPERSEDES]-(clean_rep:Memory {quarantined: false})

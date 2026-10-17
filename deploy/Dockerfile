@@ -8,6 +8,7 @@ COPY pyproject.toml uv.lock README.md ./
 COPY quarantine/ quarantine/
 COPY web/ web/
 COPY fixture.yaml ./
+COPY fixtures/ fixtures/
 
 RUN uv sync --frozen --no-dev --all-extras
 

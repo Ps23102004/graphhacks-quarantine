@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export MSYS_NO_PATHCONV=1   # Git Bash on Windows would rewrite /app/... container paths into C:/Program Files/...
 
 PROJECT="quarantine_compose_test_$$"
 PORT=8777

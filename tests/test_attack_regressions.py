@@ -330,3 +330,23 @@ def test_session2_reaches_a_fixpoint_for_any_flagged_documents(docs, capsys):
             assert q(connect(g), audit)[0][0] == 0
     finally:
         connect(g).delete()
+
+
+# ---------------------------------------------------------------- Aashna's second report (Windows run)
+def test_status_lists_the_agents_of_any_world():
+    from quarantine.agent_runtime import recovery_status
+
+    g = fresh("reg_status_agents")
+    try:
+        load(g, read_fixture("fixtures/support-crew.yaml"))
+        agents = recovery_status(g)["agents"]
+        assert set(agents) == {"ingest", "triage", "responder"} and sum(a["total_authored"] for a in agents.values()) == 21
+    finally:
+        connect("reg_status_agents").delete()
+
+
+def test_fixture_path_falls_back_to_the_installed_share_directory(tmp_path, monkeypatch):
+    import quarantine.loader as L
+
+    monkeypatch.chdir(tmp_path)                                          # not a checkout: relative path does not exist here
+    assert L.read_fixture("fixtures/support-crew.yaml")["docs"]

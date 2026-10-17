@@ -4,6 +4,8 @@
 # Copies the working tree, uncommitted edits included (.git/.venv excluded): run it on a clean tree to validate a commit.
 # Starts a throwaway FalkorDB on port 6390, runs tests, demo commands, MCP bridge, and web.
 set -euo pipefail
+export MSYS_NO_PATHCONV=1   # Git Bash on Windows would rewrite container paths
+case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) KILLEXIT=1;; *) KILLEXIT=-9;; esac   # a killed process exits 1 on Windows, -9 elsewhere
 
 IMAGE="falkordb/falkordb:6.0.2@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6"
 NAME="quarantine-validate"
@@ -62,7 +64,7 @@ case "$out" in *"healed f_http_pin"*) bad "session2 must not heal the version pi
 uv run quarantine session1 --graph validate >/dev/null
 uv run quarantine flag doc_7 --graph validate >/dev/null
 out="$(uv run quarantine session2 --kill-planner --graph validate)"
-has "$out" "kill -9, exit -9" "kill-planner: the planner process is really SIGKILLed"
+has "$out" "kill -9, exit $KILLEXIT" "kill-planner: the planner process is really killed (exit $KILLEXIT here)"
 has "$out" "claim refused at tick" "kill-planner: live lease refuses a second claim"
 has "$out" "took over lease from planner" "kill-planner: new process takes over expired lease"
 has "$out" "rounds [1, 2, 2, 0]" "kill-planner: same fixpoint"

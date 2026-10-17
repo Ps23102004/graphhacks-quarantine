@@ -38,6 +38,7 @@ def test_wheel_build_and_contents():
         assert "web/index.html" in names
         # Verify fixture.yaml under share/quarantine
         assert any(n.endswith("share/quarantine/fixture.yaml") for n in names)
+        assert any(n.endswith("share/quarantine/fixtures/support-crew.yaml") for n in names)   # the second world ships too
 
 
 def test_install_wheel_in_isolated_venv_outside_checkout():

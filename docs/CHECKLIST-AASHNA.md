@@ -26,7 +26,7 @@ Use ONLY the README's Quickstart, word for word, in a new terminal. Do not use a
 - [ ] Every command the README shows ran without editing it. List any that needed a change.
 
 ## 2. Validation scripts (40 min, can run while you read)
-- [ ] `scripts/validate.sh` -> expect `0 failed` (starts its own FalkorDB on :6390)
+- [ ] `scripts/validate.sh` -> expect `0 failed` (on Windows the kill-planner check expects exit 1, not -9) (starts its own FalkorDB on :6390)
 - [ ] `scripts/validate_compose.sh` -> expect all pass
 - [ ] `uv run python scripts/heldout_eval.py --worlds 50 --pipeline-worlds 10` -> expect `0` in the "graph != oracle" and "violations" columns
 - [ ] `uv run python scripts/counterfactual_eval.py --worlds 20` -> expect `0` false negatives, `0` invented receipts, `0` wrong 'clean' answers, `0` page != graph
@@ -40,7 +40,7 @@ Use a separate graph name so the demo graph stays clean: add `--graph test` to e
 - [ ] Run `session2` twice -> second run changes nothing
 - [ ] Flag two documents (`doc_7` and `doc_3`) -> page banner and counters stay truthful (counters go blank with two advisories)
 - [ ] Second world: `uv run quarantine session1 --fixture fixtures/support-crew.yaml --graph sc` then `uv run quarantine flag kb_5 --fixture fixtures/support-crew.yaml --graph sc` -> quarantined 7 | wipe agents 21 | roll back 17
-- [ ] MCP tool with junk input: `uv run python scripts/mcp_inspect.py call why_quarantined '{"memory_id": "x\"}) DETACH DELETE (n) //"}'` -> answer shape `unknown`, graph unchanged
+- [ ] MCP tool with junk input: `uv run python scripts/mcp_inspect.py list` shows the real tools (`inspect_quarantined_memories`, `trace_provenance_receipt`, `why_connected`, `recall`, `blast_radius`, `get_recovery_status`); then `uv run python scripts/mcp_inspect.py call trace_provenance_receipt '{"memory_id": "x\"}) DETACH DELETE (n) //"}'` -> answer shape `unknown`, then `status` shows the graph unchanged
 - [ ] Page on your phone width (Chrome devtools 375 px): no horizontal page scroll, chart scrolls inside its frame
 
 ## 4. Review (60 min, read the diff, not the whole repo)

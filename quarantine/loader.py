@@ -22,6 +22,11 @@ FIXTURE = FIXTURE_CHECKOUT if FIXTURE_CHECKOUT.exists() else FIXTURE_INSTALLED
 def read_fixture(path: Path | str | None = None) -> dict:
     if path is not None:
         p = Path(path)
+        if not p.exists() and not p.is_absolute():                      # `fixtures/x.yaml` from an installed wheel or the image
+            for base in (FIXTURE_CHECKOUT.parent, Path(sys.prefix) / "share" / "quarantine"):
+                if (base / p).exists():
+                    p = base / p
+                    break
     elif FIXTURE_CHECKOUT.exists():
         p = FIXTURE_CHECKOUT
     elif FIXTURE_INSTALLED.exists():

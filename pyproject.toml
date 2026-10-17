@@ -39,3 +39,4 @@ web = ["index.html"]
 
 [tool.setuptools.data-files]
 "share/quarantine" = ["fixture.yaml"]
+"share/quarantine/fixtures" = ["fixtures/support-crew.yaml"]
