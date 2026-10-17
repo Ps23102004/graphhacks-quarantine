@@ -21,7 +21,7 @@ Tools needed: Docker, `uv`.
 docker run -d --name quarantine-falkordb -p 6379:6379 -p 3000:3000 \
   falkordb/falkordb:6.0.2@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6
 uv sync --all-extras                  # --all-extras matters: the MCP tests need the optional SDK
-uv run pytest -q                      # expect: 76 passed (about 50 s). Note any skips.
+uv run pytest -q                      # expect: 95 passed (about 60 s). Note any skips.
 scripts/validate.sh                   # expect: validation: 29 passed, 0 failed (about 3 min; starts its own FalkorDB on :6390)
 scripts/validate_compose.sh           # expect: all checks pass. NOT re-run since Friday's compose change: this is the one to watch
 uv run python scripts/heldout_eval.py --worlds 100 --pipeline-worlds 30   # expect: 0 graph != oracle, 0 violations

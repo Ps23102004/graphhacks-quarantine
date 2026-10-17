@@ -312,3 +312,29 @@ def rework(g: Graph, old_id: str, by: str, text: str, reads: list[str], tick: in
     if not res:
         raise RuntimeError(f"Atomic rework write failed for {new_id}")
     return new_id
+
+
+def unflag(g: Graph, doc: str) -> dict:
+    """Retract an advisory (a false alarm). Re-derives quarantine from the documents that are still flagged, so a
+    memory stays red only if some remaining flagged document still reaches it. Refuses once healing has started:
+    clean replacements already exist and would no longer match a rebuilt state (reset with `quarantine session1`)."""
+    from quarantine import queries as Q
+
+    if not q(g, "MATCH (d:Doc {id: $doc}) RETURN d.id", doc=doc):
+        raise KeyError(f"no doc {doc!r} in the graph")
+    replacements, started = q(g, Q.HEAL_STARTED)[0]
+    if replacements or started:
+        raise RuntimeError("healing has already started; un-flagging now would leave replacements without a cause "
+                           "(run `quarantine session1` to reset the demo)")
+    q(g, Q.UNFLAG_DOC, doc=doc)
+    q(g, Q.RESET_QUARANTINE)
+    q(g, Q.DELETE_REWORK_TASKS)
+    remaining = q(g, Q.STILL_FLAGGED)
+    for d, tick in remaining:
+        q(g, Q.TAINT_CLOSURE, doc=d, tick=tick if tick is not None else 0)
+    if remaining:
+        q(g, Q.SUPPORT_AND_HEALABLE)
+        q(g, Q.CREATE_REWORK_TASKS, tick=remaining[-1][1] or 0)
+        q(g, Q.CREATE_BLOCKED_BY)
+    red = [r[0] for r in q(g, "MATCH (m:Memory {quarantined: true}) RETURN m.id ORDER BY m.tick")]
+    return {"still_flagged": [d for d, _ in remaining], "quarantined": red}

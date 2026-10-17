@@ -2,6 +2,7 @@
 
     quarantine session1 [--slow 0.4]      load Session 1 from fixture.yaml
     quarantine flag doc_7                 advisory lands: closure, baselines, receipts
+    quarantine unflag doc_7               retract a false alarm (before healing starts)
     quarantine session2 [--kill-planner]  heal + rework to a fixpoint
     quarantine status                     inspect recovery status as JSON
 
@@ -19,7 +20,7 @@ import time
 from quarantine import queries as Q
 from quarantine.agent_runtime import recovery_status
 from quarantine.answers import sentence
-from quarantine.loader import connect, derive_rework, load, q, read_fixture, rework, rq, validate_fixture
+from quarantine.loader import connect, derive_rework, load, q, read_fixture, rework, rq, unflag as unflag_doc, validate_fixture
 
 LEASE = 5                          # default; session2 reads the crew's procedure node for the live value
 
@@ -122,6 +123,16 @@ def flag(args) -> None:
         chain = hops[0] + "".join(f" -{t}-> {h}" for t, h in zip(via, hops[1:]))
         say(f"receipt {aid} ({length} hops): {chain}")
         say(f"  in words: {sentence(hops, via)}")
+
+
+def unflag(args) -> None:
+    g = connect(args.graph)
+    try:
+        out = unflag_doc(g, args.doc)
+    except (KeyError, RuntimeError) as e:
+        raise SystemExit(f"quarantine: {e.args[0]}") from None
+    say(f"retracted advisory on {args.doc}")
+    say(f"still flagged: {ids(out['still_flagged']) if out['still_flagged'] else 'none'} | quarantined now: {len(out['quarantined'])}")
 
 
 # ---------------------------------------------------------------- session 2
@@ -258,6 +269,10 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("doc")
     p.add_argument("--reason", help="advisory text (default: the fixture's)")
     p.set_defaults(run=flag)
+
+    p = sub.add_parser("unflag", parents=[common], help="retract a false-alarm advisory (before healing starts)")
+    p.add_argument("doc")
+    p.set_defaults(run=unflag)
 
     p = sub.add_parser("hold", parents=[common])        # internal: the process --kill-planner kills
     p.add_argument("--task", required=True)

@@ -15,6 +15,29 @@ SET d.flagged = true, d.flag_reason = $reason, d.flag_tick = $tick
 RETURN d.id
 """
 
+# Retract an advisory that turned out to be a false alarm. Quarantine is derived state (a flag on the memory), so
+# retracting means: clear every flag, then re-derive from whatever documents are still flagged (loader.unflag).
+UNFLAG_DOC = """
+MATCH (d:Doc {id: $doc})
+SET d.flagged = false
+REMOVE d.flag_reason, d.flag_tick
+RETURN d.id
+"""
+RESET_QUARANTINE = """
+MATCH (m:Memory)
+SET m.quarantined = false
+REMOVE m.quarantine_tick, m.quarantine_doc, m.support_clean, m.healable
+RETURN count(m)
+"""
+STILL_FLAGGED = "MATCH (d:Doc {flagged: true}) RETURN d.id, d.flag_tick ORDER BY d.flag_tick, d.id"
+HEAL_STARTED = """
+OPTIONAL MATCH ()-[s:SUPERSEDES]->()
+WITH count(s) AS replacements
+OPTIONAL MATCH (t:Task) WHERE t.state IN ['claimed', 'done']
+RETURN replacements, count(t) AS started_tasks
+"""
+DELETE_REWORK_TASKS = "MATCH (t:Task {kind: 'rework'}) DETACH DELETE t"
+
 # Q1 hero: everything whose provenance reaches the flagged doc. One traversal,
 # three edge types, any depth (the graph is a DAG: reads only point backwards in time). Returns the "precise" count.
 TAINT_CLOSURE = """
