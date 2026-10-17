@@ -50,6 +50,17 @@ def must(rows, what: str):
     return rows
 
 
+def scripted_rework(g, fx: dict, memory: str) -> dict | None:
+    """The fixture's scripted rework for this memory, only if every read it lists is valid in the CURRENT graph
+    (exists and is not quarantined). The script was written for the demo's single advisory; for any other flagged
+    document it can cite a memory that is now quarantined, so the caller falls back to the graph-derived rework."""
+    spec = fx.get("rework", {}).get(memory)
+    if not spec:
+        return None
+    rows = q(g, "UNWIND $reads AS rid OPTIONAL MATCH (x:Memory {id: rid}) RETURN rid, x.quarantined", reads=spec["reads"])
+    return spec if all(quarantined is False for _, quarantined in rows) else None
+
+
 def startup_line(agent: str, memory: str, task, state, waiting) -> str:
     return f"{agent}: {memory}  task {task or '-'}  {state or '-'}  waiting_on {ids(waiting)}"
 
@@ -117,7 +128,9 @@ def flag(args) -> None:
     naive, _ = q(g, Q.NAIVE_PER_AGENT, doc=args.doc)[0]
     naive_time, _ = q(g, Q.NAIVE_TIME_BASED, doc=args.doc)[0]
 
-    say(f"quarantined {precise} | wipe agents {naive} | roll back {naive_time}")
+    total_red = rq(g, "MATCH (m:Memory {quarantined: true}) RETURN count(m)")[0][0]
+    say(f"quarantined {precise} | wipe agents {naive} | roll back {naive_time}"
+        + (f"   (graph holds {total_red} quarantined in all: other advisories are still flagged)" if total_red != precise else ""))
     order = {r[0]: r[1] for r in rq(g, "MATCH (m:Memory) RETURN m.id, m.tick")}
     say(f"closure {ids(sorted(closure_ids, key=lambda m: (order.get(m, 0), m)))}")   # this advisory's closure only
     for task, waiting in blocked:
@@ -210,7 +223,7 @@ def session2(args) -> None:
                     continue
 
                 # scripted rework for the demo's memories, graph-derived for any other flagged doc
-                spec = fx.get("rework", {}).get(memory) or derive_rework(g, memory)
+                spec = scripted_rework(g, fx, memory) or derive_rework(g, memory)
 
                 # Check if clean replacement already exists (restart / recovery case)
                 rep_rows = rq(g, "MATCH (m:Memory {id: $mid})<-[:SUPERSEDES]-(r:Memory {quarantined: false}) RETURN r.id", mid=memory)

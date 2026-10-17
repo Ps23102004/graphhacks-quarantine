@@ -302,3 +302,31 @@ def test_live_placeholders_and_unhealed_facts_are_not_reported_complete():
         assert any("needs regeneration" in w for w in recovery_status(g)["warnings"])
     finally:
         connect("reg_placeholders").delete()
+
+
+# ---------------------------------------------------------------- scripted rework must be checked against the current graph (Aashna, Windows run)
+import itertools
+
+_DOCS = [f"doc_{i}" for i in range(1, 9)]
+
+
+@pytest.mark.parametrize("docs", [[d] for d in _DOCS] + [list(c) for c in itertools.combinations(_DOCS, 2)])
+def test_session2_reaches_a_fixpoint_for_any_flagged_documents(docs, capsys):
+    from quarantine import cli
+    from quarantine.agent_runtime import recovery_status
+
+    g = "reg_any_flag"
+    try:
+        cli.main(["session1", "--graph", g])
+        for d in docs:
+            cli.main(["flag", d, "--graph", g])
+        cli.main(["session2", "--graph", g])
+        out = capsys.readouterr().out
+        assert "fixpoint" in out
+        st = recovery_status(connect(g))
+        assert st["complete"] is True or st["warnings"] == [] or all("placeholder" in w for w in st["warnings"]), st["warnings"]
+        assert q(connect(g), "MATCH (t:Task) WHERE t.state <> 'done' RETURN count(t)") == [[0]]
+        for audit in (Q.AUDIT_CLEAN_NEVER_CITES_QUARANTINED, Q.AUDIT_CLOSURE_IS_CLOSED):
+            assert q(connect(g), audit)[0][0] == 0
+    finally:
+        connect(g).delete()
