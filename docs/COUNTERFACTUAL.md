@@ -1,31 +1,39 @@
-# Counterfactual evaluation: is the quarantine sound, and how conservative is it?
+# Counterfactual evaluation: how sound is the quarantine, and how conservative?
 
-`docs/EVAL-HELDOUT.md` shows the Cypher matches an independent restatement of the rule. That cannot show the rule is right. This evaluation does: for every unseen random world and every flagged document it **replays the world with that document never ingested** and asks which memories would actually have been different. Code: `quarantine/counterfactual.py`; run it with `uv run python scripts/counterfactual_eval.py --worlds 150` (seeds 7000+, never used to tune anything); asserted in `tests/test_counterfactual.py`.
+`docs/EVAL-HELDOUT.md` shows the Cypher matches an independent restatement of the rule. That cannot show the rule is useful. This evaluation asks: for every unseen random world and every flagged document, **replay the world with that document never ingested and see which memories would actually have been different.** Code: `quarantine/counterfactual.py`; run `uv run python scripts/counterfactual_eval.py --worlds 150` (seeds 7000 and up, never used to tune anything); asserted in `tests/test_counterfactual.py`.
 
 ## Model
 
-Each memory gets a symbolic content: an episode is its text, a fact is the plurality claim of its supporting episodes, a step or artifact is its text plus the contents of what it read. A memory is *truly affected* if its content differs, or it cannot exist, in the replay without the document.
+Each memory gets a symbolic content: an episode is its text; a fact is its stored value (and, in the replay, the plurality claim of the support that remains); a step or artifact is its text plus the contents of what it read. A memory is *truly affected* if its content differs, or it cannot exist, in the replay without the document.
 
-## Result (150 worlds per model, last run on this commit)
+## Result (150 worlds per model, 1,340 (world, document) runs per row)
 
-| world model | (world, doc) runs | truly affected | quarantined | false negatives | needless flags | invented receipts | clean memories answered as red | page != graph |
-|---|---|---|---|---|---|---|---|---|
-| declared read sets | 1340 | 3689 | 10496 | **0** | 6807 (65%) | **0** | **0** | **0** |
-| cumulative context | 1340 | 4193 | 11850 | **0** | 7657 (65%) | **0** | **0** | **0** |
-| deep chains | 1340 | 7085 | 22051 | **0** | 14966 (68%) | **0** | **0** | **0** |
+| world model | truly affected | quarantined | poisoned memory left clean | quarantined but unchanged | invented receipts | clean memory answered as red | page differs from graph |
+|---|---|---|---|---|---|---|---|
+| declared read sets | 3,895 | 10,496 | **0** | 6,601 (63%) | **0** | **0** | **0** |
+| cumulative context | 4,458 | 11,850 | **0** | 7,392 (62%) | **0** | **0** | **0** |
+| deep chains | 7,646 | 22,051 | **0** | 14,405 (65%) | **0** | **0** | **0** |
+| **unrecorded influence** (graph gets the declared reads; truth is each agent's whole context) | 4,458 | 10,496 | **329 memories in 169 runs (7% of truly affected)** | 6,367 (61%) | **0** | **0** | **0** |
 
-- **False negative** = truly affected but left clean. Poison keeps being used. Zero.
-- **Invented receipt** = a path whose hops are not all declared edges, or that does not end at the flagged document. Every receipt of every quarantined memory is checked. Zero.
-- **Clean answered as red** = a memory outside the closure for which the tool did not answer "not in the graph". Zero. The page's red set and counters equal the graph closure in every run. Zero.
-- **Needless flag** = quarantined but its content would not have changed (a fact the poisoned episode only agreed or dissented with, and everything built on it). Quarantine is *provenance-level*: sound, not minimal.
+How to read it:
+
+- **Poisoned memory left clean.** On the first three rows this is 0 *by construction*: the replay follows the same declared read sets the closure follows, so it shows the traversal and the page implement the rule, not that the read sets are complete. The fourth row is the honest measure of that second question: when an agent was influenced by something it never recorded as a read, the closure misses it (7% of truly affected memories in these random worlds). **The guarantee is exactly as strong as the recorded read sets.**
+- **Invented receipt:** a path with a hop that is not a recorded edge, or that does not end at the flagged document. Every receipt of every quarantined memory is checked. 0.
+- **Clean memory answered as red:** a memory outside the closure for which the tools did not answer "not in the graph". 0. The page's red set and counters equal the graph's closure in every run. 0.
+- **Quarantined but unchanged:** the closure is provenance-level ("touched by"): a fact the poisoned episode only agreed or disagreed with, and everything built on it, is quarantined although its content would not change. About 63% on random worlds, because 70% of a generated fact's support agrees on its majority claim; do not quote 63% as a general figure. 457 of the unnecessarily flagged facts cannot heal (clean support below 2).
+
+## The two hand-built worlds
+
+- Demo (`doc_7`): all **6** quarantined memories truly change. `f_http_client` stored the typosquat `reqeusts`; it heals to `requests`.
+- Support crew (`kb_5`): all **7** quarantined memories truly change.
 
 ## What to say, and what not to say
 
-- Say: "Quarantine means touched by, not proven wrong. It never misses a poisoned memory (0 in 4,020 runs). On random crews about two thirds of what it flags would have kept the same value; healing re-derives those from clean sources, and a fact with fewer than two clean episodes cannot heal (478 of 6,204 needless facts)."
-- Say: in the demo, 5 of the 6 quarantined memories truly change; `f_http_client` is a conservative flag that heals back to the same value. The second world (support crew, `kb_5`): 7 flagged, 6 truly change (`f_window`).
-- Do not say "only the memories that are wrong". Do not quote the 65% as a general figure: it depends on the generator (70% of a fact's support agrees on its majority claim).
-- What it does not show: that declared read sets match what a real agent was influenced by, or that symbolic content is real content. Next step, not done: a value-aware closure that spares memories whose content would not change.
+- Say: "Quarantined means touched by a flagged source through a recorded read. On random crews it never missed a memory the recorded reads connect to the source (0 in 4,020 runs), and about two thirds of what it flags would have kept the same value."
+- Say: "If an agent was influenced by something it did not record, we miss it: in our random crews 7% of the truly affected memories. Recording reads at the source is the thing to build next."
+- Do not say "only the memories that are wrong", "exactly", or "precise" without the sentence above next to it.
+- What this does not show: that a real agent's influence looks like these generators, or that symbolic content is real content.
 
 ## Retracting a false alarm
 
-`uv run quarantine unflag doc_7` clears the advisory and re-derives quarantine from the documents still flagged (tests/test_unflag.py: demo restored byte-for-byte, randomized multi-document cases against the oracle). It refuses once healing has started, because clean replacements would then outlive their cause; reset with `quarantine session1`.
+`uv run quarantine unflag doc_7` clears the advisory and re-derives quarantine from the documents still flagged (`tests/test_unflag.py`: demo restored node for node, randomized multi-document cases against the oracle). It refuses once healing has started, because clean replacements would then outlive their cause; reset with `quarantine session1`.
