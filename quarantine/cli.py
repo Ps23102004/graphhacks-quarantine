@@ -20,7 +20,8 @@ import time
 from quarantine import queries as Q
 from quarantine.agent_runtime import recovery_status
 from quarantine.answers import sentence
-from quarantine.loader import connect, derive_rework, load, q, read_fixture, rework, rq, unflag as unflag_doc, validate_fixture
+from quarantine.loader import (connect, derive_rework, load, q, read_fixture, reconcile, rework, rq, unflag as unflag_doc,
+                               validate_fixture)
 
 LEASE = 5                          # default; session2 reads the crew's procedure node for the live value
 
@@ -100,20 +101,25 @@ def flag(args) -> None:
     g = connect(args.graph)
     f = fx.get("flag") or {"doc": args.doc, "tick": 40, "reason": ""}
     reason = args.reason or (f["reason"] if args.doc == f["doc"] else f"flagged {args.doc} from the CLI")
-    must(q(g, Q.FLAG_DOC, doc=args.doc, reason=reason, tick=f["tick"]),
+    must(rq(g, "MATCH (d:Doc {id: $doc}) RETURN d.id", doc=args.doc),
          f"no doc {args.doc!r} in graph {args.graph!r} (run `quarantine session1` first)")
+    must(rq(g, "MATCH (s:Session {id: 's1'}) WHERE s.complete = true RETURN s.id"),
+         f"session 1 did not finish writing graph {args.graph!r} (run `quarantine session1` again)")
+    reconcile(g)                                                        # repair any torn write from an earlier crash
+    # the fixture's advisory keeps its scripted tick on a fresh graph; any later advisory is stamped after every write
+    last = rq(g, "MATCH (m:Memory) RETURN max(m.tick)")[0][0] or 0
+    tick = max(f["tick"] if args.doc == f["doc"] else 0, last + 1)
+    precise, closure_ids = q(g, Q.FLAG_AND_CLOSE, doc=args.doc, reason=reason, tick=tick)[0]   # one atomic write
     say(f"flagged {args.doc}: {reason}")
-
-    precise, closure_ids = q(g, Q.TAINT_CLOSURE, doc=args.doc, tick=f["tick"])[0]
     q(g, Q.SUPPORT_AND_HEALABLE)
-    q(g, Q.CREATE_REWORK_TASKS, tick=f["tick"])
+    q(g, Q.CREATE_REWORK_TASKS, tick=tick)
     blocked = q(g, Q.CREATE_BLOCKED_BY)
     naive, _ = q(g, Q.NAIVE_PER_AGENT, doc=args.doc)[0]
     naive_time, _ = q(g, Q.NAIVE_TIME_BASED, doc=args.doc)[0]
 
     say(f"precise {precise} | per-agent {naive} | time-based {naive_time}")
-    closure = [r[0] for r in rq(g, "MATCH (m:Memory {quarantined: true}) RETURN m.id ORDER BY m.tick")]
-    say(f"closure {ids(closure)}")
+    order = {r[0]: r[1] for r in rq(g, "MATCH (m:Memory) RETURN m.id, m.tick")}
+    say(f"closure {ids(sorted(closure_ids, key=lambda m: (order.get(m, 0), m)))}")   # this advisory's closure only
     for task, waiting in blocked:
         say(f"task {task}  blocked_by {ids(waiting)}")
     for (aid,) in rq(g, "MATCH (m:Artifact {quarantined: true}) RETURN m.id ORDER BY m.tick"):
@@ -127,6 +133,7 @@ def flag(args) -> None:
 
 def unflag(args) -> None:
     g = connect(args.graph)
+    rq(g, "MATCH (s:Session) RETURN count(s)")                          # read first: a missing graph is an error, not created
     try:
         out = unflag_doc(g, args.doc)
     except (KeyError, RuntimeError) as e:
@@ -168,6 +175,8 @@ def kill_planner(g, task: str, tick: int, lease: int = LEASE) -> int:
 def session2(args) -> None:
     fx = read_fixture(args.fixture)
     g = connect(args.graph)
+    rq(g, "MATCH (s:Session) RETURN count(s)")                          # read first: a missing graph is an error, not created
+    reconcile(g)                                                        # repair any torn write from an earlier crash
     must(rq(g, "MATCH (m:Memory {quarantined: true}) RETURN m.id LIMIT 1"),
          "nothing is quarantined (run `quarantine flag DOC` first)")
 
@@ -219,15 +228,16 @@ def session2(args) -> None:
                     new_id = rework(g, memory, agent, spec["text"], spec["reads"], tick, session, task=task,
                                     needs_regeneration=spec.get("needs_regeneration", False))
                 else:
-                    new_id = rep_rows[0][0]
-                    # Ensure current worker has claim to complete it
-                    q(g, Q.CLAIM, task=task, me=agent, now=tick, lease=lease, session=session)
+                    new_id = rep_rows[0][0]                             # written before a crash; finish the task only if we may
+                    must(q(g, Q.CLAIM, task=task, me=agent, now=tick, lease=lease, session=session),
+                         f"{agent} found {new_id} but another process holds a live lease on {task}")
 
                 completed = q(g, Q.COMPLETE, task=task, me=agent, tick=tick, now=tick, session=session)
                 if not completed:
                     sys.exit(f"error: {agent} could not complete {task}")
 
-                say(f"  {agent}: wrote {new_id} reads {ids(spec['reads'])}; COMPLETE {task}")
+                verb = "found existing" if has_clean_rep else "wrote"
+                say(f"  {agent}: {verb} {new_id} reads {ids(spec['reads'])}; COMPLETE {task}")
                 tick += 1
                 n += 1
         changes.append(n)
@@ -290,8 +300,12 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
     try:
         args.run(args)
-    except (ValueError, KeyError, OSError) as e:                       # bad fixture, unknown id, unreadable file
+    except (ValueError, KeyError, OSError, RuntimeError) as e:          # bad fixture, unknown id, unreadable file
         raise SystemExit(f"quarantine: {e.args[0] if e.args else e}") from None
+    except Exception as e:  # noqa: BLE001
+        if "empty key" in str(e).lower() or "not exist" in str(e).lower():
+            raise SystemExit(f"quarantine: graph {args.graph!r} does not exist (run `quarantine session1` first)") from None
+        raise
 
 
 if __name__ == "__main__":

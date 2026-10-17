@@ -15,28 +15,52 @@ SET d.flagged = true, d.flag_reason = $reason, d.flag_tick = $tick
 RETURN d.id
 """
 
-# Retract an advisory that turned out to be a false alarm. Quarantine is derived state (a flag on the memory), so
-# retracting means: clear every flag, then re-derive from whatever documents are still flagged (loader.unflag).
-UNFLAG_DOC = """
+# Q1b the flag and its closure in ONE statement (FalkorDB runs each query atomically), so a crash can never
+# leave a flagged document whose memories are still clean.
+FLAG_AND_CLOSE = """
 MATCH (d:Doc {id: $doc})
+SET d.flagged = true, d.flag_reason = $reason, d.flag_tick = $tick
+WITH d
+OPTIONAL MATCH (d)<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]-(m:Memory)
+FOREACH (x IN CASE WHEN m IS NULL THEN [] ELSE [m] END |
+  SET x.quarantined = true, x.quarantine_tick = $tick, x.quarantine_doc = coalesce(x.quarantine_doc, $doc))
+RETURN count(DISTINCT m) AS precise, collect(DISTINCT m.id) AS ids
+"""
+
+# Reconcile (loader.reconcile): quarantine is derived state, so after any crash it is re-derived from the documents
+# that are flagged. Every statement is idempotent and none clears a memory a still-flagged document reaches.
+UNFLAG_DOC = """
+MATCH (d:Doc {id: $doc, flagged: true})
 SET d.flagged = false
 REMOVE d.flag_reason, d.flag_tick
 RETURN d.id
 """
-RESET_QUARANTINE = """
-MATCH (m:Memory)
+STILL_FLAGGED = "MATCH (d:Doc {flagged: true}) RETURN d.id, d.flag_tick ORDER BY d.flag_tick, d.id"
+DROP_UNFLAGGED_CAUSE = """
+MATCH (m:Memory) WHERE m.quarantine_doc IS NOT NULL
+OPTIONAL MATCH (d:Doc {id: m.quarantine_doc})
+WITH m, d WHERE d IS NULL OR d.flagged <> true
+REMOVE m.quarantine_doc
+RETURN count(m)
+"""
+CLEAR_STALE = """
+MATCH (m:Memory {quarantined: true})
+WHERE NOT (m)-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]->(:Doc {flagged: true})
 SET m.quarantined = false
 REMOVE m.quarantine_tick, m.quarantine_doc, m.support_clean, m.healable
 RETURN count(m)
 """
-STILL_FLAGGED = "MATCH (d:Doc {flagged: true}) RETURN d.id, d.flag_tick ORDER BY d.flag_tick, d.id"
+DELETE_STALE_TASKS = """
+MATCH (t:Task {kind: 'rework'})-[:REWORKS]->(m:Memory {quarantined: false})
+WHERE t.state IN ['blocked', 'ready']
+DETACH DELETE t
+"""
 HEAL_STARTED = """
 OPTIONAL MATCH ()-[s:SUPERSEDES]->()
 WITH count(s) AS replacements
 OPTIONAL MATCH (t:Task) WHERE t.state IN ['claimed', 'done']
 RETURN replacements, count(t) AS started_tasks
 """
-DELETE_REWORK_TASKS = "MATCH (t:Task {kind: 'rework'}) DETACH DELETE t"
 
 # Q1 hero: everything whose provenance reaches the flagged doc. One traversal,
 # three edge types, any depth (the graph is a DAG: reads only point backwards in time). Returns the "precise" count.
@@ -184,13 +208,13 @@ RETURN m.id AS memory, m.healable AS healable, t.id AS task, t.state AS state,
 ORDER BY m.tick
 """
 
-# Q8 lease: claim a ready task, or take over an expired claim, atomically
-# (FalkorDB serialises write queries per graph). 0 rows = someone holds it.
+# Q8 lease: claim a ready task, take over an expired claim, or resume your own claim from the same session after a
+# crash, atomically (FalkorDB serialises write queries per graph). 0 rows = someone else holds a live lease.
 CLAIM = """
 MATCH (t:Task {id: $task})-[:REWORKS]->(:Memory)<-[:AUTHORED]-(a:Agent {name: $me})
 OPTIONAL MATCH (t)-[c:CLAIMED_BY]->(holder)
 WITH t, a, c, holder
-WHERE t.state IN ['ready', 'claimed'] AND (c IS NULL OR c.lease_until < $now)
+WHERE t.state IN ['ready', 'claimed'] AND (c IS NULL OR c.lease_until < $now OR (c.session = $session AND holder.name = $me))
 DELETE c
 CREATE (t)-[:CLAIMED_BY {lease_until: $now + $lease, session: $session}]->(a)
 SET t.state = 'claimed'

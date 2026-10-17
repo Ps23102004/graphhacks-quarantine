@@ -20,10 +20,13 @@ args = ap.parse_args()
 hard = 0
 print("| world model | (world, doc) runs | truly affected | quarantined | false negatives | needless flags | needless facts that cannot heal | invented receipts | wrong 'clean' answers | page != graph |")
 print("|---|---|---|---|---|---|---|---|---|---|")
-for label, mode, deep in (("declared read sets", "declared", False), ("cumulative context", "cumulative", False), ("deep chains", "declared", True)):
+for label, mode, deep in (("declared read sets", "declared", False), ("cumulative context", "cumulative", False), ("deep chains", "declared", True),
+                          ("UNRECORDED influence (graph: declared reads; truth: whole context)", "hidden", False)):
     t = run(range(args.start, args.start + args.worlds), mode, deep)
-    hard += len(t.false_negatives) + len(t.bad_receipts) + len(t.bad_clean_answers) + len(t.page_mismatch)
-    print(f"| {label} | {t.runs} | {t.affected} | {t.flagged} | {len(t.false_negatives)} | {t.needless} ({t.needless / max(t.flagged, 1):.0%} of flagged) | "
+    # hidden mode is expected to miss memories: it measures what incomplete read sets cost, it is not a pass/fail gate
+    hard += (0 if mode == "hidden" else len(t.false_negatives)) + len(t.bad_receipts) + len(t.bad_clean_answers) + len(t.page_mismatch)
+    missed = sum(len(x[3]) for x in t.false_negatives)
+    print(f"| {label} | {t.runs} | {t.affected} | {t.flagged} | {len(t.false_negatives)} runs, {missed} memories ({missed / max(t.affected, 1):.0%} of truly affected) | {t.needless} ({t.needless / max(t.flagged, 1):.0%} of flagged) | "
           f"{t.needless_unhealable_facts} | {len(t.bad_receipts)} | {len(t.bad_clean_answers)} | {len(t.page_mismatch)} |")
     print(f"<!-- needless by kind: {dict(t.needless_by_kind)} first problems: {(t.false_negatives + t.bad_receipts + t.bad_clean_answers + t.page_mismatch)[:2]} -->")
 sys.exit(1 if hard else 0)

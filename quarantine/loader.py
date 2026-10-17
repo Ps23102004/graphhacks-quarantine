@@ -88,6 +88,11 @@ def validate_fixture(fx: dict) -> None:
                 raise ValueError(f"{sec}: id {mid!r} ends in the reserved suffix _v<n> used for healed and reworked twins")
             if not isinstance(m, dict):
                 raise ValueError(f"{sec}: {mid!r} must be a mapping")
+            unknown = set(m) - {f for f, _ in fields} - {"agent", "note"}
+            if unknown:
+                # e.g. `reads:` on a fact or episode would be silently dropped, hiding provenance: refuse instead
+                raise ValueError(f"{sec}: {mid!r} has unknown key(s) {sorted(unknown)}; only {[f for f, _ in fields]} "
+                                 f"(+ agent, note) are read, so anything else would be ignored")
             for field_name, typ in fields:
                 if not isinstance(m.get(field_name), typ) or isinstance(m.get(field_name), bool):
                     raise ValueError(f"{sec}: {mid!r} needs {field_name!r} as {typ.__name__}, got {m.get(field_name)!r}")
@@ -192,17 +197,26 @@ def _node(g: Graph, labels: str, props: dict) -> None:
         raise RuntimeError(f"Failed to create node :{labels} with props {props}")
 
 
-def _memory(g: Graph, labels: str, mid: str, author: str, session: str, props: dict) -> None:
-    res = q(g, f"MATCH (a:Agent {{name: $author}}), (s:Session {{id: $session}}) "
-               f"CREATE (m:Memory:{labels}) SET m += $p, m.id = $mid, m.quarantined = false "
-               f"CREATE (a)-[:AUTHORED]->(m), (m)-[:RAN_IN]->(s) "
-               f"RETURN count(m)",
-            author=author, session=session, p=props, mid=mid)
-    if not res or res[0][0] == 0:
-        raise RuntimeError(f"Failed to create memory {mid} authored by {author} in session {session}")
+def _memory(g: Graph, labels: str, mid: str, author: str, session: str, props: dict,
+            edge: str | None = None, target: str = "Memory", links: list[dict] | None = None) -> None:
+    """One memory, its authorship and its provenance edges in ONE statement, so a crash can never leave a memory
+    without the read set it was written from. links: [{id, props}] targets of `edge`."""
+    links = links or []
+    cypher = (f"MATCH (a:Agent {{name: $author}}), (s:Session {{id: $session}}) "
+              f"CREATE (m:Memory:{labels}) SET m += $p, m.id = $mid, m.quarantined = false "
+              f"CREATE (a)-[:AUTHORED]->(m), (m)-[:RAN_IN]->(s) ")
+    if links:
+        cypher += (f"WITH m UNWIND $links AS l MATCH (x:{target} {{id: l.id}}) "
+                   f"CREATE (m)-[r:{edge}]->(x) SET r += l.props RETURN count(r)")
+    else:
+        cypher += "RETURN count(m)"
+    res = q(g, cypher, author=author, session=session, p=props, mid=mid, links=links)
+    if not res or res[0][0] != (len(links) or 1):
+        raise RuntimeError(f"Failed to write memory {mid} by {author} with {len(links)} {edge or 'provenance'} edge(s)")
 
 
 def _influenced_by(g: Graph, mid: str, reads: list[str], tick: int, session: str) -> None:
+    """Add read edges to an existing memory (tests build worlds edge by edge; load() writes them with the memory)."""
     for rid in reads:
         res = q(g, "MATCH (m:Memory {id: $mid}), (x:Memory {id: $rid}) "
                    "CREATE (m)-[:INFLUENCED_BY {read_tick: $tick, session: $session}]->(x) "
@@ -245,34 +259,42 @@ def load(g: Graph, fx: dict, after_write=None) -> None:
     write_procedure(g, fx.get("procedure"))
 
     for eid, e in fx["episodes"].items():
-        _memory(g, "Episode", eid, e.get("agent", "research"), "s1", {"tick": e["tick"], "text": e["text"]})
-        res = q(g, "MATCH (m:Episode {id: $eid}), (d:Doc {id: $doc}) CREATE (m)-[:EXTRACTED_FROM]->(d) RETURN count(*)",
-                eid=eid, doc=e["doc"])
-        if not res or res[0][0] == 0:
-            raise ValueError(f"Failed to link episode {eid} to doc {e['doc']}")
+        _memory(g, "Episode", eid, e.get("agent", "research"), "s1", {"tick": e["tick"], "text": e["text"]},
+                "EXTRACTED_FROM", "Doc", [{"id": e["doc"], "props": {}}])
         done(eid)
 
     for fid, f in fx["facts"].items():
         _memory(g, "Fact", fid, f.get("agent", "research"), "s1",
                 {"subject": f["subject"], "slot": f["slot"], "value": f["value"],
-                 "tick": f["tick"], "support_total": len(f["support"])})
-        for s in f["support"]:
-            res = q(g, "MATCH (f:Fact {id: $fid}), (e:Episode {id: $ep}) "
-                       "CREATE (f)-[:CONSOLIDATED_FROM {claim: $claim}]->(e) RETURN count(*)",
-                    fid=fid, ep=s["ep"], claim=s["claim"])
-            if not res or res[0][0] == 0:
-                raise ValueError(f"Failed to link fact {fid} to episode {s['ep']}")
+                 "tick": f["tick"], "support_total": len(f["support"])},
+                "CONSOLIDATED_FROM", "Episode", [{"id": s["ep"], "props": {"claim": s["claim"]}} for s in f["support"]])
         done(fid)
 
-    for sid, s in fx["steps"].items():
-        _memory(g, "PlanStep", sid, s.get("agent", "planner"), "s1", {"order": s["order"], "tick": s["tick"], "text": s["text"]})
-        _influenced_by(g, sid, s["reads"], s["tick"], "s1")
-        done(sid)
+    for kind, label, agent, extra in (("steps", "PlanStep", "planner", "order"), ("artifacts", "Artifact", "coder", "path")):
+        for mid, m in fx[kind].items():
+            _memory(g, label, mid, m.get("agent", agent), "s1", {extra: m[extra], "tick": m["tick"], "text": m["text"]},
+                    "INFLUENCED_BY", "Memory", [{"id": r, "props": {"read_tick": m["tick"], "session": "s1"}} for r in m["reads"]])
+            done(mid)
+    # the last write: Session 1 finished. `flag` refuses a graph without it (a crash mid-load is visible, not silent)
+    q(g, "MATCH (s:Session {id: 's1'}) SET s.complete = true")
 
-    for aid, a in fx["artifacts"].items():
-        _memory(g, "Artifact", aid, a.get("agent", "coder"), "s1", {"path": a["path"], "tick": a["tick"], "text": a["text"]})
-        _influenced_by(g, aid, a["reads"], a["tick"], "s1")
-        done(aid)
+
+def reconcile(g: Graph) -> list[str]:
+    """Re-derive quarantine, support and rework tasks from the documents that are flagged right now. Idempotent;
+    run at the start of flag, unflag and session2 so any torn write from a crash is repaired before work continues."""
+    from quarantine import queries as Q
+
+    q(g, Q.DROP_UNFLAGGED_CAUSE)
+    flagged = q(g, Q.STILL_FLAGGED)
+    for d, tick in flagged:
+        q(g, Q.TAINT_CLOSURE, doc=d, tick=tick if tick is not None else 0)
+    q(g, Q.CLEAR_STALE)
+    q(g, Q.DELETE_STALE_TASKS)
+    q(g, Q.SUPPORT_AND_HEALABLE)
+    if flagged:
+        q(g, Q.CREATE_REWORK_TASKS, tick=max((t or 0) for _, t in flagged))
+    q(g, Q.CREATE_BLOCKED_BY)
+    return [d for d, _ in flagged]
 
 
 def derive_rework(g: Graph, memory_id: str) -> dict:
@@ -387,9 +409,9 @@ def rework(g: Graph, old_id: str, by: str, text: str, reads: list[str], tick: in
 
 
 def unflag(g: Graph, doc: str) -> dict:
-    """Retract an advisory (a false alarm). Re-derives quarantine from the documents that are still flagged, so a
-    memory stays red only if some remaining flagged document still reaches it. Refuses once healing has started:
-    clean replacements already exist and would no longer match a rebuilt state (reset with `quarantine session1`)."""
+    """Retract an advisory (a false alarm), then reconcile: a memory stays red only if some document that is still
+    flagged reaches it, and nothing a flagged document reaches is ever cleared, even for a moment. Refuses once healing
+    has started: clean replacements already exist and would no longer match a rebuilt state (reset with session1)."""
     from quarantine import queries as Q
 
     if not q(g, "MATCH (d:Doc {id: $doc}) RETURN d.id", doc=doc):
@@ -398,15 +420,8 @@ def unflag(g: Graph, doc: str) -> dict:
     if replacements or started:
         raise RuntimeError("healing has already started; un-flagging now would leave replacements without a cause "
                            "(run `quarantine session1` to reset the demo)")
-    q(g, Q.UNFLAG_DOC, doc=doc)
-    q(g, Q.RESET_QUARANTINE)
-    q(g, Q.DELETE_REWORK_TASKS)
-    remaining = q(g, Q.STILL_FLAGGED)
-    for d, tick in remaining:
-        q(g, Q.TAINT_CLOSURE, doc=d, tick=tick if tick is not None else 0)
-    if remaining:
-        q(g, Q.SUPPORT_AND_HEALABLE)
-        q(g, Q.CREATE_REWORK_TASKS, tick=remaining[-1][1] or 0)
-        q(g, Q.CREATE_BLOCKED_BY)
+    if not q(g, Q.UNFLAG_DOC, doc=doc):
+        raise KeyError(f"{doc!r} is not flagged; nothing to retract")
+    still = reconcile(g)
     red = [r[0] for r in q(g, "MATCH (m:Memory {quarantined: true}) RETURN m.id ORDER BY m.tick")]
-    return {"still_flagged": [d for d, _ in remaining], "quarantined": red}
+    return {"still_flagged": still, "quarantined": red}

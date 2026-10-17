@@ -130,6 +130,7 @@ def test_session2_heals_a_fact_that_no_step_reads(tmp_path, capsys):
     (lambda w: w["artifacts"]["a"].pop("path"), "path"),
     (lambda w: w["docs"]["d1"].update(flagged=True), "reserved"),
     (lambda w: w["episodes"]["e1"].update(text=["not", "a", "string"]), "text"),
+    (lambda w: w["facts"]["f"].update(reads=["e1"]), "unknown key"),          # provenance that load() would drop
 ])
 def test_validate_fixture_refuses_worlds_load_would_choke_on(breakage, match):
     w = copy.deepcopy(world())
@@ -185,3 +186,118 @@ def test_snapshot_of_a_graph_that_does_not_exist_is_empty_not_an_error():
 
     snap = snapshot(connect("reg_graph_that_was_never_created"))
     assert snap["nodes"] == [] and snap["docs"] == [] and snap["edges"] == [] and snap["counters"] is None
+
+
+# ---------------------------------------------------------------- crash consistency (torn writes are repaired, never shown as done)
+def _demo(name):
+    g = fresh(name)
+    load(g, read_fixture("fixture.yaml"))
+    return g
+
+
+def red_ids(g):
+    return {r[0] for r in q(g, "MATCH (m:Memory {quarantined: true}) RETURN m.id")}
+
+
+SIX = {"ep_7a", "ep_7b", "f_http_client", "f_http_pin", "step_3", "a_requirements"}
+
+
+def test_flag_and_its_closure_are_one_write():
+    g = _demo("reg_atomic_flag")
+    try:
+        precise, ids_ = q(g, Q.FLAG_AND_CLOSE, doc="doc_7", reason="t", tick=40)[0]
+        assert precise == 6 and set(ids_) == SIX == red_ids(g)
+    finally:
+        connect("reg_atomic_flag").delete()
+
+
+def test_status_reports_a_torn_flag_and_reconcile_repairs_it():
+    from quarantine.agent_runtime import recovery_status
+    from quarantine.loader import reconcile
+
+    g = _demo("reg_torn_flag")
+    try:
+        q(g, Q.FLAG_DOC, doc="doc_7", reason="t", tick=40)              # the process died before the closure
+        st = recovery_status(g)
+        assert st["complete"] is False and any("not quarantined" in w for w in st["warnings"])
+        reconcile(g)
+        assert red_ids(g) == SIX
+        assert q(g, "MATCH (t:Task) RETURN count(t)")[0][0] == 2          # rework_step_3, rework_a_requirements
+        assert recovery_status(g)["warnings"] == ["2 rework task(s) remaining to reach fixpoint", "1 healable fact(s) not healed yet"]
+    finally:
+        connect("reg_torn_flag").delete()
+
+
+def test_unflag_never_passes_through_a_state_where_a_still_flagged_doc_is_clean():
+    from quarantine.loader import unflag
+
+    g = _demo("reg_unflag_atomic")
+    try:
+        q(g, Q.FLAG_AND_CLOSE, doc="doc_7", reason="t", tick=40)
+        q(g, Q.FLAG_AND_CLOSE, doc="doc_5", reason="t", tick=41)
+        unflag(g, "doc_5")
+        assert red_ids(g) == SIX
+        assert {r[0] for r in q(g, "MATCH (m:Memory {quarantined: true}) RETURN DISTINCT m.quarantine_doc")} == {"doc_7"}
+        with pytest.raises(KeyError, match="not flagged"):
+            unflag(g, "doc_5")                                          # retracting twice is an error, not a success
+    finally:
+        connect("reg_unflag_atomic").delete()
+
+
+def test_session1_writes_each_memory_with_its_read_set_in_one_statement():
+    g = _demo("reg_s1_atomic")
+    try:
+        assert q(g, "MATCH (s:Session {id: 's1'}) RETURN s.complete") == [[True]]
+        bare = q(g, "MATCH (m:Memory) WHERE (m:PlanStep OR m:Artifact) AND NOT (m)-[:INFLUENCED_BY]->() RETURN count(m)")
+        assert bare == [[0]]
+    finally:
+        connect("reg_s1_atomic").delete()
+
+
+def test_a_restarted_session2_resumes_its_own_dead_claim(capsys):
+    from quarantine import cli
+
+    try:
+        cli.main(["session1", "--graph", "reg_resume"])
+        cli.main(["flag", "doc_7", "--graph", "reg_resume"])
+        g = connect("reg_resume")
+        q(g, Q.SUPPORT_AND_HEALABLE)
+        q(g, Q.HEAL_FACTS, session="s2", tick=41)
+        q(g, Q.PROMOTE_READY)
+        assert q(g, Q.CLAIM, task="rework_step_3", me="planner", now=42, lease=5, session="s2")   # then the process died
+        cli.main(["session2", "--graph", "reg_resume"])
+        out = capsys.readouterr().out
+        assert "fixpoint" in out and "could not" not in out
+        assert q(g, "MATCH (t:Task) WHERE t.state <> 'done' RETURN count(t)") == [[0]]
+    finally:
+        connect("reg_resume").delete()
+
+
+def test_status_and_session2_on_a_missing_graph_give_one_line_errors():
+    from quarantine import cli
+
+    for cmd in ("status", "session2"):
+        with pytest.raises(SystemExit) as e:
+            cli.main([cmd, "--graph", "reg_graph_that_was_never_created"])
+        assert "does not exist" in str(e.value)
+        g = connect("reg_graph_that_was_never_created")
+        with pytest.raises(Exception, match="empty key"):
+            g.ro_query("MATCH (n) RETURN n")                            # and the command did not create it
+
+
+def test_live_placeholders_and_unhealed_facts_are_not_reported_complete():
+    from quarantine.agent_runtime import recovery_status
+    from quarantine.loader import derive_rework, rework
+
+    g = _demo("reg_placeholders")
+    try:
+        q(g, Q.FLAG_AND_CLOSE, doc="doc_7", reason="t", tick=40)
+        q(g, Q.SUPPORT_AND_HEALABLE)
+        st = recovery_status(g)
+        assert st["complete"] is False and any("healable" in w for w in st["warnings"])
+        q(g, Q.HEAL_FACTS, session="s2", tick=41)
+        spec = derive_rework(g, "step_3")
+        rework(g, "step_3", "planner", spec["text"], spec["reads"], 42, "s2", needs_regeneration=True)
+        assert any("needs regeneration" in w for w in recovery_status(g)["warnings"])
+    finally:
+        connect("reg_placeholders").delete()
