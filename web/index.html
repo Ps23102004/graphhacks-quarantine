@@ -198,7 +198,7 @@ FORM: left-to-right layered flow (Sankey-like ribbons), canvas; labels are alway
     <section>
       <h2>Quarantined</h2>
       <ul class="ledger" id="ledger"></ul>
-      <p class="ledger-empty" id="ledger-empty">Nothing is quarantined. Flag a source with <code>quarantine flag doc_7</code>.</p>
+      <p class="ledger-empty" id="ledger-empty">Nothing is quarantined. Flag a source with <code>quarantine flag DOC</code>.</p>
     </section>
 
     <section>
@@ -408,13 +408,13 @@ function updateCounters() {
 }
 function updateHud() {
   const c = state.counters, hud = $("hud"), d = state.lastData;
-  if (!d || !d.nodes.length) { $("hud-n").textContent = "–"; $("hud-of").textContent = ""; $("hud-line").textContent = "Waiting for the crew to write memory."; hud.classList.remove("hot"); return; }
+  if (!d || !d.nodes.length) { $("hud-n").textContent = "–"; $("hud-of").textContent = ""; $("hud-line").textContent = "No memory in this graph yet."; hud.classList.remove("hot"); return; }
   const flagged = flaggedIds(d), agents = new Set(d.nodes.map(n => n.agent).filter(Boolean)).size;
   if (state.torn.length) { $("hud-n").textContent = "–"; $("hud-of").textContent = ""; hud.classList.remove("hot");
     $("hud-line").innerHTML = `${list(state.torn)} ${state.torn.length === 1 ? "is" : "are"} flagged, but the quarantine closure has not been applied, so no count is shown.`; return; }
   if (!flagged.length) { $("hud-n").textContent = state.total; $("hud-of").textContent = "memories"; $("hud-line").innerHTML = `written by <b>${agents} agent${agents === 1 ? "" : "s"}</b> across <b>${d.docs.length} sources</b>. Every read is a ribbon; no source is flagged.`; hud.classList.remove("hot"); return; }
   if (!c) { const n = state.red.size; $("hud-n").textContent = n; $("hud-of").textContent = `of ${state.total} memories`; hud.classList.toggle("hot", n > 0);
-    $("hud-line").innerHTML = `quarantined by <b>${flagged.length} advisories</b> (${list(flagged)}).`; return; }
+    $("hud-line").innerHTML = `quarantined by <b>${flagged.length} advisor${flagged.length === 1 ? "y" : "ies"}</b>: ${list(flagged)}.`; return; }
   const n = Math.min(state.red.size, c.precise);
   $("hud-n").textContent = n; $("hud-of").textContent = `of ${state.total} memories`; hud.classList.toggle("hot", n > 0);
   $("hud-line").innerHTML = `reached by <b>${esc(d.flagged)}</b>. A rollback would have lost <b>${c.time_based}</b>; wiping the agents, <b>${c.per_agent}</b>.`;
@@ -424,7 +424,7 @@ function updateBanner(data) {
   $("banner").innerHTML =
     !data.nodes.length ? "Empty graph · run <b>quarantine session1</b>"
     : !data.flagged ? "<b>Memory</b> · no source is flagged; every read is recorded as an edge"
-    : `<b>${twins ? "Healing" : "Session 2"}</b> · ${flaggedIds(data).length > 1 ? "advisories" : "advisory"}: ${list(flaggedIds(data))} flagged` +
+    : `<b>${flaggedIds(data).length > 1 ? "Advisories" : "Advisory"}</b> · ${list(flaggedIds(data))} flagged` +
       (twins ? ` · ${twins} memor${twins === 1 ? "y" : "ies"} rebuilt from clean sources` : "");
   $("live").classList.remove("down");
 }

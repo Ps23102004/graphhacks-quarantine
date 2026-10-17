@@ -167,6 +167,8 @@ async (page) => {
     await page.evaluate(() => hive.setView('precise'));
     await show(torn);
     check('torn flag: no "reached by" claim, counters blank', !(await text('hud-line')).includes('reached by') && /not been applied/.test(await text('hud-line')) && (await text('c-agent')) === '–', await text('hud-line'));
+    await show({ nodes: [], docs: [], edges: [], flagged: null, counters: null });   // a graph that does not exist yet
+    check('missing graph shows the empty-state hint', await page.evaluate(() => !document.getElementById('empty').hidden && !document.getElementById('live').classList.contains('down')) && (await text('banner')).includes('Empty graph'), await text('banner'));
     await show(solo);
     check('agent count follows the data', (await text('hud-line')).includes('1 agent ') && (await text('banner')).includes('no source is flagged'), await text('hud-line'));
   } finally {
