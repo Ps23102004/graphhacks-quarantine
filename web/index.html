@@ -7,27 +7,23 @@
 <style>
   :root {
     color-scheme: dark;
-    --bg: #0b0d12;
-    --bg-2: #10131a;
-    --glass: rgba(26, 30, 40, 0.72);
-    --glass-strong: rgba(30, 34, 46, 0.86);
+    --bg: #07090f;
+    --bg-2: #0d1018;
+    --glass: rgba(24, 28, 40, 0.62);
+    --glass-strong: rgba(32, 37, 52, 0.82);
     --hair: rgba(255, 255, 255, 0.08);
-    --hair-strong: rgba(255, 255, 255, 0.16);
-    --text: #f2f4f8;
-    --text-2: #a7afbd;
-    --text-3: #7c8595;
+    --hair-strong: rgba(255, 255, 255, 0.17);
+    --text: #f5f6fa;
+    --text-2: #a9b0c0;
+    --text-3: #778094;
     --cell: #2a3140;
-    --cell-edge: #3a4354;
-    --edge: rgba(167, 175, 189, 0.22);
     --red: #ff453a;
     --red-soft: rgba(255, 69, 58, 0.16);
     --green: #30d158;
     --green-soft: rgba(48, 209, 88, 0.16);
     --orange: #ff9f0a;
-    --orange-soft: rgba(255, 159, 10, 0.16);
     --path: #ffd60a;
-    --a1: #64d2ff; --a2: #7d7aff; --a3: #da8fff; --a4: #66d4cf; --a5: #ffb340;
-    --radius: 14px;
+    --radius: 16px;
     --ease: cubic-bezier(0.16, 1, 0.3, 1);
     --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, sans-serif;
     --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
@@ -35,18 +31,17 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
   body {
-    background: radial-gradient(1200px 900px at 38% 52%, #141826 0%, var(--bg) 62%) fixed, var(--bg);
-    color: var(--text); font: 15px/1.45 var(--font); -webkit-font-smoothing: antialiased;
+    background: var(--bg); color: var(--text); font: 15px/1.45 var(--font); -webkit-font-smoothing: antialiased;
     display: grid; grid-template-rows: auto 1fr; grid-template-columns: minmax(0, 1fr); min-height: 100vh;
   }
   button { font: inherit; color: inherit; }
-  :focus-visible { outline: 2px solid var(--a1); outline-offset: 3px; border-radius: 8px; }
+  :focus-visible { outline: 2px solid #5ac8fa; outline-offset: 3px; border-radius: 8px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
-  /* ---------- top bar: translucent material over the hive ---------- */
   .bar {
     position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px;
-    padding: 14px 24px; background: rgba(11, 13, 18, 0.62);
-    backdrop-filter: blur(20px) saturate(160%); -webkit-backdrop-filter: blur(20px) saturate(160%);
+    padding: 14px 24px; background: rgba(7, 9, 15, 0.55);
+    backdrop-filter: blur(22px) saturate(170%); -webkit-backdrop-filter: blur(22px) saturate(170%);
     border-bottom: 1px solid var(--hair);
   }
   .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -55,79 +50,33 @@
   .brand p { margin: 0; font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .status {
     margin-left: auto; display: flex; align-items: center; gap: 10px; padding: 7px 14px 7px 12px;
-    border-radius: 999px; background: var(--glass); border: 1px solid var(--hair); font-size: 13.5px; color: var(--text-2);
-    max-width: 52vw;
+    border-radius: 999px; background: var(--glass); border: 1px solid var(--hair); font-size: 13.5px; color: var(--text-2); max-width: 52vw;
   }
   .status b { color: var(--text); font-weight: 600; }
   .status span#banner { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .live { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: none; box-shadow: 0 0 0 0 rgba(48,209,88,.5); }
+  .live { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: none; }
   .live.down { background: var(--red); }
   @media (prefers-reduced-motion: no-preference) { .live:not(.down) { animation: live 2.4s var(--ease) infinite; } }
   @keyframes live { 0% { box-shadow: 0 0 0 0 rgba(48,209,88,.45); } 70%, 100% { box-shadow: 0 0 0 7px rgba(48,209,88,0); } }
 
-  /* ---------- stage ---------- */
-  main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 0; min-height: 0; }
-  .hive { position: relative; min-height: 560px; }
-  #hive { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  .empty {
-    position: absolute; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: none;
-    color: var(--text-2); font-size: 15px;
-  }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0; }
+  .hive { position: relative; min-height: 560px; overflow: hidden;
+    background: radial-gradient(900px 700px at 46% 48%, #121830 0%, #0a0d18 52%, var(--bg) 100%); }
+  #stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: manipulation; }
+  .empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; pointer-events: none; color: var(--text-2); }
   .empty code { font-family: var(--mono); color: var(--text); background: var(--glass); border: 1px solid var(--hair); padding: 3px 8px; border-radius: 8px; }
   .empty[hidden] { display: none; }
 
-  /* hive svg */
-  .axis line { stroke: var(--hair-strong); stroke-width: 1.5; stroke-linecap: round; }
-  .axis text { fill: var(--text-2); font: 600 15px var(--font); letter-spacing: 0.01em; }
-  .axis .count { fill: var(--text-3); font-weight: 500; }
-  .core-hex { fill: #161a24; stroke: var(--hair-strong); stroke-width: 1.5; }
-  .core-text { fill: var(--text-3); font: 500 12.5px var(--font); text-anchor: middle; }
-
-  .arc { fill: none; stroke: var(--edge); stroke-width: 1.4; transition: stroke 400ms var(--ease), opacity 400ms var(--ease); }
-  .arc.sup { stroke: var(--green); stroke-dasharray: 4 5; opacity: .75; }
-  .arc.hot { stroke: var(--red); stroke-width: 2.2; opacity: .9; }
-  .arc.path { stroke: var(--path); stroke-width: 3.6; opacity: 1; }
-  @media (prefers-reduced-motion: no-preference) {
-    .arc.hot.drawing { stroke-dasharray: var(--len) var(--len); animation: draw 900ms var(--ease) both; }
-    .arc.path { stroke-dasharray: var(--len) var(--len); animation: draw 700ms var(--ease) both; }
-  }
-  @keyframes draw { from { stroke-dashoffset: var(--len); } to { stroke-dashoffset: 0; } }
-  svg.has-focus .arc:not(.near):not(.path) { opacity: .18; }
-  svg.has-focus .arc.near { stroke: var(--text-2); stroke-width: 2; }
-  svg.has-focus .arc.near.hot { stroke: var(--red); }
-
-  .cell { cursor: pointer; outline: none; }
-  .cell .hex { fill: var(--cell); stroke: var(--ring, var(--cell-edge)); stroke-width: 2.2; transition: fill 450ms var(--ease), stroke 450ms var(--ease), opacity 300ms var(--ease); }
-  .cell .halo { fill: none; stroke: transparent; stroke-width: 9; opacity: 0; transition: opacity 450ms var(--ease); }
-  .cell .mark { fill: #0b0d12; font: 700 11px var(--font); text-anchor: middle; dominant-baseline: central; opacity: 0; pointer-events: none; }
-  .cell .lbl { fill: var(--text-2); font: 500 13px var(--font); pointer-events: none; transition: fill 300ms var(--ease), opacity 300ms var(--ease); }
-  .cell .lbl-bg { fill: var(--bg); opacity: .78; }
-  .cell .lblg { transition: opacity 250ms var(--ease); }
-  .cell.quiet .lblg { opacity: 0; }
-  .cell.quiet:hover .lblg, .cell.quiet:focus-visible .lblg, .cell.quiet.selected .lblg, svg.has-focus .cell.quiet.near .lblg, svg.labels .cell.quiet .lblg { opacity: 1; }
-  .cell:hover .hex, .cell:focus-visible .hex { stroke: var(--text); }
-  .cell:focus-visible .halo { stroke: var(--a1); opacity: .55; }
-  .cell.doc .hex { fill: #1c2130; stroke-dasharray: 3 3; }
-  .cell.flagged .hex { fill: #4a1512; stroke: var(--red); stroke-dasharray: none; }
-  .cell.red .hex { fill: var(--red); stroke: var(--red); }
-  .cell.red .halo { stroke: var(--red-soft); opacity: 1; }
-  .cell.red .mark, .cell.twin .mark, .cell.collateral .mark { opacity: 1; }
-  .cell.red .lbl, .cell.twin .lbl, .cell.selected .lbl { fill: var(--text); }
-  .cell.twin .hex { fill: var(--green); stroke: var(--green); }
-  .cell.twin .halo { stroke: var(--green-soft); opacity: 1; }
-  .cell.collateral .hex { fill: var(--orange); stroke: var(--orange); }
-  .cell.collateral .halo { stroke: var(--orange-soft); opacity: 1; }
-  .cell.dim .hex { opacity: .35; }
-  .cell.dim .lbl { opacity: .45; }
-  .cell.selected .halo { stroke: var(--path); opacity: .9; stroke-width: 5; }
-  svg.has-focus .cell:not(.near):not(.selected) .hex { opacity: .4; }
-  svg.has-focus .cell:not(.near):not(.selected) .lbl { opacity: .35; }
-  @media (prefers-reduced-motion: no-preference) {
-    .cell.enter .hex { animation: settle 520ms var(--ease) both; transform-box: fill-box; transform-origin: center; }
-    .cell.burst .halo { animation: burst 900ms var(--ease) both; transform-box: fill-box; transform-origin: center; }
-  }
-  @keyframes settle { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-  @keyframes burst { 0% { transform: scale(.6); opacity: 1; stroke-width: 14; } 100% { transform: scale(1.5); opacity: 0; stroke-width: 2; } }
+  .hud { position: absolute; left: 28px; top: 24px; max-width: min(430px, 60%); pointer-events: none;
+    padding: 18px 22px 18px; border-radius: 20px; background: rgba(12, 15, 24, 0.5); border: 1px solid var(--hair);
+    backdrop-filter: blur(18px) saturate(150%); -webkit-backdrop-filter: blur(18px) saturate(150%); }
+  .hud .big { display: flex; align-items: baseline; gap: 10px; line-height: 1; }
+  .hud .num { font-size: 72px; font-weight: 700; letter-spacing: -0.045em; font-variant-numeric: tabular-nums; color: var(--text); transition: color 400ms var(--ease); }
+  .hud.hot .num { color: var(--red); }
+  .hud .of { font-size: 22px; font-weight: 500; color: var(--text-2); letter-spacing: -0.01em; }
+  .hud p { margin: 10px 0 0; font-size: 14px; color: var(--text-2); line-height: 1.45; }
+  .hud p b { color: var(--text); font-weight: 600; }
+  .caption { position: absolute; left: 28px; bottom: 20px; right: 28px; font-size: 12.5px; color: var(--text-3); pointer-events: none; }
 
   /* ---------- inspector: one translucent column ---------- */
   .inspector {
@@ -197,25 +146,27 @@
     body { grid-template-rows: auto auto; }
     main { grid-template-columns: 1fr; }
     .hive { min-height: 0; aspect-ratio: 1 / 1; }
-    .inspector { border-left: 0; border-top: 1px solid var(--hair); }
+    .inspector { border-left: 0; border-top: 1px solid var(--hair); padding: 18px 16px 24px; }
     .brand p { display: none; }
     .bar { flex-wrap: wrap; padding: 12px 16px; gap: 10px; }
     .status { margin-left: 0; width: 100%; max-width: 100%; min-width: 0; }
     .status span#banner { white-space: normal; }
-    .inspector { padding: 18px 16px 24px; }
+    .hud { left: 12px; top: 12px; padding: 12px 14px; border-radius: 16px; max-width: 70%; }
+    .hud .num { font-size: 44px; } .hud .of { font-size: 16px; } .hud p { font-size: 12px; margin-top: 6px; }
+    .caption { display: none; }
   }
   @media (prefers-reduced-transparency: reduce) {
-    .bar, .inspector, .policy, .card, .status { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg-2); }
+    .bar, .inspector, .policy, .card, .status, .hud { backdrop-filter: none; -webkit-backdrop-filter: none; background: var(--bg-2); }
   }
 </style>
 </head>
 <body>
 <!--
-THESIS: shared agent memory drawn as a hive plot, one radial axis per kind of memory, so "this bad source reached these six cells and no others" is visible as a wave travelling outward along provenance arcs; refuses the force-directed hairball and the grey-dots page it replaces.
-OWN-WORLD: graphite night ground, translucent Apple-style material panels, hexagonal cells on five axes around a quiet core, system red for quarantined, green for healed twins, orange for clean work a naive wipe would destroy, agents as coloured cell rims, gold for the receipt path.
-STORY: the visitor sees memory being written, sees one flagged source turn exactly six cells red, compares that with the 25 and 19 a naive wipe would take by clicking the policies, clicks any red cell to read why in words, and watches the crew heal.
-FIRST VIEWPORT: the hive fills the left two thirds; the right column leads with the three ways to forget (6 / 25 / 19) as selectable bars, then the selected memory's receipt, then the ledger.
-FORM: hive plot (founder-pinned, beats the roll); no seed key (pinned direction).
+THESIS: shared agent memory drawn as a living hive: luminous cells on five axes around a core, every read an arc with light travelling along it, so "this one bad source reached these six cells and no others" is a red wave you watch spread outward through the swarm; refuses the force-directed hairball and the clip-art outlines it replaces.
+OWN-WORLD: deep indigo-black night with a faint honeycomb lattice fading from the core, additive glow instead of strokes, each agent a colour of light, system red for the contamination, green for healed replacements, orange for clean work a naive wipe would burn, gold for the receipt; Apple-style translucent glass for the HUD, bar and inspector.
+STORY: the visitor sees memory alive (light flowing along reads), sees one source turn six cells red in a travelling wave and a headline number "6 of 25", compares the 19 and 25 a naive wipe would take, clicks any red cell to read why in a sentence, and watches replacements bloom green.
+FIRST VIEWPORT: the hive fills the stage; a glass HUD top-left carries the headline count; the right column leads with the three ways to forget as comparable bars, then the receipt and ledger.
+FORM: hive plot (founder-pinned), rendered in canvas with additive blending; no seed key (pinned direction).
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
 -->
 <header class="bar">
@@ -228,15 +179,12 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
 <main>
   <section class="hive" aria-label="Hive plot of the crew's shared memory">
-    <svg id="hive" viewBox="-80 -10 1160 1020" preserveAspectRatio="xMidYMid meet" role="group" aria-label="Memory hive: sources, episodes, facts, plan steps and files on five axes">
-      <defs>
-        <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6"/></filter>
-      </defs>
-      <g id="axes"></g>
-      <g id="arcs"></g>
-      <g id="core"></g>
-      <g id="cells"></g>
-    </svg>
+    <canvas id="stage" role="img" aria-label="Hive plot: five axes of memory (sources, episodes, facts, plan steps, files) joined by provenance arcs. A text list of every memory follows the inspector."></canvas>
+    <div class="hud" id="hud" aria-live="polite">
+      <div class="big"><span class="num" id="hud-n">–</span><span class="of" id="hud-of"></span></div>
+      <p id="hud-line">Connecting to the graph…</p>
+    </div>
+    <div class="caption">Each axis is a kind of memory. Light travels along an arc from what was read to the memory that read it.</div>
     <div class="empty" id="empty" hidden><div>No memory in this graph yet.<br><br>Run <code>uv run quarantine session1</code></div></div>
   </section>
 
@@ -280,7 +228,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
     <section>
       <h2>Key</h2>
       <div class="legend" id="legend">
-        <span><i style="background:var(--cell)"></i>clean memory</span>
+        <span><i style="background:#5ac8fa"></i>clean memory (colour = agent)</span>
         <span><i style="background:var(--red)"></i>quarantined</span>
         <span><i style="background:var(--green)"></i>healed replacement</span>
         <span><i style="background:var(--orange)"></i>clean work a naive wipe loses</span>
@@ -290,226 +238,209 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
       <div class="legend" id="agents" style="margin-top:10px"></div>
     </section>
     <p class="foot">Agents in this demo are scripted. Every cell, arc and number is read live from FalkorDB.</p>
+    <ul class="sr-only" id="sr-cells" aria-label="All memories"></ul>
   </aside>
 </main>
 
 <script>
 "use strict";
-const SVGNS = "http://www.w3.org/2000/svg";
-const AXES = [ // order around the hive; provenance flows from each kind to the previous one
+const AXES = [
   { kind: "Doc", label: "Sources" }, { kind: "Episode", label: "Episodes" }, { kind: "Fact", label: "Facts" },
   { kind: "PlanStep", label: "Plan steps" }, { kind: "Artifact", label: "Files" },
 ];
-const C = { x: 500, y: 500, r0: 104, r1: 418 };
-const AGENT_VARS = ["--a1", "--a2", "--a3", "--a4", "--a5"];
-const MARK = { red: "!", twin: "+", collateral: "×" };
+const L = { c: 500, r0: 96, r1: 392 };                       // logical space 1000 x 1000, centre, inner and outer radius
+const AGENT_RGB = [[90, 200, 250], [181, 123, 255], [255, 194, 122], [79, 227, 193], [255, 143, 184]];
+const RED = [255, 69, 58], GREEN = [48, 209, 88], ORANGE = [255, 159, 10], GOLD = [255, 214, 10], DIM = [74, 82, 100];
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const esc = t => String(t ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const $ = id => document.getElementById(id);
-const el = (tag, attrs = {}, parent) => {
-  const n = document.createElementNS(SVGNS, tag);
-  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
-  if (parent) parent.appendChild(n);
-  return n;
-};
-const hexPath = r => {
-  const p = [];
-  for (let i = 0; i < 6; i++) { const a = Math.PI / 3 * i; p.push(`${(r * Math.cos(a)).toFixed(2)},${(r * Math.sin(a)).toFixed(2)}`); }
-  return `M${p.join("L")}Z`;
-};
+const esc = t => String(t ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const lift = (c, t) => mix(c, [255, 255, 255], t), sink = (c, t) => mix(c, [0, 0, 0], t);
 
-// ---------- state ----------
-const state = { red: new Set(), pending: new Map(), seen: false, view: "precise", selected: null, total: null,
-                lastData: null, agents: new Map(), request: 0, known: new Set() };
-const meta = new Map();          // id -> node (memory or doc) from the latest snapshot
-const cellEls = new Map();       // id -> <g>
-const arcEls = new Map();        // edge key -> <path>
+const canvas = $("stage"), ctx = canvas.getContext("2d");
+const state = { red: new Set(), pending: new Map(), arcing: new Set(), seen: false, view: "precise", selected: null, hover: null,
+                counters: null, total: 0, lastData: null, agents: new Map(), request: 0 };
+const meta = new Map();              // id -> snapshot node (memory or document)
+const cells = new Map();             // id -> visual cell
+const arcs = new Map();              // key -> visual arc
+let W = 0, H = 0, S = 1, OX = 0, OY = 0, dpr = 1, lattice = null, motes = [], particles = [], rings = [];
 
-// ---------- geometry ----------
+// ---------------------------------------------------------------- geometry
 const angleOf = i => (-90 + 72 * i) * Math.PI / 180;
-const at = (i, r) => ({ x: C.x + r * Math.cos(angleOf(i)), y: C.y + r * Math.sin(angleOf(i)) });
+const onAxis = (i, r) => ({ x: L.c + r * Math.cos(angleOf(i)), y: L.c + r * Math.sin(angleOf(i)) });
 function layout(data) {
-  const pos = new Map();
   const groups = new Map(AXES.map(a => [a.kind, []]));
   data.docs.forEach((d, i) => groups.get("Doc").push({ id: d.id, order: i }));
   data.nodes.filter(n => !n.twin_of && groups.has(n.kind)).forEach(n => groups.get(n.kind).push({ id: n.id, order: n.tick }));
+  const pos = new Map();
   AXES.forEach((a, i) => {
     const list = groups.get(a.kind).sort((p, q) => (p.order - q.order) || p.id.localeCompare(q.id));
     list.forEach((n, k) => {
-      const r = C.r0 + (k + 1) / (list.length + 1) * (C.r1 - C.r0);
-      pos.set(n.id, { ...at(i, r), axis: i, r });
+      const r = L.r0 + (k + 1) / (list.length + 1) * (L.r1 - L.r0);
+      // a gentle fan across the axis keeps neighbours from stacking into a column
+      const wob = (k % 2 ? 1 : -1) * 9, a = angleOf(i) + Math.PI / 2;
+      const p = onAxis(i, r);
+      pos.set(n.id, { x: p.x + wob * Math.cos(a), y: p.y + wob * Math.sin(a), axis: i, r });
     });
   });
   for (const n of data.nodes.filter(n => n.twin_of)) {
-    const p = pos.get(n.twin_of);
-    if (!p) continue;
-    const a = angleOf(p.axis) + Math.PI / 2;      // beside its original, across the axis from the labels
-    pos.set(n.id, { x: p.x - 30 * Math.cos(a), y: p.y - 30 * Math.sin(a), axis: p.axis, r: p.r, twin: true });
+    const p = pos.get(n.twin_of); if (!p) continue;
+    const a = angleOf(p.axis) + Math.PI / 2;
+    pos.set(n.id, { x: p.x - 34 * Math.cos(a), y: p.y - 34 * Math.sin(a), axis: p.axis, r: p.r, twin: true });
   }
   return { pos, counts: AXES.map(a => groups.get(a.kind).length) };
 }
-function arcPath(p, q) {
-  if (p.axis === q.axis) {                        // same-axis read (a step reading an earlier step): bow outward
-    const a = angleOf(p.axis) + Math.PI / 2, bend = 34 + Math.abs(p.r - q.r) * 0.25;
-    const mx = (p.x + q.x) / 2 + bend * Math.cos(a), my = (p.y + q.y) / 2 + bend * Math.sin(a);
-    return `M${p.x},${p.y} Q${mx},${my} ${q.x},${q.y}`;
+function curve(p, q, n = 30) {
+  let cx, cy;
+  if (p.axis === q.axis) {
+    const a = angleOf(p.axis) + Math.PI / 2, bend = 46 + Math.abs(p.r - q.r) * 0.22;
+    cx = (p.x + q.x) / 2 + bend * Math.cos(a); cy = (p.y + q.y) / 2 + bend * Math.sin(a);
+  } else {
+    const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;
+    cx = mx + (L.c - mx) * 0.5; cy = my + (L.c - my) * 0.5;
   }
-  const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;   // hive-plot arc: pulled toward the core
-  const cx = mx + (C.x - mx) * 0.42, cy = my + (C.y - my) * 0.42;
-  return `M${p.x},${p.y} Q${cx},${cy} ${q.x},${q.y}`;
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, u = 1 - t;
+    pts.push([u * u * p.x + 2 * u * t * cx + t * t * q.x, u * u * p.y + 2 * u * t * cy + t * t * q.y]);
+  }
+  return pts;
+}
+function resize() {
+  const r = canvas.parentElement.getBoundingClientRect();
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = Math.max(1, r.width); H = Math.max(1, r.height);
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  S = Math.min(W, H) / 1000 * 0.97;
+  OX = W / 2 - L.c * S + (W > 980 ? 18 : 0); OY = H / 2 - L.c * S + (W > 980 ? 14 : 0);
+  buildLattice();
+  paintNow();
+  if (!motes.length) for (let i = 0; i < 70; i++) motes.push({ x: Math.random() * 1000, y: Math.random() * 1000, v: 2 + Math.random() * 5, a: Math.random() * 6.28, s: 0.6 + Math.random() * 1.4, al: 0.12 + Math.random() * 0.3 });
+}
+new ResizeObserver(resize).observe(canvas.parentElement);
+const toLogical = (px, py) => ({ x: (px - OX) / S, y: (py - OY) / S });
+
+// a faint honeycomb that fades away from the core: the hive, as texture rather than decoration
+function buildLattice() {
+  lattice = document.createElement("canvas"); lattice.width = Math.round(W * dpr); lattice.height = Math.round(H * dpr);
+  const g = lattice.getContext("2d"); g.scale(dpr, dpr);
+  const R = 34 * S, h = R * Math.sqrt(3);
+  g.strokeStyle = "rgba(160,175,255,0.07)"; g.lineWidth = 1;
+  for (let row = -2; row < H / (h * 0.5) + 3; row++) for (let col = -2; col < W / (R * 1.5) + 3; col++) {
+    const x = col * R * 1.5, y = row * h + (col % 2 ? h / 2 : 0);
+    g.beginPath(); for (let k = 0; k < 6; k++) { const a = Math.PI / 3 * k; g[k ? "lineTo" : "moveTo"](x + R * 0.98 * Math.cos(a), y + R * 0.98 * Math.sin(a)); } g.closePath(); g.stroke();
+  }
+  g.globalCompositeOperation = "destination-in";
+  const cx = OX + L.c * S, cy = OY + L.c * S, m = g.createRadialGradient(cx, cy, 60 * S, cx, cy, 520 * S);
+  m.addColorStop(0, "rgba(0,0,0,1)"); m.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = m; g.fillRect(0, 0, W, H);
 }
 
-// ---------- static frame ----------
-function drawFrame(counts) {
-  const g = $("axes"); g.replaceChildren();
-  AXES.forEach((a, i) => {
-    const ax = el("g", { class: "axis" }, g);
-    const s = at(i, C.r0 - 22), e = at(i, C.r1 + 18);
-    el("line", { x1: s.x, y1: s.y, x2: e.x, y2: e.y }, ax);
-    const t = at(i, C.r1 + 52), anchor = Math.abs(t.x - C.x) < 30 ? "middle" : t.x > C.x ? "start" : "end";
-    const label = el("text", { x: t.x, y: t.y, "text-anchor": anchor, "dominant-baseline": "central" }, ax);
-    label.textContent = a.label + " ";
-    const c = el("tspan", { class: "count" }, label); c.textContent = counts[i];
-  });
-  const core = $("core"); core.replaceChildren();
-  el("path", { d: hexPath(58), transform: `translate(${C.x} ${C.y}) rotate(30)`, class: "core-hex" }, core);
-  const t1 = el("text", { x: C.x, y: C.y - 7, class: "core-text" }, core); t1.textContent = "one shared";
-  const t2 = el("text", { x: C.x, y: C.y + 11, class: "core-text" }, core); t2.textContent = "graph memory";
-}
-
-// ---------- classification ----------
-function cellClass(n) {
+// ---------------------------------------------------------------- state -> look
+function kindOf(n) {
+  if (n.isDoc) return "doc";
   const red = n.red && state.red.has(n.id);
   if (n.twin_of) return "twin";
-  if (state.view !== "precise" && !red) {
-    const wiped = state.view === "agent" ? n.naive_agent : n.naive_time;
-    return wiped ? "collateral" : "dim";
-  }
+  if (state.view !== "precise" && !red) return (state.view === "agent" ? n.naive_agent : n.naive_time) ? "collateral" : "dim";
   return red ? "red" : "";
 }
-function agentColor(name) {
-  if (!state.agents.has(name)) state.agents.set(name, `var(${AGENT_VARS[state.agents.size % AGENT_VARS.length]})`);
+function agentRGB(name) {
+  if (!state.agents.has(name)) state.agents.set(name, AGENT_RGB[state.agents.size % AGENT_RGB.length]);
   return state.agents.get(name);
 }
+const GLYPH = { red: "!", twin: "+", collateral: "×" };
+function targetLook(n, cls) {
+  if (n.isDoc) return n.flagged ? { rgb: RED, a: 1, glow: 1 } : { rgb: [120, 132, 160], a: 0.9, glow: 0.2 };
+  const base = agentRGB(n.agent);
+  if (cls === "red") return { rgb: RED, a: 1, glow: 1 };
+  if (cls === "twin") return { rgb: GREEN, a: 1, glow: 0.9 };
+  if (cls === "collateral") return { rgb: ORANGE, a: 1, glow: 0.9 };
+  if (cls === "dim") return { rgb: DIM, a: 0.5, glow: 0.05 };
+  return { rgb: base, a: 1, glow: 0.45 };
+}
+const RADIUS = { Doc: 12.5, Episode: 10.5, Fact: 13.5, PlanStep: 14.5, Artifact: 16.5 };
 
-// ---------- render ----------
+// ---------------------------------------------------------------- render (data -> visual objects)
 function render(data) {
   const live = new Set([...data.docs.map(d => d.id), ...data.nodes.map(n => n.id)]);
-  const reset = !data.nodes.some(n => n.red);
-  if (reset && (state.red.size || state.pending.size)) {
-    state.pending.forEach(t => clearTimeout(t)); state.pending.clear(); state.red.clear();
-    clearSelection();
+  if (!data.nodes.some(n => n.red) && (state.red.size || state.pending.size || state.arcing.size)) {
+    state.pending.forEach(t => clearTimeout(t)); state.pending.clear(); state.red.clear(); state.arcing.clear(); clearSelection(true);
   }
-  for (const [id, g] of cellEls) if (!live.has(id)) { g.remove(); cellEls.delete(id); meta.delete(id); }
+  for (const id of [...cells.keys()]) if (!live.has(id)) { cells.delete(id); meta.delete(id); }
   data.docs.forEach(d => meta.set(d.id, { ...d, kind: "Doc", isDoc: true }));
   data.nodes.forEach(n => meta.set(n.id, n));
   state.lastData = data;
-
   const { pos, counts } = layout(data);
-  drawFrame(counts);
+  state.counts = counts;
   $("empty").hidden = data.nodes.length > 0;
 
-  // arcs
-  const liveArcs = new Set();
-  for (const e of data.edges) {
-    const p = pos.get(e.src), q = pos.get(e.dst);
-    if (!p || !q) continue;
-    const key = `${e.src}|${e.type}|${e.dst}`;
-    liveArcs.add(key);
-    let a = arcEls.get(key);
-    if (!a) { a = el("path", { class: "arc" }, $("arcs")); a.dataset.src = e.src; a.dataset.dst = e.dst; a.dataset.type = e.type; arcEls.set(key, a); }
-    a.setAttribute("d", arcPath(p, q));
-    a.classList.toggle("sup", e.type === "SUPERSEDES");
-    if (!a.style.getPropertyValue("--len")) a.style.setProperty("--len", Math.ceil(a.getTotalLength()) + "px");
-    const hot = state.red.has(e.src) && (state.red.has(e.dst) || meta.get(e.dst)?.flagged);
-    a.classList.toggle("hot", !!hot && e.type !== "SUPERSEDES");
-  }
-  for (const [k, a] of arcEls) if (!liveArcs.has(k)) { a.remove(); arcEls.delete(k); }
-
-  // cells
   const all = [...data.docs.map(d => meta.get(d.id)), ...data.nodes];
   for (const n of all) {
-    const p = pos.get(n.id);
-    if (!p) continue;
-    let g = cellEls.get(n.id);
-    const fresh = !g;
-    if (fresh) {
-      g = el("g", { class: "cell", tabindex: "0", role: "button" }, $("cells"));
-      g.dataset.id = n.id;
-      el("path", { class: "halo", d: hexPath(n.isDoc ? 16 : 17) }, g);
-      el("path", { class: "hex", d: hexPath(n.isDoc ? 12 : 13) }, g);
-      el("text", { class: "mark" }, g);
-      const lg = el("g", { class: "lblg" }, g);
-      el("rect", { class: "lbl-bg", rx: 4 }, lg);
-      el("text", { class: "lbl" }, lg);
-      g.addEventListener("click", () => select(n.id));
-      g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(n.id); } });
-      g.addEventListener("pointerenter", () => focusNear(n.id));
-      g.addEventListener("pointerleave", () => focusNear(null));
-      g.addEventListener("focus", () => focusNear(n.id));
-      g.addEventListener("blur", () => focusNear(null));
-      cellEls.set(n.id, g);
-      if (state.seen && !reduced) { g.classList.add("enter"); setTimeout(() => g.classList.remove("enter"), 700); }
+    const p = pos.get(n.id); if (!p) continue;
+    let c = cells.get(n.id);
+    if (!c) {
+      c = { id: n.id, x: p.x, y: p.y, tx: p.x, ty: p.y, r: RADIUS[n.kind] || 10, rgb: [60, 70, 90], a: 0, glow: 0, born: performance.now(), pop: state.seen && !reduced ? 0 : 1, vis: 0, cls: "" };
+      cells.set(n.id, c);
     }
-    g.setAttribute("transform", `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})`);
-    const cls = n.isDoc ? "" : cellClass(n);
-    g.setAttribute("class", ["cell", n.isDoc ? "doc" : "", n.flagged ? "flagged" : "", cls, n.id === state.selected ? "selected" : ""].filter(Boolean).join(" "));
-    g.querySelector(".hex").style.setProperty("--ring", n.isDoc ? "" : agentColor(n.agent));
-    g.querySelector(".mark").textContent = n.isDoc ? (n.flagged ? "!" : "") : (MARK[cls] || "");
-    if (n.isDoc && n.flagged) g.querySelector(".mark").style.opacity = 1;
-    const status = n.isDoc ? (n.flagged ? "flagged source" : "source") : cls === "red" ? "quarantined" : cls === "twin" ? "healed replacement" : cls === "collateral" ? "clean, but this wipe would lose it" : "clean";
-    g.setAttribute("aria-label", `${n.id}, ${n.isDoc ? "document" : n.kind} by ${n.agent || "source"}, ${status}`);
-    // label: perpendicular to its axis, so neighbours on the same axis can never collide; flipped to stay upright
-    const lg = g.querySelector(".lblg"), lbl = g.querySelector(".lbl"), bg = g.querySelector(".lbl-bg");
-    lbl.textContent = n.id;
-    // sources take their labels on the left: their arcs arrive from the Episodes axis on the right
-    let deg = (angleOf(p.axis) * 180 / Math.PI + 90 + ((p.twin || p.axis === 0) ? 180 : 0) + 360) % 360;
-    const flip = deg > 90 && deg < 270;
-    if (flip) deg -= 180;
-    const dx = flip ? -21 : 21;
-    lg.setAttribute("transform", `rotate(${deg.toFixed(1)})`);
-    lbl.setAttribute("x", dx); lbl.setAttribute("y", 4.5); lbl.setAttribute("text-anchor", flip ? "end" : "start");
-    const w = n.id.length * 7.4 + 8;
-    bg.setAttribute("x", flip ? dx - w + 4 : dx - 4); bg.setAttribute("y", -9); bg.setAttribute("width", w.toFixed(1)); bg.setAttribute("height", 18);
-    g.classList.toggle("quiet", !n.isDoc && cls !== "red");                // only quarantined cells and sources carry labels; the rest on hover
+    c.n = n; c.tx = p.x; c.ty = p.y; c.axis = p.axis; c.twin = !!p.twin;
+    c.cls = kindOf(n); c.glyph = n.isDoc ? (n.flagged ? "!" : "") : (GLYPH[c.cls] || "");
+    c.look = targetLook(n, c.cls);
+    if (reduced || !state.seen) { c.x = c.tx; c.y = c.ty; c.rgb = c.look.rgb.slice(); c.a = c.look.a; c.glow = c.look.glow; c.pop = 1; }
   }
 
-  // the red wave: cells turn red in the order they were written, the arcs into them draw on as they land
-  const newlyRed = data.nodes.filter(n => n.red && !state.red.has(n.id) && !state.pending.has(n.id)).sort((p, q) => p.tick - q.tick);
-  newlyRed.forEach((n, i) => {
-    const land = () => {
-      state.red.add(n.id); state.pending.delete(n.id);
-      const g = cellEls.get(n.id);
-      if (g) { g.classList.add("red"); g.classList.remove("quiet"); g.querySelector(".mark").textContent = MARK.red; if (!reduced) { g.classList.add("burst"); setTimeout(() => g.classList.remove("burst"), 950); } }
-      for (const a of arcEls.values()) {
-        if (a.dataset.src === n.id && a.dataset.type !== "SUPERSEDES" && (state.red.has(a.dataset.dst) || meta.get(a.dataset.dst)?.flagged)) {
-          a.classList.add("hot", "drawing");
-        }
-      }
-      updateCounters(); updateLedger();
-    };
-    if (state.seen && !reduced) state.pending.set(n.id, setTimeout(land, 360 * (i + 1))); else land();
-  });
+  const liveArcs = new Set();
+  for (const e of data.edges) {
+    const p = pos.get(e.src), q = pos.get(e.dst); if (!p || !q) continue;
+    const key = `${e.src}|${e.type}|${e.dst}`; liveArcs.add(key);
+    let a = arcs.get(key);
+    if (!a) { a = { key, src: e.src, dst: e.dst, type: e.type, hotP: 0, pathP: 0, path: false, appear: state.seen && !reduced ? 0 : 1 }; arcs.set(key, a); }
+    a.pts = curve(p, q);
+    a.hotRule = e.type !== "SUPERSEDES" && !!meta.get(e.src)?.red && (!!meta.get(e.dst)?.red || !!meta.get(e.dst)?.flagged);
+  }
+  for (const k of [...arcs.keys()]) if (!liveArcs.has(k)) arcs.delete(k);
 
-  const c = data.counters;
+  // the wave: arcs run from the flagged source outward, then the cell they reach ignites
+  const fresh = data.nodes.filter(n => n.red && !state.red.has(n.id) && !state.pending.has(n.id)).sort((a, b) => a.tick - b.tick);
+  fresh.forEach((n, i) => {
+    const ignite = () => {
+      state.red.add(n.id); state.pending.delete(n.id);
+      const c = cells.get(n.id);
+      if (c) { c.cls = "red"; c.glyph = "!"; c.look = targetLook(c.n, "red"); rings.push({ x: c.x, y: c.y, t: performance.now(), rgb: RED }); }
+      refreshAll();
+    };
+    if (state.seen && !reduced) {
+      state.pending.set(n.id, setTimeout(() => { state.arcing.add(n.id); state.pending.set(n.id, setTimeout(ignite, 520)); }, 380 * i));
+    } else { state.arcing.add(n.id); state.red.add(n.id); const c = cells.get(n.id); if (c) { c.cls = "red"; c.glyph = "!"; c.look = targetLook(c.n, "red"); } }
+  });
+  if (!state.seen) arcs.forEach(a => { a.hotP = a.hotRule ? 1 : 0; });
+
+  state.counters = data.counters;
   state.total = data.nodes.filter(n => !n.twin_of).length;
-  state.counters = c;
-  updateCounters(); updateLedger(); updateAgents(); updateBanner(data);
-  if (state.selected && !meta.has(state.selected)) clearSelection();
+  refreshAll(); updateAgents(); updateBanner(data); buildSr(data);
+  if (state.selected && !meta.has(state.selected)) clearSelection(true);
   state.seen = true;
+  paintNow();
 }
 
+function refreshAll() { updateCounters(); updateLedger(); updateHud(); }
 function updateCounters() {
   const c = state.counters, total = state.total || 0;
-  const precise = c ? Math.min(state.red.size, c.precise) : null;
   const set = (key, v) => {
     $(`c-${key}`).textContent = v === null ? "–" : v;
     $(`t-${key}`).textContent = v === null || !total ? "" : `/${total}`;
     $(`f-${key}`).style.transform = `scaleX(${v === null || !total ? 0 : (v / total).toFixed(4)})`;
   };
-  set("precise", precise); set("agent", c ? c.per_agent : null); set("time", c ? c.time_based : null);
+  set("precise", c ? Math.min(state.red.size, c.precise) : null); set("agent", c ? c.per_agent : null); set("time", c ? c.time_based : null);
 }
-
+function updateHud() {
+  const c = state.counters, hud = $("hud"), d = state.lastData;
+  if (!d || !d.nodes.length) { $("hud-n").textContent = "–"; $("hud-of").textContent = ""; $("hud-line").textContent = "Waiting for the crew to write memory."; hud.classList.remove("hot"); return; }
+  if (!c) { $("hud-n").textContent = state.total; $("hud-of").textContent = "memories"; $("hud-line").innerHTML = `written by <b>${state.agents.size || 3} agents</b> across <b>${d.docs.length} sources</b>. Every read is an arc; no source is flagged.`; hud.classList.remove("hot"); return; }
+  const n = Math.min(state.red.size, c.precise);
+  $("hud-n").textContent = n; $("hud-of").textContent = `of ${state.total} memories`; hud.classList.toggle("hot", n > 0);
+  $("hud-line").innerHTML = `reached by <b>${esc(d.flagged)}</b>. A rollback would have lost <b>${c.time_based}</b>; wiping the agents, <b>${c.per_agent}</b>.`;
+}
 function updateBanner(data) {
   const twins = data.nodes.filter(n => n.twin_of).length;
   $("banner").innerHTML =
@@ -519,100 +450,76 @@ function updateBanner(data) {
     : `<b>Healing</b> · ${twins} memor${twins === 1 ? "y" : "ies"} rebuilt from clean sources`;
   $("live").classList.remove("down");
 }
-
 function updateLedger() {
   const items = [...meta.values()].filter(n => !n.isDoc && (state.red.has(n.id) || n.twin_of)).sort((p, q) => p.tick - q.tick);
-  const ul = $("ledger"); ul.replaceChildren();
-  $("ledger-empty").hidden = items.length > 0;
+  const ul = $("ledger"); ul.replaceChildren(); $("ledger-empty").hidden = items.length > 0;
   for (const n of items) {
-    const li = document.createElement("li"), b = document.createElement("button");
+    const li = document.createElement("li"), b = document.createElement("button"), twin = !!n.twin_of;
     b.type = "button"; b.setAttribute("aria-pressed", String(n.id === state.selected));
-    const twin = !!n.twin_of;
     b.innerHTML = `<span class="sw" style="background:${twin ? "var(--green)" : "var(--red)"}"></span>` +
-      `<span><code>${esc(n.id)}</code> <span class="what">${twin ? "replaces " + esc(n.twin_of) : esc(n.kind)}</span></span>` +
-      `<span class="what">${esc(n.agent)}</span>`;
-    b.addEventListener("click", () => select(n.id));
+      `<span><code>${esc(n.id)}</code> <span class="what">${twin ? "replaces " + esc(n.twin_of) : esc(n.kind)}</span></span><span class="what">${esc(n.agent)}</span>`;
+    b.addEventListener("click", () => select(n.id)); li.appendChild(b); ul.appendChild(li);
+  }
+}
+function updateAgents() {
+  const box = $("agents"); box.replaceChildren();
+  for (const name of [...new Set([...meta.values()].filter(n => !n.isDoc).map(n => n.agent))].filter(Boolean).sort()) {
+    const s = document.createElement("span"); s.innerHTML = `<i style="background:${rgba(agentRGB(name), 1)};border-radius:50%;clip-path:none"></i>${esc(name)}`; box.appendChild(s);
+  }
+}
+let srKey = "";
+function buildSr(data) {                      // keyboard and screen-reader access to every cell (the canvas itself is not focusable per cell)
+  const key = [...data.docs.map(d => d.id), ...data.nodes.map(n => n.id)].join("|");
+  if (key === srKey) return; srKey = key;
+  const ul = $("sr-cells"); ul.replaceChildren();
+  for (const n of [...data.docs.map(d => ({ id: d.id, kind: "document" })), ...data.nodes]) {
+    const li = document.createElement("li"), b = document.createElement("button"); b.type = "button";
+    b.textContent = `${n.id} (${n.kind})`; b.addEventListener("click", () => select(n.id));
+    b.addEventListener("focus", () => { state.hover = n.id; }); b.addEventListener("blur", () => { state.hover = null; });
     li.appendChild(b); ul.appendChild(li);
   }
 }
 
-function updateAgents() {
-  const box = $("agents"); box.replaceChildren();
-  const names = [...new Set([...meta.values()].filter(n => !n.isDoc).map(n => n.agent))].filter(Boolean).sort();
-  for (const name of names) {
-    const s = document.createElement("span");
-    s.innerHTML = `<i class="ring" style="color:${agentColor(name)}"></i>${esc(name)}`;
-    box.appendChild(s);
-  }
-}
-
-// ---------- views: what would each policy throw away? ----------
+// ---------------------------------------------------------------- policies: what would each naive wipe throw away?
 function setView(v) {
   state.view = v;
-  document.querySelectorAll(".policy").forEach(b => {
-    const on = b.dataset.view === v; b.classList.toggle("active", on); b.setAttribute("aria-pressed", String(on));
-  });
+  document.querySelectorAll(".policy").forEach(b => { const on = b.dataset.view === v; b.classList.toggle("active", on); b.setAttribute("aria-pressed", String(on)); });
   if (state.lastData) render(state.lastData);
   const lost = [...meta.values()].filter(n => !n.isDoc && !n.twin_of && !n.red && (v === "agent" ? n.naive_agent : n.naive_time)).length;
-  $("view-note").textContent = v === "precise" ? "" :
-    !state.counters ? "Flag a source first to compare." :
-    `${v === "agent" ? "Wiping every compromised agent" : "Rolling back to before the bad source"} throws away ${lost} clean memories (orange ×) with the poisoned ones. The graph keeps them.`;
+  $("view-note").textContent = v === "precise" ? "" : !state.counters ? "Flag a source first to compare." :
+    `${v === "agent" ? "Wiping every compromised agent" : "Rolling back to before the bad source"} throws away ${lost} clean memories (orange ×) along with the poisoned ones. The graph keeps them.`;
 }
-document.querySelectorAll(".policy").forEach(b => b.addEventListener("click", () => setView(state.view === b.dataset.view && b.dataset.view !== "precise" ? "precise" : b.dataset.view)));
+document.querySelectorAll(".policy").forEach(b => b.addEventListener("click", () =>
+  setView(state.view === b.dataset.view && b.dataset.view !== "precise" ? "precise" : b.dataset.view)));
 
-// ---------- focus: neighbours light up, the rest recedes ----------
-function focusNear(id) {
-  const svg = $("hive");
-  svg.classList.toggle("has-focus", !!id);
-  for (const a of arcEls.values()) a.classList.toggle("near", !!id && (a.dataset.src === id || a.dataset.dst === id));
-  for (const [cid, g] of cellEls) {
-    const near = !!id && (cid === id || [...arcEls.values()].some(a => (a.dataset.src === id && a.dataset.dst === cid) || (a.dataset.dst === id && a.dataset.src === cid)));
-    g.classList.toggle("near", near);
-  }
-}
-
-// ---------- selection: the receipt ----------
-function clearPath() { for (const a of arcEls.values()) a.classList.remove("path"); }
-function clearSelection() {
-  state.request++; state.selected = null; clearPath();
-  for (const g of cellEls.values()) g.classList.remove("selected");
-  $("detail").textContent = "Select a cell in the hive, or a memory in the ledger below.";
-  updateLedger();
+// ---------------------------------------------------------------- selection: the receipt
+function clearSelection(silent) {
+  state.request++; state.selected = null; arcs.forEach(a => { a.path = false; });
+  $("detail").textContent = "Select a cell in the hive, or a memory in the ledger below."; if (!silent) updateLedger();
 }
 async function select(id) {
   const n = meta.get(id); if (!n) return;
-  const req = ++state.request;
-  state.selected = id; clearPath();
-  for (const [cid, g] of cellEls) g.classList.toggle("selected", cid === id);
-  updateLedger();
+  const req = ++state.request; state.selected = id; arcs.forEach(a => { a.path = false; a.pathP = 0; }); updateLedger();
   const d = $("detail");
   if (n.isDoc) {
-    d.innerHTML = `<span class="kind">Source</span><span class="id">${esc(n.id)}</span><div class="text">${esc(n.title)}</div>` +
-      `<div class="meta">${n.flagged ? "Flagged: " + esc(n.reason || "prompt-injected") : "Not flagged"}</div>`;
+    d.innerHTML = `<span class="kind">Source</span><span class="id">${esc(n.id)}</span><div class="text">${esc(n.title)}</div><div class="meta">${n.flagged ? "Flagged: " + esc(n.reason || "prompt-injected") : "Not flagged"}</div>`;
     return;
   }
-  const head = `<span class="kind">${esc(n.kind)}</span><span class="id">${esc(n.id)}</span>` +
-    `<div class="text">${esc(n.text || n.value || "")}</div>` +
+  const head = `<span class="kind">${esc(n.kind)}</span><span class="id">${esc(n.id)}</span><div class="text">${esc(n.text || n.value || "")}</div>` +
     `<div class="meta">written by ${esc(n.agent)} at tick ${esc(n.tick)}${n.twin_of ? " · replaces " + esc(n.twin_of) : ""}</div>`;
   d.innerHTML = head + `<div class="meta" style="margin-top:10px">Tracing provenance…</div>`;
   try {
     const res = await fetch("/receipt?id=" + encodeURIComponent(id));
     if (!res.ok && res.status !== 503) throw new Error(`HTTP ${res.status}`);
     const rc = await res.json();
-    if (req !== state.request) return;                                 // a newer click or a reset won
+    if (req !== state.request) return;                               // a newer click or a reset won
     if (rc && rc.shape === "path") {
-      for (let i = 0; i + 1 < rc.hops.length; i++) {
-        const a = arcEls.get(`${rc.hops[i]}|${rc.via[i]}|${rc.hops[i + 1]}`);
-        if (a) { a.classList.remove("path"); void a.getBoundingClientRect(); a.classList.add("path"); }
-      }
+      for (let i = 0; i + 1 < rc.hops.length; i++) { const a = arcs.get(`${rc.hops[i]}|${rc.via[i]}|${rc.hops[i + 1]}`); if (a) { a.path = true; a.pathP = 0; } }
       const steps = rc.hops.map((h, i) => `<li><code>${esc(h)}</code>${i < rc.via.length ? `<span class="via">${esc(rc.via[i].toLowerCase().replace(/_/g, " "))}</span>` : ""}</li>`).join("");
-      d.innerHTML = head + `<span class="shape path">quarantined · ${esc(rc.len)} hops</span>` +
-        `<div class="answer">${esc(rc.sentence || "")}</div><ol class="chain">${steps}</ol>`;
+      d.innerHTML = head + `<span class="shape path">quarantined · ${esc(rc.len)} hops</span><div class="answer">${esc(rc.sentence || "")}</div><ol class="chain">${steps}</ol>`;
     } else if (rc && rc.shape) {
       d.innerHTML = head + `<span class="shape ${esc(rc.shape)}">${rc.shape === "not_in_graph" ? "not in the graph" : esc(rc.shape)}</span><div class="answer">${esc(rc.answer || "")}</div>`;
-    } else {
-      d.innerHTML = head + `<div class="err">${esc(rc && rc.error ? rc.error : "No answer from the server.")}</div>`;
-    }
+    } else d.innerHTML = head + `<div class="err">${esc(rc && rc.error ? rc.error : "No answer from the server.")}</div>`;
   } catch (err) {
     if (req !== state.request) return;
     d.innerHTML = head + `<div class="err">Receipt request failed: ${esc(err.message)}</div>`;
@@ -620,21 +527,202 @@ async function select(id) {
 }
 document.addEventListener("keydown", ev => { if (ev.key === "Escape") clearSelection(); });
 
-// ---------- polling ----------
-async function poll() {
-  try {
-    const r = await fetch("/graph");
-    const data = await r.json();
-    if (data.error) throw new Error(data.error);
-    render(data);
-  } catch (e) {
-    $("banner").innerHTML = `Graph unreachable · ${esc(e.message)}`;
-    $("live").classList.add("down");
+// ---------------------------------------------------------------- pointer
+let hoverId = null;
+function hit(px, py) {
+  const p = toLogical(px, py); let best = null, bd = 1e9;
+  for (const c of cells.values()) { const d = Math.hypot(c.x - p.x, c.y - p.y); if (d < c.r + 9 && d < bd) { best = c.id; bd = d; } }
+  return best;
+}
+canvas.addEventListener("pointermove", e => { const r = canvas.getBoundingClientRect(); hoverId = hit(e.clientX - r.left, e.clientY - r.top); state.hover = hoverId; canvas.style.cursor = hoverId ? "pointer" : "default"; });
+canvas.addEventListener("pointerleave", () => { hoverId = null; state.hover = null; });
+canvas.addEventListener("click", e => { const r = canvas.getBoundingClientRect(), id = hit(e.clientX - r.left, e.clientY - r.top); if (id) select(id); else clearSelection(); });
+
+// ---------------------------------------------------------------- animation loop
+let last = performance.now();
+function paintNow() { if (W && typeof draw === "function") { try { draw(performance.now()); } catch (e) { /* first call can precede the first layout */ } } }   // a changed canvas is never left blank
+function tick(ts) {
+  if (document.hidden || !W) return;
+  const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000)); last = ts;
+  update(dt, ts); draw(ts);
+}
+function frame(ts) { requestAnimationFrame(frame); tick(ts); }
+// some embedded and background contexts throttle requestAnimationFrame to ~1 fps; a watchdog keeps the picture current
+setInterval(() => { const now = performance.now(); if (now - last > 180) tick(now); }, 90);
+function update(dt, ts) {
+  const k = reduced ? 1 : Math.min(1, dt * 7);
+  for (const c of cells.values()) {
+    c.x += (c.tx - c.x) * k; c.y += (c.ty - c.y) * k;
+    const t = c.look; if (!t) continue;
+    c.rgb = mix(c.rgb, t.rgb, k); c.a += (t.a - c.a) * k; c.glow += (t.glow - c.glow) * k;
+    c.pop += (1 - c.pop) * Math.min(1, dt * 6);
+  }
+  for (const a of arcs.values()) {
+    const want = state.arcing.has(a.src) && a.hotRule ? 1 : 0;
+    a.hotP += (want - a.hotP) * (reduced ? 1 : Math.min(1, dt * 3.2));
+    a.pathP += ((a.path ? 1 : 0) - a.pathP) * (reduced ? 1 : Math.min(1, dt * 5));
+    a.appear += (1 - a.appear) * Math.min(1, dt * 4);
+  }
+  if (reduced) return;
+  for (const m of motes) { m.x += Math.cos(m.a) * m.v * dt; m.y += Math.sin(m.a) * m.v * dt; m.a += (Math.random() - .5) * 0.4 * dt; if (m.x < 0) m.x += 1000; if (m.x > 1000) m.x -= 1000; if (m.y < 0) m.y += 1000; if (m.y > 1000) m.y -= 1000; }
+  // light flowing along reads: from what was read (dst) to the memory that read it (src); red from the flagged source outward on hot arcs
+  const want = Math.min(90, arcs.size * 1.6);
+  if (particles.length < want && Math.random() < 0.9) {
+    const list = [...arcs.values()].filter(a => a.type !== "SUPERSEDES"); const a = list[(Math.random() * list.length) | 0];
+    if (a) particles.push({ a, t: 0, v: 0.18 + Math.random() * 0.22 });
+  }
+  particles = particles.filter(p => (p.t += p.v * dt) < 1);
+  rings = rings.filter(r => ts - r.t < 1100);
+}
+
+function pointAt(a, t) { const n = a.pts.length - 1, f = Math.min(n, Math.max(0, t * n)), i = Math.min(n - 1, f | 0), u = f - i; return [a.pts[i][0] + (a.pts[i + 1][0] - a.pts[i][0]) * u, a.pts[i][1] + (a.pts[i + 1][1] - a.pts[i][1]) * u]; }
+function strokePts(pts, from, to) {         // draw the part of a polyline between fractions [from, to]
+  const n = pts.length - 1, i0 = Math.floor(from * n), i1 = Math.ceil(to * n);
+  ctx.beginPath(); const s = pointPts(pts, from); ctx.moveTo(s[0], s[1]);
+  for (let i = i0 + 1; i < i1; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  const e = pointPts(pts, to); ctx.lineTo(e[0], e[1]); ctx.stroke();
+}
+function pointPts(pts, t) { const n = pts.length - 1, f = Math.min(n, Math.max(0, t * n)), i = Math.min(n - 1, f | 0), u = f - i; return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * u, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * u]; }
+
+function neighbours(id) {
+  const s = new Set([id]); if (!id) return s;
+  for (const a of arcs.values()) { if (a.src === id) s.add(a.dst); if (a.dst === id) s.add(a.src); }
+  return s;
+}
+function draw(ts) {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  if (lattice) ctx.drawImage(lattice, 0, 0, W, H);
+  ctx.save(); ctx.translate(OX, OY); ctx.scale(S, S);
+
+  // ambient motes: the hive is never perfectly still
+  if (!reduced) { ctx.globalCompositeOperation = "lighter"; for (const m of motes) { ctx.fillStyle = `rgba(170,190,255,${m.al})`; ctx.beginPath(); ctx.arc(m.x, m.y, m.s, 0, 6.283); ctx.fill(); } }
+
+  // axes
+  ctx.globalCompositeOperation = "lighter"; ctx.lineCap = "round";
+  AXES.forEach((a, i) => {
+    const s = onAxis(i, L.r0 - 34), e = onAxis(i, L.r1 + 22), g = ctx.createLinearGradient(s.x, s.y, e.x, e.y);
+    g.addColorStop(0, "rgba(160,175,255,0)"); g.addColorStop(0.18, "rgba(160,175,255,0.28)"); g.addColorStop(1, "rgba(160,175,255,0.05)");
+    ctx.strokeStyle = g; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y); ctx.stroke();
+  });
+  // core
+  const core = ctx.createRadialGradient(L.c, L.c, 0, L.c, L.c, 80); core.addColorStop(0, "rgba(120,140,255,0.16)"); core.addColorStop(1, "rgba(120,140,255,0)");
+  ctx.fillStyle = core; ctx.beginPath(); ctx.arc(L.c, L.c, 80, 0, 6.283); ctx.fill();
+
+  const focus = state.hover || null, near = neighbours(focus || state.selected);
+  const dimOthers = !!(focus || state.selected);
+
+  // arcs
+  for (const a of arcs.values()) {
+    const cs = cells.get(a.src), cd = cells.get(a.dst); if (!cs || !cd) continue;
+    const isNear = dimOthers && (near.has(a.src) && near.has(a.dst)) && (a.src === (focus || state.selected) || a.dst === (focus || state.selected));
+    const fade = (dimOthers && !isNear && !a.path ? 0.35 : 1) * a.appear;
+    const sup = a.type === "SUPERSEDES";
+    const grad = ctx.createLinearGradient(cs.x, cs.y, cd.x, cd.y);
+    const c1 = sup ? GREEN : cs.rgb, c2 = sup ? GREEN : cd.rgb;
+    const base = sup ? 0.5 : 0.17;
+    grad.addColorStop(0, rgba(c1, base * fade * Math.max(cs.a, 0.35))); grad.addColorStop(1, rgba(c2, base * fade * Math.max(cd.a, 0.35)));
+    ctx.strokeStyle = grad; ctx.lineWidth = sup ? 1.8 : 1.15;
+    if (sup) ctx.setLineDash([4, 6]); strokePts(a.pts, 0, 1); ctx.setLineDash([]);
+    if (isNear) { ctx.strokeStyle = rgba(lift(cs.rgb, .3), 0.55); ctx.lineWidth = 1.8; strokePts(a.pts, 0, 1); }
+    if (a.hotP > 0.01) {                                    // contamination spreads from the source end toward the reader
+      const from = 1 - a.hotP;
+      ctx.strokeStyle = rgba(RED, 0.16); ctx.lineWidth = 9; strokePts(a.pts, from, 1);
+      ctx.strokeStyle = rgba(RED, 0.95 * Math.min(1, a.hotP * 1.4)); ctx.lineWidth = 2.2; strokePts(a.pts, from, 1);
+    }
+    if (a.pathP > 0.01) {                                   // the receipt: gold, drawn from the memory back to the source
+      ctx.strokeStyle = rgba(GOLD, 0.2 * a.pathP); ctx.lineWidth = 12; strokePts(a.pts, 0, a.pathP);
+      ctx.strokeStyle = rgba(GOLD, 0.95 * a.pathP); ctx.lineWidth = 3.4; strokePts(a.pts, 0, a.pathP);
+    }
+  }
+  // light on the wires
+  if (!reduced) for (const p of particles) {
+    const a = p.a, hot = a.hotP > 0.5, t = 1 - p.t;           // travel dst -> src
+    const [x, y] = pointAt(a, hot ? p.t : t), col = hot ? RED : lift(cells.get(a.dst)?.rgb || [160, 175, 255], 0.35);
+    ctx.fillStyle = rgba(col, hot ? 0.95 : 0.75); ctx.beginPath(); ctx.arc(x, y, hot ? 2.6 : 1.9, 0, 6.283); ctx.fill();
+    ctx.fillStyle = rgba(col, 0.2); ctx.beginPath(); ctx.arc(x, y, hot ? 8 : 5.5, 0, 6.283); ctx.fill();
+  }
+  // shockwave rings where a cell ignites
+  for (const r of rings) { const u = (ts - r.t) / 1100, e = 1 - Math.pow(1 - u, 3); ctx.strokeStyle = rgba(r.rgb, 0.7 * (1 - u)); ctx.lineWidth = 3 * (1 - u) + 0.5; ctx.beginPath(); ctx.arc(r.x, r.y, 14 + e * 70, 0, 6.283); ctx.stroke(); }
+
+  // cells
+  const labels = [];
+  const order = [...cells.values()].sort((p, q) => (p.cls === "red") - (q.cls === "red"));
+  for (const c of order) {
+    const dim = dimOthers && !near.has(c.id) && c.id !== state.selected ? 0.38 : 1;
+    const R = c.r * (0.4 + 0.6 * Math.min(1, c.pop)) * (c.cls === "red" ? 1 + 0.07 * Math.sin(ts / 260 + c.x) : 1);
+    const al = c.a * dim * Math.min(1, c.pop * 1.4);
+    if (c.n.isDoc) { hexCell(c, R, al, ts); }
+    else {
+      ctx.globalCompositeOperation = "lighter";
+      const gR = R * (2.6 + c.glow * 1.4), g = ctx.createRadialGradient(c.x, c.y, R * 0.4, c.x, c.y, gR);
+      g.addColorStop(0, rgba(c.rgb, 0.34 * c.glow * al)); g.addColorStop(1, rgba(c.rgb, 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, gR, 0, 6.283); ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+      const o = ctx.createRadialGradient(c.x - R * 0.35, c.y - R * 0.4, R * 0.1, c.x, c.y, R);
+      o.addColorStop(0, rgba(lift(c.rgb, 0.62), al)); o.addColorStop(0.55, rgba(c.rgb, al)); o.addColorStop(1, rgba(sink(c.rgb, 0.5), al));
+      ctx.fillStyle = o; ctx.beginPath(); ctx.arc(c.x, c.y, R, 0, 6.283); ctx.fill();
+      ctx.strokeStyle = rgba(lift(c.rgb, 0.5), 0.55 * al); ctx.lineWidth = 1.1; ctx.stroke();
+      if (c.glyph) { ctx.fillStyle = `rgba(8,10,16,${0.9 * al})`; ctx.font = `800 ${Math.round(R * 1.1)}px ${getComputedStyle(document.body).fontFamily}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(c.glyph, c.x, c.y + 0.5); }
+    }
+    if (c.id === state.selected) { ctx.strokeStyle = rgba(GOLD, 0.95); ctx.lineWidth = 2.4; ctx.beginPath(); ctx.arc(c.x, c.y, R + 7, 0, 6.283); ctx.stroke(); ctx.strokeStyle = rgba(GOLD, 0.25); ctx.lineWidth = 9; ctx.stroke(); }
+    if (c.id === state.hover) { ctx.strokeStyle = "rgba(255,255,255,0.85)"; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(c.x, c.y, R + 5, 0, 6.283); ctx.stroke(); }
+    const show = c.n.isDoc || c.cls === "red" || c.cls === "twin" || c.id === state.selected || c.id === state.hover || (dimOthers && near.has(c.id));
+    if (show) labels.push({ c, R, text: c.id, strong: c.cls === "red" || c.id === state.selected || c.id === state.hover });
+  }
+  // axis titles
+  ctx.globalCompositeOperation = "source-over"; ctx.textBaseline = "middle";
+  const fam = getComputedStyle(document.body).fontFamily;
+  AXES.forEach((a, i) => {
+    const t = onAxis(i, L.r1 + 62), count = String(state.counts ? state.counts[i] : "");
+    ctx.textAlign = "left"; ctx.font = `600 17px ${fam}`; const w1 = ctx.measureText(a.label).width;
+    ctx.font = `500 14px ${fam}`; const w2 = ctx.measureText(count).width, total = w1 + 7 + w2;
+    const x0 = Math.abs(t.x - L.c) < 40 ? t.x - total / 2 : t.x > L.c ? t.x : t.x - total;
+    ctx.font = `600 17px ${fam}`; ctx.fillStyle = "rgba(235,238,248,0.9)"; ctx.fillText(a.label, x0, t.y);
+    ctx.font = `500 14px ${fam}`; ctx.fillStyle = "rgba(150,160,180,0.95)"; ctx.fillText(count, x0 + w1 + 7, t.y + 1);
+  });
+  drawLabels(labels, fam);
+  ctx.restore();
+  ctx.globalCompositeOperation = "source-over";
+}
+function hexCell(c, R, al, ts) {
+  const flagged = c.n.flagged;
+  if (flagged) { ctx.globalCompositeOperation = "lighter"; const g = ctx.createRadialGradient(c.x, c.y, R * 0.5, c.x, c.y, R * 4); g.addColorStop(0, rgba(RED, 0.5 * (0.8 + 0.2 * Math.sin(ts / 300)))); g.addColorStop(1, rgba(RED, 0)); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(c.x, c.y, R * 4, 0, 6.283); ctx.fill(); }
+  ctx.globalCompositeOperation = "source-over";
+  ctx.beginPath(); for (let k = 0; k < 6; k++) { const a = Math.PI / 3 * k; ctx[k ? "lineTo" : "moveTo"](c.x + R * Math.cos(a), c.y + R * Math.sin(a)); } ctx.closePath();
+  ctx.fillStyle = flagged ? rgba(sink(RED, 0.55), al) : `rgba(20,25,40,${0.95 * al})`; ctx.fill();
+  ctx.strokeStyle = flagged ? rgba(RED, al) : `rgba(140,152,185,${0.75 * al})`; ctx.lineWidth = flagged ? 2.2 : 1.4; if (!flagged) ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
+  if (flagged) { ctx.fillStyle = `rgba(255,255,255,${al})`; ctx.font = `800 ${Math.round(R * 1.1)}px ${getComputedStyle(document.body).fontFamily}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("!", c.x, c.y + 0.5); }
+}
+function drawLabels(list, fam) {                     // horizontal pills, pushed apart so none overlap
+  ctx.font = `600 13px ${fam}`; ctx.textBaseline = "middle";
+  const boxes = list.map(l => {
+    const w = ctx.measureText(l.text).width + 14, h = 21, c = l.c;
+    const dx = c.x - L.c, dy = c.y - L.c, d = Math.hypot(dx, dy) || 1, left = c.n.isDoc ? true : dx < -12;
+    const x = c.n.isDoc ? c.x - l.R - 10 - w : left ? c.x - l.R - 10 - w : c.x + l.R + 10;
+    const y = c.n.isDoc ? c.y - h / 2 : c.y + (dy / d) * 4 - h / 2;
+    return { l, x, y, w, h };
+  }).sort((a, b) => a.y - b.y);
+  for (let it = 0; it < 10; it++) for (let i = 1; i < boxes.length; i++) {
+    const a = boxes[i - 1], b = boxes[i];
+    if (a.x < b.x + b.w && b.x < a.x + a.w && b.y < a.y + a.h) { const push = (a.y + a.h - b.y) / 2 + 0.5; a.y -= push; b.y += push; }
+  }
+  for (const b of boxes) {
+    ctx.fillStyle = "rgba(9,11,18,0.82)"; ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 8); ctx.fill();
+    ctx.strokeStyle = b.l.strong ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.1)"; ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = b.l.strong ? "#fff" : "rgba(210,216,230,0.9)"; ctx.textAlign = "left"; ctx.fillText(b.l.text, b.x + 7, b.y + b.h / 2 + 0.5);
   }
 }
-window.hive = { state, meta, cellEls, arcEls, select, setView, clearSelection, poll };   // used by scripts/check_browser.js
-poll();
-setInterval(poll, 1000);
+
+// ---------------------------------------------------------------- polling
+async function poll() {
+  try {
+    const r = await fetch("/graph"); const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    render(data);
+  } catch (e) { $("banner").innerHTML = `Graph unreachable · ${esc(e.message)}`; $("live").classList.add("down"); }
+}
+window.hive = { state, meta, cells, arcs, select, setView, clearSelection, poll, resize };   // used by scripts/check_browser.js
+resize(); requestAnimationFrame(frame); poll(); setInterval(poll, 1000);
 </script>
 </body>
 </html>

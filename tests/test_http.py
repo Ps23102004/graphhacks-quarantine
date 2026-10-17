@@ -51,7 +51,7 @@ def test_http_root_and_index_html(running_server):
             assert resp.status == 200
             assert "text/html" in resp.headers.get("Content-Type", "")
             body = resp.read().decode()
-            assert "Quarantine" in body and "id=\"hive\"" in body
+            assert "Quarantine" in body and "id=\"stage\"" in body
 
 
 def test_http_page_is_self_contained(running_server):

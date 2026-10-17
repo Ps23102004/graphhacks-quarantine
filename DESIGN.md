@@ -1,17 +1,17 @@
-# DESIGN.md — the Quarantine hive (recorded from the built page, 2026-10-17)
+# DESIGN.md — the Quarantine hive (canvas build, recorded 2026-10-17)
 
 ## World
 
-- **Form:** a hive plot. Five radial axes around a quiet core, one per kind of memory, in provenance order: Sources (top), Episodes, Facts, Plan steps, Files (clockwise, 72° apart). Each memory is a hexagonal cell placed on its axis by write order. Provenance is a curved arc pulled toward the core; a read between two cells on the same axis bows outward. No force layout, no physics: the picture is the same every time the same graph is loaded.
+- **Form:** a hive plot. Five radial axes around a quiet core, one per kind of memory, in provenance order: Sources (top), Episodes, Facts, Plan steps, Files (clockwise, 72° apart). Each memory is a luminous orb (documents are hexagons) placed on its axis by write order, coloured by the agent that wrote it; a faint honeycomb lattice fades out from the core. Provenance is a curved arc with light particles flowing along it, pulled toward the core; a read between two cells on the same axis bows outward. No force layout, no physics: the picture is the same every time the same graph is loaded.
 - **Ground:** graphite night `#0b0d12` with one soft radial lift behind the hive. Chosen for the recording scene and dim demo rooms; there is no light theme.
-- **Material:** Apple-style translucent layers: the sticky top bar and the inspector column use `backdrop-filter` blur over the ground; cards are one step lighter glass with a 1px hairline (`rgba(255,255,255,.08)`), radius 14px. `prefers-reduced-transparency` makes them solid.
+- **Material:** The hive is drawn on one `<canvas>` with additive blending (glow orbs, arcs, particles); a glass HUD states the headline number. Apple-style translucent layers: the sticky top bar and the inspector column use `backdrop-filter` blur over the ground; cards are one step lighter glass with a 1px hairline (`rgba(255,255,255,.08)`), radius 14px. `prefers-reduced-transparency` makes them solid.
 - **Type:** the platform system face (SF on Apple devices) at body 15px; numbers tabular; large counters 38px weight 650 tracking -0.03em; ids in the system monospace.
 
 ## Colour roles (meaning, never decoration)
 
 | role | value | used for |
 |---|---|---|
-| clean memory | `#2a3140` fill | default cell |
+| clean memory | agent colour | default orb; colour = author |
 | quarantined | `#ff453a` (system red) | red cells, hot arcs, the precise counter |
 | healed replacement | `#30d158` (system green) | twin cells beside their original, dashed SUPERSEDES arc |
 | naive casualty | `#ff9f0a` (system orange) | clean cells a naive wipe would destroy (only in the two comparison views) |
@@ -31,7 +31,7 @@ Every state also has a non-colour marker inside the cell: `!` quarantined or fla
 - Click, or focus and press Enter/Space, on any cell: the inspector shows what it says, who wrote it and when, and the server's answer in one of four shapes; for a quarantined memory the path to the source lights up and reads as a sentence. Escape clears.
 - Hover or focus: the cell's neighbours stay lit, everything else recedes.
 - The three policy cards are toggles: the precise view, and two views that paint in orange what each naive wipe would lose.
-- Labels: sources and quarantined cells are labelled; every other label appears on hover, focus or selection. Labels run perpendicular to their axis, so neighbours never collide.
+- Labels: sources and quarantined cells are labelled; every other label appears on hover, focus or selection. Labels are pills with collision avoidance. Keyboard and screen-reader access goes through a hidden button list (`#sr-cells`).
 
 ## Layout
 

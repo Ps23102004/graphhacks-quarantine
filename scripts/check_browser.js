@@ -1,5 +1,5 @@
 // Browser checks for the hive page. Only HTTP responses are substituted; the real page, its timers,
-// SVG rendering and click/keyboard handlers run unchanged.
+// canvas rendering and click/keyboard handlers run unchanged.
 //   playwright-cli open http://127.0.0.1:8765
 //   playwright-cli run-code --filename scripts/check_browser.js
 // Requires the demo seeded with `quarantine session1` (the checks derive their fixtures from it).
@@ -46,26 +46,32 @@ async (page) => {
   const checks = [];
   const check = (name, ok, detail) => checks.push({ name, passed: !!ok, detail });
   const show = async data => { current = data; await page.evaluate(() => hive.poll()); };
-  const clickMemory = id => page.locator(`#hive .cell[data-id="${id}"]`).click();
+  // Cells are drawn on a canvas, so a click is a real mouse click at the cell's pixel position.
+  const clickMemory = async id => {
+    const pt = await page.evaluate(id => { const c = hive.cells.get(id), r = document.querySelector('#stage').getBoundingClientRect();
+      return { x: r.left + OX + c.x * S, y: r.top + OY + c.y * S }; }, id);
+    await page.mouse.click(pt.x, pt.y);
+  };
   const receiptShown = () => document.querySelector('#detail').textContent.includes('hops');
   const outside = () => {
-    const box = document.querySelector('#hive').getBoundingClientRect();
-    return [...hive.cellEls.entries()].filter(([, g]) => {
-      const b = g.querySelector('.hex').getBoundingClientRect();
-      return b.left < box.left - 1 || b.top < box.top - 1 || b.right > box.right + 1 || b.bottom > box.bottom + 1;
-    }).map(([id]) => id);
+    const box = document.querySelector('#stage').getBoundingClientRect();
+    return [...hive.cells.values()].filter(c => {
+      const x = OX + c.x * S, y = OY + c.y * S;
+      return x - c.r * S < 0 || y - c.r * S < 0 || x + c.r * S > box.width || y + c.r * S > box.height;
+    }).map(c => c.id);
   };
   const checkFit = async name => {
     await page.evaluate(() => new Promise(requestAnimationFrame));
     const clipped = await page.evaluate(outside);
     check(name, !clipped.length, clipped);
   };
+  const count = cls => page.evaluate(cls => [...hive.cells.values()].filter(c => c.cls === cls).length, cls);
   await page.route('**/graph', graphRoute);
   await page.route('**/receipt?*', receiptRoute);
   try {
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.goto(url);
-    await page.waitForFunction(() => window.hive && hive.cellEls.size === 33);
+    await page.waitForFunction(() => window.hive && hive.cells.size === 33);
     for (const width of [1920, 960, 375]) {
       await page.setViewportSize({ width, height: width === 375 ? 812 : 1080 });
       await checkFit(`every cell visible at ${width}px`);
@@ -76,43 +82,36 @@ async (page) => {
     await show(flagged);
     await page.waitForFunction(() => hive.state.red.size === 6, undefined, { timeout: 8000 });
     check('precise counter reaches 6 with the wave', await page.evaluate(() => document.querySelector('#c-precise').textContent === '6'));
-    check('quarantined cells carry a non-colour marker', await page.evaluate(ids =>
-      ids.every(id => hive.cellEls.get(id).querySelector('.mark').textContent === '!'), redIds));
-    check('flagged source carries a non-colour marker', await page.evaluate(() =>
-      hive.cellEls.get('doc_7').querySelector('.mark').textContent === '!'));
+    check('quarantined cells carry a non-colour marker', await page.evaluate(ids => ids.every(id => hive.cells.get(id).glyph === '!'), redIds));
+    check('flagged source carries a non-colour marker', await page.evaluate(() => hive.cells.get('doc_7').glyph === '!'));
 
     await clickMemory('a_requirements');
     await page.waitForFunction(receiptShown);
-    check('receipt highlights four arcs', await page.evaluate(() => document.querySelectorAll('#hive .arc.path').length === 4));
+    check('receipt highlights four arcs', await page.evaluate(() => [...hive.arcs.values()].filter(a => a.path).length === 4));
     check('receipt reads as a sentence', await page.evaluate(() => document.querySelector('#detail').textContent.includes('was extracted from doc_7')));
 
     await page.evaluate(() => hive.setView('time'));
-    check('time-based view paints 13 clean casualties', await page.evaluate(() => document.querySelectorAll('#hive .cell.collateral').length === 13));
+    check('time-based view paints 13 clean casualties', (await count('collateral')) === 13);
     await page.evaluate(() => hive.setView('agent'));
-    check('per-agent view paints 19 clean casualties', await page.evaluate(() => document.querySelectorAll('#hive .cell.collateral').length === 19));
+    check('per-agent view paints 19 clean casualties', (await count('collateral')) === 19);
     await page.evaluate(() => hive.setView('precise'));
-    check('precise view shows no casualties', await page.evaluate(() => document.querySelectorAll('#hive .cell.collateral').length === 0));
+    check('precise view shows no casualties', (await count('collateral')) === 0);
 
     await show(healed);
-    check('healed twin carries a non-colour marker', await page.evaluate(() =>
-      hive.cellEls.get('f_http_client_v2').querySelector('.mark').textContent === '+'));
+    check('healed twin carries a non-colour marker', await page.evaluate(() => hive.cells.get('f_http_client_v2').glyph === '+'));
     for (const width of [1920, 960]) {
       await page.setViewportSize({ width, height: 1080 });
       await checkFit(`healed graph fits at ${width}px`);
     }
 
-    await page.locator('#hive .cell[data-id="step_3"]').focus();
+    await page.locator('#sr-cells button', { hasText: 'step_3 (' }).focus();
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => hive.state.selected === 'step_3');
     check('a cell can be selected from the keyboard', true);
 
     await show(clean);
-    check('reset clears receipt, highlight and selection', await page.evaluate(() =>
-      !document.querySelector('#detail').textContent.includes('hops') &&
-      !document.querySelector('#hive .arc.path') && !document.querySelector('#hive .cell.selected')));
-    check('reset removes twins and status markers', await page.evaluate(() =>
-      hive.cellEls.size === 33 && hive.state.red.size === 0 && hive.state.pending.size === 0 &&
-      !document.querySelector('#hive .cell.red, #hive .cell.twin') && document.querySelector('#c-precise').textContent === '–'));
+    check('reset clears receipt, highlight and selection', await page.evaluate(() => !document.querySelector('#detail').textContent.includes('hops') && ![...hive.arcs.values()].some(a => a.path) && hive.state.selected === null));
+    check('reset removes twins and status markers', await page.evaluate(() => hive.cells.size === 33 && hive.state.red.size === 0 && hive.state.pending.size === 0 && ![...hive.cells.values()].some(c => c.cls === 'red' || c.cls === 'twin') && document.querySelector('#c-precise').textContent === '–'));
 
     await show(flagged);
     await page.waitForFunction(() => hive.state.red.size === 6, undefined, { timeout: 8000 });
