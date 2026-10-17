@@ -40,9 +40,10 @@ echo "== 5. Verify HTTP endpoints =="
 curl -s -f "http://127.0.0.1:$PORT/" | grep -q "QUARANTINE"
 echo "  PASS: GET /"
 
-# Check vendor js
-curl -s -f -o /dev/null "http://127.0.0.1:$PORT/vendor/vis-network.min.js"
-echo "  PASS: GET /vendor/vis-network.min.js"
+# Check /receipt JSON (the page loads nothing else; the server's routes are /, /index.html, /graph and /receipt)
+out="$(curl -s -f "http://127.0.0.1:$PORT/receipt?id=a_requirements")"
+grep -q '"shape"' <<<"$out"
+echo "  PASS: GET /receipt returns an answer shape"
 
 # Check /graph JSON
 out="$(curl -s -f "http://127.0.0.1:$PORT/graph")"

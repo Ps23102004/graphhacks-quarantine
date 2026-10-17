@@ -2,7 +2,7 @@
 
 You are the merge gate. Parth builds on `improve`; nothing lands on `main` until you sign off. The Thursday baseline is the tag `freeze-v1` (also what `main` is at), so if `improve` is not ready by Sat 18:00 EDT we submit `freeze-v1` and lose nothing.
 
-Size of the change: 14 commits, 30 files, +1858 / -172 lines (`git diff --stat freeze-v1..improve`). About 1,600 lines of product code in `quarantine/`, about 1,100 lines of new tests.
+Size of the change when this brief was written (Fri 2026-10-16; it has grown since): 14 commits, 30 files, +1858 / -172 lines. Run `git diff --shortstat freeze-v1..improve` for the current size. About 1,600 lines of product code in `quarantine/`, about 1,100 lines of new tests.
 
 ## 0. Get the code
 
@@ -21,10 +21,11 @@ Tools needed: Docker, `uv`.
 docker run -d --name quarantine-falkordb -p 6379:6379 -p 3000:3000 \
   falkordb/falkordb:6.0.2@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6
 uv sync --all-extras                  # --all-extras matters: the MCP tests need the optional SDK
-uv run pytest -q                      # expect: 95 passed (about 60 s). Note any skips.
-scripts/validate.sh                   # expect: validation: 29 passed, 0 failed (about 3 min; starts its own FalkorDB on :6390)
+uv run pytest -q                      # expect: all passed, 0 failed (about 1 to 2 min; the count changes, see docs/TESTING.md). Note any skips.
+scripts/validate.sh                   # expect: validation: N passed, 0 failed (about 3 min; copies the working tree, uncommitted edits included; starts its own FalkorDB on :6390)
 scripts/validate_compose.sh           # expect: all checks pass. NOT re-run since Friday's compose change: this is the one to watch
 uv run python scripts/heldout_eval.py --worlds 100 --pipeline-worlds 30   # expect: 0 graph != oracle, 0 violations
+uv run python scripts/counterfactual_eval.py --worlds 20   # expect: 0 false negatives, 0 invented receipts (see docs/COUNTERFACTUAL.md)
 uv run python scripts/mutation_check.py   # about 20 min; expect: 0 unexpected survivors (2 documented equivalent mutants are fine)
 ```
 
@@ -47,10 +48,10 @@ Write down anything that differs from "expect". A fresh-machine failure is worth
 | # | where | why it matters | what to look for |
 |---|---|---|---|
 | 1 | `quarantine/loader.py` `rework`, `derive_rework`, `write_procedure` | the write path; an earlier version copied poisoned text into a clean twin | fencing (author, session, lease), atomicity of the single-statement write, the empty-read-set branch, `needs_regeneration` / `ungrounded` / `REWORKED_FOR`, anything that lets a clean memory cite a quarantined one |
-| 2 | `quarantine/queries.py` (diff vs `freeze-v1`) | every Cypher statement | `TAINT_CLOSURE` is now unbounded (`*1..`): confirm it terminates on cycles if anyone ever writes one. `SUPPORT_AND_HEALABLE` and `HEAL_FACTS` both encode the heal rule (strict plurality, at least 2): two copies that must agree, so check for drift. `HEAL_FACTS` now uses `FOREACH` to record dissent. `CREATE_REWORK_TASKS` adds `FOLLOWS` |
+| 2 | `quarantine/queries.py` (diff vs `freeze-v1`) | every Cypher statement | `TAINT_CLOSURE` is now unbounded (`*1..`): confirm it terminates on cycles if anyone ever writes one. `SUPPORT_AND_HEALABLE` and `HEAL_FACTS` both encode the heal rule (strict plurality, at least 2): two copies that must agree, so check for drift. `HEAL_FACTS` uses `FOREACH` to record the outvoted clean episodes as `OUTVOTED` edges, which the closure and receipts do not follow. `CREATE_REWORK_TASKS` adds `FOLLOWS` |
 | 3 | `quarantine/answers.py` (new, 189 lines) | the fixed tool catalog the organizers' guide asks for | `valid_id` and the resolvers run before any query; `sentence()` raises on malformed paths; `why_connected` uses `algo.SPpaths` and falls back to `shortestPath` only if it raises; `blast_radius` runs one receipt query per member (fine at 25 nodes, slow at thousands) |
 | 4 | `quarantine/mcp_server.py` | what a real AI host would call | every tool should answer in one of four shapes (`path`, `memory`, `not_in_graph`, `unknown`). **Smell:** `_recovery()` loops over module names with `except Exception: continue`, which can hide a real failure. Decide whether to tighten it |
-| 5 | `web/server.py`, `web/index.html` | the video's main screen | reads only via `ro_query`; host-header check; all agent text escaped (XSS fix from the Thursday review); the orange "naive wipe" overlay; behaviour with two flagged docs (counters intentionally go blank) |
+| 5 | `web/server.py`, `web/index.html` | the video's main screen | reads only via `ro_query`; host-header check; all agent text escaped (XSS fix from the Thursday review); the hatched ochre "naive wipe" casualty views; behaviour with two flagged docs (counters intentionally go blank) |
 | 6 | `quarantine/worldgen.py`, `heldout.py` | the "unseen data" evidence | the oracle must really be independent of the Cypher (it is plain-Python sets); would a bug in both go unnoticed? |
 | 7 | `docs/GUIDELINE-CONFORMANCE.md`, `docs/EVAL-HELDOUT.md` | claims we will make in the README | every claim has a test and an honest limit; flag any sentence that overstates |
 | 8 | `deploy/docker-compose.yml`, `scripts/validate_compose.sh` | "local to live by env vars" | `docker compose config` with `FALKORDB_HOST` etc. set shows them in the web service; nobody has tried a real FalkorDB Cloud instance |
@@ -64,7 +65,8 @@ Write down anything that differs from "expect". A fresh-machine failure is worth
 5. Point `--graph` at a name that does not exist. Known gap: some write-path commands create an empty graph; list which ones.
 6. Run with `FALKORDB_PORT` pointing at a second container while the demo one is running; nothing should touch the wrong one.
 7. Write one new held-out generator setting we did not think of (many agents, very wide facts, a fact supported only by poisoned episodes) and see if graph and oracle still agree.
-8. Read `tests/test_guideline.py` and `tests/test_track02_bar.py` as a skeptic: is any assertion true by construction? (Twelve AI skeptics already did this once; a human pass is different.)
+8. Flag `doc_7`, then `uv run quarantine unflag doc_7` (retract a false alarm): nothing should stay red. After `session2` has started healing, `unflag` must refuse.
+9. Read `tests/test_guideline.py` and `tests/test_track02_bar.py` as a skeptic: is any assertion true by construction? (Twelve AI skeptics already did this once; a human pass is different.)
 
 ## 4. Known weak spots (do not rediscover these, but do judge whether they matter)
 
@@ -74,7 +76,7 @@ Write down anything that differs from "expect". A fresh-machine failure is worth
 - Tenant isolation is by graph name on one FalkorDB instance, not by credential.
 - The kickoff email's guide was paraphrased by Parth, not read by us; Aman is confirming it. The six rules may be slightly off.
 - FalkorDB Cloud has never been tried; only the connection arguments and `docker compose config` are tested.
-- The page was checked by eye at 800x955 only; not at 1920x1080 or on a projector; red-versus-grey is distinguishable by label markers (`!`, `+`, `x`) but nobody colour-blind has looked.
+- The page is checked by `scripts/check_browser.js` at 1920, 960 and 375 wide, not on a projector; quarantined, healed and naive-casualty chips carry label markers (`!`, `+`, `×`) besides colour, but nobody colour-blind has looked.
 
 ## 5. Merge criteria (all must be true)
 
@@ -91,7 +93,7 @@ Then merge `improve` into `main` yourself (fast-forward if possible), tag it `su
 
 ## 6. How to report
 
-Put findings in `docs/REVIEW-FINDINGS.md`, one per line: `severity (blocker / should-fix / nit) | file:line | what you did | what happened | smallest fix`. Where you can, add a failing test under `tests/` instead of prose; a red test is the clearest bug report. Send Parth the blockers immediately, the rest at the Sat 10:00 EDT checkpoint (fresh-clone gate).
+Step-by-step checklists exist: `docs/CHECKLIST-AASHNA.md` (yours) and `docs/CHECKLIST-AMAN.md`. Put findings in the filled checklist you send Parth, one per line: `severity (blocker / should-fix / nit) | file:line | what you did | what happened | smallest fix`. Where you can, add a failing test under `tests/` instead of prose; a red test is the clearest bug report. Send Parth the blockers immediately, the rest at the Sat 10:00 EDT checkpoint (fresh-clone gate).
 
 ## 7. Schedule
 

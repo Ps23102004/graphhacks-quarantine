@@ -5,7 +5,6 @@ license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "falkordb>=1.8.0",
-    "pytest>=9.1.1",
     "pyyaml>=6.0.3",
 ]
 
@@ -15,6 +14,11 @@ quarantine = "quarantine.cli:main"
 [project.optional-dependencies]
 mcp = [
     "mcp>=1.12.0,<2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
 ]
 
 [tool.pytest.ini_options]

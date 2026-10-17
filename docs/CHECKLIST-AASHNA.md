@@ -12,7 +12,7 @@ Branch: `improve` at tag `freeze-sat` (Parth will message the exact tag). Tools:
 Use ONLY the README's Quickstart, word for word, in a new terminal. Do not use anything you remember from before.
 - [ ] Step 1 (FalkorDB container) works. If port 6379 is taken: note it.
 - [ ] `uv sync --all-extras` works.
-- [ ] `uv run pytest -q` -> expect `N passed` (N from the README). Note time and any skips.
+- [ ] `uv run pytest -q` -> expect all passed, `0 failed` (the count changes; see `docs/TESTING.md`). Note time and any skips.
 - [ ] Demo, two terminals: `uv run python web/server.py`, open http://localhost:8765; then `uv run quarantine session1 --slow 0.4`, `uv run quarantine flag doc_7`, `uv run quarantine session2 --kill-planner`.
   - [ ] flag prints `precise 6 | per-agent 25 | time-based 19` (or the README's current wording)
   - [ ] page: 6 red chips, headline "6 of 25 memories", ledger lists ep_7a, ep_7b, f_http_client, f_http_pin, step_3, a_requirements
