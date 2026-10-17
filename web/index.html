@@ -146,7 +146,7 @@ FORM: left-to-right layered flow (Sankey-like ribbons), canvas; labels are alway
 <header class="bar">
   <div class="brand">
     <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect x="2" y="2" width="30" height="30" rx="8" fill="#17140f"/><circle cx="17" cy="17" r="8" fill="#d02818"/><circle cx="21.5" cy="12.5" r="3.2" fill="#d02818"/><circle cx="12" cy="22.5" r="2.4" fill="#d02818"/></svg>
-    <div class="words"><h1>Quarantine</h1><p>Precise forgetting for shared agent memory · FalkorDB</p></div>
+    <div class="words"><h1>Quarantine</h1><p>Forget one poisoned source, keep the clean work · FalkorDB</p></div>
   </div>
   <div class="status" role="status"><i class="live" id="live"></i><span id="banner">connecting…</span></div>
 </header>
@@ -169,8 +169,8 @@ FORM: left-to-right layered flow (Sankey-like ribbons), canvas; labels are alway
       <h2 id="forget-h">Three ways to forget a poisoned source</h2>
       <div class="policies" role="group" aria-labelledby="forget-h">
         <button class="policy precise active" data-view="precise" aria-pressed="true">
-          <span class="name">Graph-precise quarantine</span>
-          <span class="how">only what the source actually reached</span>
+          <span class="name">Graph quarantine</span>
+          <span class="how">what its recorded reads reach</span>
           <span class="n"><span id="c-precise">–</span><small id="t-precise"></small></span>
           <span class="track"><span class="fill" id="f-precise"></span></span>
         </button>

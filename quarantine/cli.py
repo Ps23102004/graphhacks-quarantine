@@ -117,7 +117,7 @@ def flag(args) -> None:
     naive, _ = q(g, Q.NAIVE_PER_AGENT, doc=args.doc)[0]
     naive_time, _ = q(g, Q.NAIVE_TIME_BASED, doc=args.doc)[0]
 
-    say(f"precise {precise} | per-agent {naive} | time-based {naive_time}")
+    say(f"quarantined {precise} | wipe agents {naive} | roll back {naive_time}")
     order = {r[0]: r[1] for r in rq(g, "MATCH (m:Memory) RETURN m.id, m.tick")}
     say(f"closure {ids(sorted(closure_ids, key=lambda m: (order.get(m, 0), m)))}")   # this advisory's closure only
     for task, waiting in blocked:
@@ -300,6 +300,9 @@ def main(argv: list[str] | None = None) -> None:
     args = ap.parse_args(argv)
     try:
         args.run(args)
+    except BrokenPipeError:                                             # output piped into head; not an error
+        sys.stderr.close()
+        raise SystemExit(0) from None
     except (ValueError, KeyError, OSError, RuntimeError) as e:          # bad fixture, unknown id, unreadable file
         raise SystemExit(f"quarantine: {e.args[0] if e.args else e}") from None
     except Exception as e:  # noqa: BLE001

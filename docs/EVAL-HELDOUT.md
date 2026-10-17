@@ -12,13 +12,13 @@ Seeds 1000 and up for this report; the test suite uses 2000+ and 3000+. The seed
 
 ## Results (300 worlds per model, 2645 cases each; last run on this commit)
 
-| world model | cases | graph != oracle | precise quarantine | naive: wipe agents | naive: time-based | clean lost: wipe agents | clean lost: time-based |
+| world model | cases | graph != oracle | graph quarantine | naive: wipe agents | naive: time-based | clean lost: wipe agents | clean lost: time-based |
 |---|---|---|---|---|---|---|---|
 | declared read sets (the demo's model) | 2645 | **0** | 29% | 92% | 78% | 91% | 68% |
 | cumulative context (pessimistic) | 2645 | **0** | 32% | 92% | 78% | 91% | 67% |
 | deep chains | 2645 | **0** | 45% | 92% | 83% | 92% | 67% |
 
-"Precise quarantine" is the mean share of a world's memories that the graph quarantines. The naive columns are the mean share each policy would discard. "Clean lost" is the share of the world's non-poisoned memories that policy throws away.
+"Graph quarantine" is the mean share of a world's memories that the graph quarantines. The naive columns are the mean share each policy would discard. "Clean lost" is the share of the world's non-poisoned memories that policy throws away.
 
 ## Whole Session 2 on unseen worlds
 
@@ -40,6 +40,6 @@ A hop bound in the closure query (`*1..10`) silently left poisoned memories deep
 
 - It shows the Cypher implements the stated rules (closure, baselines, strict-plurality heal) on thousands of cases the demo did not contain, including cycles of disagreement among sources and deep chains.
 - The oracle encodes the same rules, so it cannot show that the rules are the right ones. It is an independent implementation of the specification, not independent evidence that the specification is good.
-- It does not show that captured read sets match what a real agent was influenced by. The "cumulative" row is the pessimistic case (every later write counts everything its author had read or written before); precise quarantine rises only from 29% to 32% in these random worlds, but this depends on the generator.
+- It does not show that captured read sets match what a real agent was influenced by. The "cumulative" row is the pessimistic case (every later write counts everything its author had read or written before); graph quarantine rises only from 29% to 32% in these random worlds, but this depends on the generator.
 - The baseline percentages depend on the generator: with only 3 to 5 agents, wiping every compromised agent discards almost everything. Do not quote 92% as a general figure; say "in 300 random crews of 3 to 5 agents".
 - The generator is not real agent traffic. A study on logged traces from a real multi-agent run would be the next step and is not done.

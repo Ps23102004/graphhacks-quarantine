@@ -1,6 +1,5 @@
 """Every Cypher statement QUARANTINE runs, named. Verified against
-falkordb/falkordb:6.0.2 (spikes/DAY1-SPIKES.md); verdicts and sample output in
-plans QUERIES.md. Keep this file the single source of truth for the demo, the
+falkordb/falkordb:6.0.2 (spikes/day1_spikes.py, results in spikes/day1-results.txt). Keep this file the single source of truth for the demo, the
 MCP tool descriptions and the README.
 
 Conventions: $doc flagged document id; $tick logical clock; $session session

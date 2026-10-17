@@ -25,7 +25,7 @@ uv run pytest -q                      # expect: all passed, 0 failed (about 1 to
 scripts/validate.sh                   # expect: validation: N passed, 0 failed (about 3 min; copies the working tree, uncommitted edits included; starts its own FalkorDB on :6390)
 scripts/validate_compose.sh           # expect: all checks pass. NOT re-run since Friday's compose change: this is the one to watch
 uv run python scripts/heldout_eval.py --worlds 100 --pipeline-worlds 30   # expect: 0 graph != oracle, 0 violations
-uv run python scripts/counterfactual_eval.py --worlds 20   # expect: 0 false negatives, 0 invented receipts (see docs/COUNTERFACTUAL.md)
+uv run python scripts/counterfactual_eval.py --worlds 20   # expect: 0 invented receipts, 0 wrong "clean" answers, 0 page-vs-graph mismatches; misses only in the "unrecorded influence" row (see docs/COUNTERFACTUAL.md)
 uv run python scripts/mutation_check.py   # about 20 min; expect: 0 unexpected survivors (2 documented equivalent mutants are fine)
 ```
 
@@ -34,10 +34,10 @@ Then the demo by hand, in two terminals (this is the exact video path):
 ```bash
 uv run python web/server.py                          # page at http://localhost:8765 (port 8000 may be taken on some machines)
 uv run quarantine session1 --slow 0.4
-uv run quarantine flag doc_7                         # expect: precise 6 | per-agent 25 | time-based 19, and an "in words:" line
+uv run quarantine flag doc_7                         # expect: quarantined 6 | wipe agents 25 | roll back 19, and an "in words:" line
 uv run quarantine session2 --kill-planner            # expect: "kill -9, exit -9", then lease takeover, rounds [1, 2, 2, 0]
 uv run quarantine session1 --fixture fixtures/support-crew.yaml --graph sc
-uv run quarantine flag kb_5 --fixture fixtures/support-crew.yaml --graph sc   # expect: precise 7 | per-agent 21 | time-based 17
+uv run quarantine flag kb_5 --fixture fixtures/support-crew.yaml --graph sc   # expect: quarantined 7 | wipe agents 21 | roll back 17
 uv run python scripts/mcp_inspect.py call why_connected '{"from_id": "a_requirements", "to_id": "doc_7"}'
 ```
 

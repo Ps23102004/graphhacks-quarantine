@@ -32,7 +32,7 @@ def g():
 def test_deep_cascade_reachability(g):
     """Scenario: 6-tier deep influence chain.
     Doc -> Ep -> Fact -> Step1 -> Step2 -> Artifact (5 edges / hops)
-    Flagging doc must precisely capture all 5 downstream memories.
+    Flagging doc must capture all 5 downstream memories.
     """
     _node(g, "Doc", {"id": "doc_evil", "flagged": False})
     _memory(g, "Episode", "ep_e", "agent_alpha", "s1", {"tick": 1, "text": "bad claim"})

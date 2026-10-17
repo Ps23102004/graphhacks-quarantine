@@ -53,7 +53,7 @@ def test_install_wheel_in_isolated_venv_outside_checkout():
 
         # Create isolated venv
         subprocess.run([sys.executable, "-m", "venv", str(venv_dir)], check=True)
-        venv_python = venv_dir / "bin" / "python"
+        venv_python = venv_dir / ("Scripts" if os.name == "nt" else "bin") / ("python.exe" if os.name == "nt" else "python")
 
         # Install wheel
         subprocess.run([str(venv_python), "-m", "pip", "install", "--no-cache-dir", str(wheel_path)], check=True)

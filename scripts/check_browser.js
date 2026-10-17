@@ -111,7 +111,7 @@ async (page) => {
     await page.evaluate(() => hive.setView('agent'));
     check('per-agent view paints 19 clean casualties', (await count('collateral')) === 19);
     await page.evaluate(() => hive.setView('precise'));
-    check('precise view shows no casualties', (await count('collateral')) === 0);
+    check('graph view shows no casualties', (await count('collateral')) === 0);
 
     await show(healed);
     check('healed twin carries a non-colour marker', await page.evaluate(() => hive.cells.get('f_http_client_v2').glyph === '+'));

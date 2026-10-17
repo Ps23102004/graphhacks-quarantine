@@ -49,14 +49,14 @@ playwright-cli -s=quarantine-ui-check run-code --filename scripts/check_browser.
 playwright-cli -s=quarantine-ui-check close
 ```
 
-Expect every check to report `passed: true`. This runs the real ledger page (no chart library), substitutes only `/graph` and `/receipt` responses, and never writes to FalkorDB. It covers every cell staying visible at 1920, 960 and 375 px, no horizontal scroll on a phone, the precise counter climbing with the red wave, non-colour markers (`!`, `+`, `×`), the receipt highlighting four ribbons and reading as a sentence, the two naive-wipe views painting 13 and 19 clean casualties, healed twins fitting, keyboard selection, reset cleanup, and a receipt arriving after reset. It supplements the live CLI run; it does not prove graph queries or process recovery. The Python suite does not require Playwright.
+Expect every check to report `passed: true`. This runs the real ledger page (no chart library), substitutes only `/graph` and `/receipt` responses, and never writes to FalkorDB. It covers every cell staying visible at 1920, 960 and 375 px, no horizontal scroll on a phone, the quarantine counter climbing with the red wave, non-colour markers (`!`, `+`, `×`), the receipt highlighting four ribbons and reading as a sentence, the two naive-wipe views painting 13 and 19 clean casualties, healed twins fitting, keyboard selection, reset cleanup, and a receipt arriving after reset. It supplements the live CLI run; it does not prove graph queries or process recovery. The Python suite does not require Playwright.
 
 ## What each claim is tested by
 
 | claim (what the video says) | test | independent of the fixture's tuning? |
 |---|---|---|
 | Fixture is well formed; read sets only point backwards in time | `test_fixture_loads_and_is_consistent` | yes (audit queries) |
-| Flagging doc_7 quarantines exactly 6; per-agent wipe would hit 25; time-based 19 | `test_closure_is_precise_and_baselines_are_not` | numbers come from the fixture's `expected:` block |
+| Flagging doc_7 quarantines 6; per-agent wipe would hit 25; time-based 19 | `test_closure_is_precise_and_baselines_are_not` | numbers come from the fixture's `expected:` block |
 | The receipt is a 4-hop shortestPath through the Planner | `test_receipt_is_a_shortest_path_through_the_planner` | yes (path asserted hop by hop) |
 | Clean support counts and rework blockers | `test_support_counts_and_rework_ordering` | partly |
 | Session 2 heals the package fact, then reworks in dependency order, rounds [1, 2, 2, 0] | `test_session2_heals_then_reworks_in_dependency_order` | partly |

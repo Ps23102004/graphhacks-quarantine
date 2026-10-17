@@ -2,7 +2,7 @@
 
 Run:  uv run python spikes/day1_spikes.py > spikes/day1-results.txt
 Each spike prints the Cypher, the raw result set (or the exact error) and
-nothing else: verdicts are written by hand into spikes/DAY1-SPIKES.md.
+nothing else: results are in spikes/day1-results.txt.
 """
 from __future__ import annotations
 

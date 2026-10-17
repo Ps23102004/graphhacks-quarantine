@@ -50,7 +50,7 @@ has "$out" "session 1 done - 0 processes running" "session1 ends with 0 processe
 has "$out" "read [step_3, step_1] -> wrote a_requirements" "read set printed before the write"
 
 out="$(uv run quarantine flag doc_7 --graph validate)"
-has "$out" "precise 6 | per-agent 25 | time-based 19" "flag: 6 vs 25 vs 19"
+has "$out" "quarantined 6 | wipe agents 25 | roll back 19" "flag: 6 vs 25 vs 19"
 has "$out" "closure [ep_7a, ep_7b, f_http_client, f_http_pin, step_3, a_requirements]" "flag: the six memories"
 has "$out" "receipt a_requirements (4 hops)" "flag: 4-hop receipt"
 
@@ -71,7 +71,7 @@ echo "== control: a different doc gives a different, hand-derived closure"
 uv run quarantine session1 --graph validate_ctl >/dev/null
 out="$(uv run quarantine flag doc_5 --graph validate_ctl)"
 has "$out" "closure [ep_5, f_http_client, step_3, a_requirements]" "flag doc_5: ep_5 -> f_http_client -> step_3 -> a_requirements"
-has "$out" "precise 4 " "flag doc_5: precise 4"
+has "$out" "quarantined 4 " "flag doc_5: quarantined 4"
 
 echo "== packaging and wheel build"
 uv build --wheel -q && ok "uv build --wheel" || bad "uv build failed"

@@ -23,7 +23,7 @@ for label, mode, deep in (("declared read sets (the demo's model)", "declared", 
     s = summarize(run(range(1000, 1000 + n), mode, deep, graph="heldout_report"))
     rows.append((label, s))
 
-print(f"| world model | (world, flagged doc) cases | graph != oracle | precise quarantine | naive: wipe agents | naive: time-based | clean memories lost: wipe agents | clean memories lost: time-based |")
+print(f"| world model | (world, flagged doc) cases | graph != oracle | graph quarantine | naive: wipe agents | naive: time-based | clean memories lost: wipe agents | clean memories lost: time-based |")
 print("|---|---|---|---|---|---|---|---|")
 for label, s in rows:
     print(f"| {label} | {s['cases']} | {s['mismatched']} | {s['mean_precise_frac']:.0%} | {s['mean_per_agent_frac']:.0%} | "

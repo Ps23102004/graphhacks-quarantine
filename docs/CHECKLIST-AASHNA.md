@@ -14,7 +14,7 @@ Use ONLY the README's Quickstart, word for word, in a new terminal. Do not use a
 - [ ] `uv sync --all-extras` works.
 - [ ] `uv run pytest -q` -> expect all passed, `0 failed` (the count changes; see `docs/TESTING.md`). Note time and any skips.
 - [ ] Demo, two terminals: `uv run python web/server.py`, open http://localhost:8765; then `uv run quarantine session1 --slow 0.4`, `uv run quarantine flag doc_7`, `uv run quarantine session2 --kill-planner`.
-  - [ ] flag prints `precise 6 | per-agent 25 | time-based 19` (or the README's current wording)
+  - [ ] flag prints `quarantined 6 | wipe agents 25 | roll back 19` (or the README's current wording)
   - [ ] page: 6 red chips, headline "6 of 25 memories", ledger lists ep_7a, ep_7b, f_http_client, f_http_pin, step_3, a_requirements
   - [ ] click `a_requirements`: yellow highlighter path to doc_7 and a sentence in "Why is it red?"
   - [ ] session2: "kill -9", lease takeover, rounds [1, 2, 2, 0]; page shows green replacement chips under f_http_client, step_3, a_requirements
@@ -34,7 +34,7 @@ Use a separate graph name so the demo graph stays clean: add `--graph test` to e
 - [ ] Flag doc_7, run session2, then unflag -> must refuse with "healing has already started"
 - [ ] Run `session2` twice -> second run changes nothing
 - [ ] Flag two documents (`doc_7` and `doc_3`) -> page banner and counters stay truthful (counters go blank with two advisories)
-- [ ] Second world: `uv run quarantine session1 --fixture fixtures/support-crew.yaml --graph sc` then `uv run quarantine flag kb_5 --fixture fixtures/support-crew.yaml --graph sc` -> precise 7 | per-agent 21 | time-based 17
+- [ ] Second world: `uv run quarantine session1 --fixture fixtures/support-crew.yaml --graph sc` then `uv run quarantine flag kb_5 --fixture fixtures/support-crew.yaml --graph sc` -> quarantined 7 | wipe agents 21 | roll back 17
 - [ ] MCP tool with junk input: `uv run python scripts/mcp_inspect.py call why_quarantined '{"memory_id": "x\"}) DETACH DELETE (n) //"}'` -> answer shape `unknown`, graph unchanged
 - [ ] Page on your phone width (Chrome devtools 375 px): no horizontal page scroll, chart scrolls inside its frame
 

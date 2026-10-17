@@ -12,6 +12,9 @@ pytest.importorskip("mcp", reason="optional MCP SDK: run `uv sync --all-extras`"
 
 from quarantine.loader import connect, q
 
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent                          # tests must not depend on the working directory
 PORT = int(os.environ.get("FALKORDB_PORT", 6379))
 GRAPH = "quarantine_mcp_test"
 
@@ -127,7 +130,7 @@ def test_mcp_inspect_cli_stdio_handshake_and_tool_call():
 
     # 1. Test list command
     proc = subprocess.run(
-        [sys.executable, "scripts/mcp_inspect.py", "list"],
+        [sys.executable, str(REPO / "scripts" / "mcp_inspect.py"), "list"],
         capture_output=True,
         text=True,
         env=env,
@@ -143,7 +146,7 @@ def test_mcp_inspect_cli_stdio_handshake_and_tool_call():
 
     # 2. Test call command
     proc2 = subprocess.run(
-        [sys.executable, "scripts/mcp_inspect.py", "call", "get_recovery_status"],
+        [sys.executable, str(REPO / "scripts" / "mcp_inspect.py"), "call", "get_recovery_status"],
         capture_output=True,
         text=True,
         env=env,
@@ -202,7 +205,7 @@ def test_why_connected_description_says_unweighted():
 
 def test_mcp_inspect_surfaces_the_tool_error_message():
     env = os.environ.copy() | {"QUARANTINE_GRAPH": FX, "FALKORDB_PORT": str(PORT)}
-    proc = subprocess.run([sys.executable, "scripts/mcp_inspect.py", "call", "no_such_tool"],
+    proc = subprocess.run([sys.executable, str(REPO / "scripts" / "mcp_inspect.py"), "call", "no_such_tool"],
                           capture_output=True, text=True, env=env, timeout=15)
     assert proc.returncode == 1
     assert "TaskGroup" not in proc.stderr and "Error: Tool no_such_tool returned error: Unknown tool" in proc.stderr, proc.stderr

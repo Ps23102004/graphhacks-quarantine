@@ -227,7 +227,7 @@ def test_cli_runs_the_three_commands_end_to_end(fx):
     try:
         assert "session 1 done - 0 processes running" in run("session1")
         out = run("flag", fx["flag"]["doc"])
-        assert f"precise {ex['precise']} | per-agent {ex['naive_per_agent']} | time-based {ex['naive_time_based']}" in out
+        assert f"quarantined {ex['precise']} | wipe agents {ex['naive_per_agent']} | roll back {ex['naive_time_based']}" in out
         out = run("session2", "--kill-planner")
         assert "took over lease from planner" in out
         assert f"rounds {ex['session2_round_changes']}, {ex['memories_after_session2']} memories" in out

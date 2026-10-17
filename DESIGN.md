@@ -11,7 +11,7 @@
 
 | role | value | used for |
 |---|---|---|
-| quarantined | `#d02818` vermilion | red chips, hot ribbons, the precise counter, ink stain |
+| quarantined | `#d02818` vermilion | red chips, hot ribbons, the quarantine counter, ink stain |
 | healed replacement | `#16804a` | twin chip outline and tint, dashed SUPERSEDES ribbon |
 | naive casualty | `#c76a04` ochre, hatched | clean chips a naive wipe would destroy (comparison views only) |
 | receipt path | `#ffd23f` highlighter | the selected memory's path to the source, and the chain in the inspector |
@@ -21,7 +21,7 @@ Every state also has a non-colour marker on the chip: `!` quarantined or flagged
 
 ## Motion
 
-- One authored moment, the **spill**: when a source is flagged, ink creeps along its ribbons and each reached chip turns red in write order, 380 ms apart, with a stain that spreads for 900 ms. The precise counter climbs with it.
+- One authored moment, the **spill**: when a source is flagged, ink creeps along its ribbons and each reached chip turns red in write order, 380 ms apart, with a stain that spreads for 900 ms. The quarantine counter climbs with it.
 - Supporting: chips settle in on arrival, the receipt highlighter draws on, comparison bars grow with `transform: scaleX`, ink dots drift along ribbons.
 - `prefers-reduced-motion`: no wave delay, no draw-on, no drifting dots; colour changes only.
 
@@ -29,7 +29,7 @@ Every state also has a non-colour marker on the chip: `!` quarantined or flagged
 
 - Click a chip (or use the hidden `#sr-cells` button list with the keyboard): the inspector shows what it says, who wrote it, and the server's answer in one of four shapes; a quarantined memory highlights its whole path and reads as a sentence. Escape clears.
 - Hover or focus: the chip's neighbours stay lit, the rest recede. The receipt path always stays lit.
-- The three policy cards are toggles: the precise view, and two views that hatch in ochre what each naive wipe would lose.
+- The three policy cards are toggles: the graph view, and two views that hatch in ochre what each naive wipe would lose.
 
 ## Layout
 
