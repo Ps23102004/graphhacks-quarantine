@@ -22,7 +22,8 @@ HERE = Path(__file__).resolve().parent
 NODES = """
 MATCH (m:Memory)<-[:AUTHORED]-(a:Agent)
 OPTIONAL MATCH (m)-[:SUPERSEDES]->(old:Memory)
-RETURN m.id, labels(m)[1], m.tick, m.quarantined, a.name, m.text, old.id, m.value, m.path
+RETURN m.id, labels(m)[1], m.tick, m.quarantined, a.name, m.text, old.id, m.value, m.path,
+       coalesce(m.needs_regeneration, false), coalesce(m.ungrounded, false)
 ORDER BY m.tick
 """
 DOCS = "MATCH (d:Doc) RETURN d.id, d.title, d.flagged, d.flag_reason ORDER BY d.id"
@@ -57,15 +58,16 @@ def mark_naive(nodes: list[dict], edges: list[dict], flagged: str) -> None:
 
 
 def snapshot(g) -> dict:
-    nodes = [dict(id=i, kind=k, tick=t, red=bool(r), agent=a, text=tx, twin_of=tw, value=v, path=p)
-             for i, k, t, r, a, tx, tw, v, p in _read_query(g, NODES)]
+    nodes = [dict(id=i, kind=k, tick=t, red=bool(r), agent=a, text=tx, twin_of=tw, value=v, path=p,
+                  needs_regeneration=bool(nr), ungrounded=bool(ug))   # a placeholder twin: no content yet, not healed work
+             for i, k, t, r, a, tx, tw, v, p, nr, ug in _read_query(g, NODES)]
     docs = [dict(id=i, title=t, flagged=bool(f), reason=r) for i, t, f, r in _read_query(g, DOCS)]
     edges = [dict(src=a, type=t, dst=b) for a, t, b in _read_query(g, EDGES)]
     flagged_docs = [d["id"] for d in docs if d["flagged"]]
     flagged = flagged_docs[0] if flagged_docs else None
     counters = None
     if len(flagged_docs) == 1:                                          # the counters tell one advisory's story
-        precise = sum(1 for n in nodes if n["red"])
+        precise = sum(1 for n in nodes if n["red"] and not n["twin_of"])   # originals, like the two baselines
         counters = dict(precise=precise,
                         per_agent=_read_query(g, Q.NAIVE_PER_AGENT, doc=flagged)[0][0],
                         time_based=_read_query(g, Q.NAIVE_TIME_BASED, doc=flagged)[0][0])

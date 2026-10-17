@@ -85,3 +85,38 @@ def test_page_overlay_flags_add_up_to_the_counters():
         assert len(lost) == c["time_based"] - c["precise"]               # 13 clean memories the time-based wipe would lose
     finally:
         connect("quarantine_overlay_test").delete()
+
+
+def test_page_tells_placeholders_and_quarantined_twins_apart_from_healed_work():
+    """A second advisory can quarantine a healed twin, and a twin with no clean grounding is only a placeholder:
+    the snapshot carries what the page needs to draw neither of them as clean healed work."""
+    try:
+        run("session1"); run("flag", "doc_1"); run("session2")
+        twins = [n for n in snapshot(connect(GRAPH))["nodes"] if n["twin_of"]]
+        assert twins and all(not n["red"] for n in twins)
+        assert any(n["needs_regeneration"] for n in twins), "doc_1 twins are placeholders until an agent rewrites them"
+        assert all(n["needs_regeneration"] == n["text"].startswith("[needs regeneration") for n in twins)
+
+        run("session1"); run("flag", "doc_7"); run("session2"); run("flag", "doc_2"); run("session2")
+        s = snapshot(connect(GRAPH))
+        red_twins = sorted(n["id"] for n in s["nodes"] if n["twin_of"] and n["red"])
+        assert red_twins == ["a_requirements_v2", "f_http_client_v2", "step_3_v2"]
+        assert {n["twin_of"] for n in s["nodes"]} >= {"f_http_client_v2", "step_3_v2", "a_requirements_v2"}   # twins of twins
+    finally:
+        connect(GRAPH).delete()
+
+
+def test_precise_counter_counts_originals_like_the_baselines():
+    """With one flagged doc and a quarantined twin, 'precise' must count the same population as the two baselines."""
+    from quarantine import queries as Q
+    from quarantine.loader import load, q
+    g = connect(GRAPH)
+    try:
+        load(g, read_fixture())
+        q(g, Q.FLAG_AND_CLOSE, doc="doc_7", reason="t", tick=40)
+        q(g, "MATCH (o:Memory {id: 'f_http_client'})<-[:AUTHORED]-(a:Agent) "
+             "CREATE (a)-[:AUTHORED]->(t:Memory:Fact {id: 'f_http_client_v2', tick: 41, quarantined: true})-[:SUPERSEDES]->(o)")
+        s = snapshot(g)
+        assert s["counters"]["precise"] == read_fixture()["expected"]["precise"]
+    finally:
+        g.delete()
