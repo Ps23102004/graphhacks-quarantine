@@ -104,6 +104,9 @@ def validate_fixture(fx: dict) -> None:
                 for s in f["support"]:
                     if not isinstance(s, dict) or not isinstance(s.get("ep"), str) or not isinstance(s.get("claim"), str):
                         raise ValueError(f"facts: {fid!r} support entries need 'ep' and 'claim' strings, got {s!r}")
+                eps = [s["ep"] for s in f["support"]]
+                if len(eps) != len(set(eps)):
+                    raise ValueError(f"facts: {fid!r} lists the same episode twice in its support (one episode is one vote)")
         if sec in ("steps", "artifacts"):
             for mid, m in fx[sec].items():
                 if not all(isinstance(r, str) for r in m["reads"]):

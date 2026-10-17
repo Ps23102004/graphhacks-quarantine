@@ -131,6 +131,7 @@ def test_session2_heals_a_fact_that_no_step_reads(tmp_path, capsys):
     (lambda w: w["docs"]["d1"].update(flagged=True), "reserved"),
     (lambda w: w["episodes"]["e1"].update(text=["not", "a", "string"]), "text"),
     (lambda w: w["facts"]["f"].update(reads=["e1"]), "unknown key"),          # provenance that load() would drop
+    (lambda w: w["facts"]["f"]["support"].append({"ep": "e1", "claim": "x"}), "same episode twice"),
 ])
 def test_validate_fixture_refuses_worlds_load_would_choke_on(breakage, match):
     w = copy.deepcopy(world())
