@@ -38,7 +38,7 @@ def _ro_query(g, cypher: str, **params) -> list:
 
 
 @mcp.tool()
-def inspect_quarantined_memories() -> list[dict]:
+def inspect_quarantined_memories() -> dict:
     """List all quarantined memories and why they were quarantined."""
     g = connect(graph_name())
     query = """
@@ -71,7 +71,7 @@ def trace_provenance_receipt(memory_id: str) -> dict:
 
 @mcp.tool()
 def why_connected(from_id: str, to_id: str) -> dict:
-    """How does A lead to B? Weighted shortest path over provenance edges via algo.SPpaths (shortestPath fallback).
+    """How does A lead to B? Fewest-hops (unweighted) path over provenance edges via algo.SPpaths; shortestPath only if the procedure raises.
     Both ids are resolved first: an unresolved id returns shape "unknown" and nothing runs."""
     if not isinstance(from_id, str) or not isinstance(to_id, str) or not from_id or not to_id:
         return {"shape": "unknown", "answer": "unknown entity: from_id and to_id must be non-empty strings; nothing was run",
