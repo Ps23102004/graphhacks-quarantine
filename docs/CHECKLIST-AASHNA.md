@@ -4,6 +4,11 @@ Goal: prove a stranger can run QUARANTINE from a clean clone, and that nothing o
 
 Branch: `improve` at tag `freeze-sat` (Parth will message the exact tag). Tools: Docker Desktop running, `uv`, `git`, Chrome.
 
+## Windows notes (from your first report)
+- Clone the tag fresh; do not reuse the Oct 16 zip. Fixed since then: test port default (now 6379), Windows venv path in `tests/test_packaging.py`, MCP tests no longer depend on the working directory, README shows the real healing query and no longer mentions Graphiti/Vector TTL, a missing graph shows an empty page (no traceback).
+- `--kill-planner` exits with 1, not -9, on Windows: expected; the lease takeover is what to check. The recorded video is made on the Mac.
+- Still open (not blocking): a live deployment needs the public hostname added to `ALLOWED_HOSTS` (see `deploy/docker-compose.yml`). We are not deploying.
+
 ## 0. Get the code (5 min)
 - [ ] Accept the GitHub collaborator invite (Parth adds your username).
 - [ ] `git clone https://github.com/Ps23102004/graphhacks-quarantine.git && cd graphhacks-quarantine && git checkout freeze-sat`
