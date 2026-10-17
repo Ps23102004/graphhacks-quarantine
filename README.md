@@ -38,7 +38,7 @@ We measured the gap. For 1,340 (world, flagged document) runs in each of four ki
 
 In the demo all 6 quarantined memories really change: `f_http_client` stored the typosquat `reqeusts` and heals to `requests`. If an advisory turns out to be a false alarm, `uv run quarantine unflag doc_7` retracts it before healing starts and re-derives quarantine from whatever is still flagged.
 
-How we attacked it: ten independent attacker agents (engine edge cases, crash consistency, MCP input, web security, page truthfulness, hostile fixtures, claims audit, fresh clone, specification blind spots), each finding checked by three skeptics. They found real defects (a reserved-id collision that lost data, torn writes that left a flagged source with nothing red, outvoted votes followed as provenance, a page headline that was false with two advisories, and an error in our own evaluation); each is fixed with a test in `tests/test_attack_regressions.py` and the related test files.
+How we attacked it: ten independent attacker agents across nine areas (engine edge cases, crash consistency, MCP input, web security, page truthfulness, hostile fixtures, claims audit, fresh clone, specification blind spots), each finding checked by three skeptics. They found real defects (a reserved-id collision that lost data, torn writes that left a flagged source with nothing red, outvoted votes followed as provenance, a page headline that was false with two advisories, and an error in our own evaluation); each is fixed with a test in `tests/test_attack_regressions.py` and the related test files.
 
 ## What the demo shows
 
@@ -218,7 +218,7 @@ Recording inputs establishes provenance. It does not reveal exactly which input 
 
 ### Optional MCP inspection
 
-The MCP server exposes a fixed, read-only tool catalog (the agent never writes Cypher). Every answer is one of four shapes: path, memory, not in graph, unknown.
+The MCP server exposes a fixed, read-only tool catalog (the agent never writes Cypher). Every answer is one of four shapes: path, memory, not in graph, unknown. A null, numeric, list or missing id gets `unknown`, which also says when an id names a node of another kind; only a call to a tool that does not exist is a protocol error. A receipt cites only a document that is flagged now; after a torn write it says so instead of guessing.
 
 ```bash
 uv sync --all-extras
@@ -250,6 +250,7 @@ Not run: an AI-driven security scan (the tool we have needs a paid LLM key; band
 - **Healing counts episodes, not independent documents.** Several planted documents nobody has flagged yet can outvote real ones, and unflagged sources can still be wrong; agreeing episodes may share the same underlying source.
 - **No depth bound.** The closure and receipt are unbounded (a 10-hop cap was removed after a held-out chain world showed it hid poisoned memories). The graph is acyclic by construction because reads only point backwards in time.
 - **Recovery is scripted.** Repeated attacks, arbitrary LLM decisions, and production-scale workloads need further evaluation. At 25 nodes a recursive SQL query does the same work; the case for a graph is the shape of the problem (provenance is edges, the closure and receipt are one query each, the schema is the audit trail), not speed.
+- **Healing after a second advisory is order-dependent.** If a second document is flagged after healing, a rebuilt fact keeps only the first round's winning votes, so a clean claim it had outvoted can be lost: the fact may stay unhealed and its readers are rebuilt ungrounded, while flagging both documents together heals it.
 - **Tenant isolation is by graph name** on one FalkorDB instance, not by credential.
 - **External effects remain external.** Memory repair cannot reverse actions already taken outside the graph.
 

@@ -277,6 +277,10 @@ def test_rule5_graph_algorithm_is_a_tool_and_actually_runs(g):
         load(gc, make_chain_world(60))
         deep = answers.why_connected(gc, "art_0", "doc_1")
         assert deep["shape"] == "path" and deep["method"] == "algo.SPpaths" and deep["length"] == 63, deep.get("method")
+        # the statement the CLI actually runs (FLAG_AND_CLOSE, not TAINT_CLOSURE) is unbounded too
+        from quarantine.worldgen import oracle_tainted
+        n, _ids = q(gc, Q.FLAG_AND_CLOSE, doc="doc_1", reason="t", tick=900)[0]
+        assert n == len(oracle_tainted(make_chain_world(60), "doc_1")) == 63
     finally:
         gc.delete()
 

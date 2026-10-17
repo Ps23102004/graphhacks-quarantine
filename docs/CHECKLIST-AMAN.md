@@ -14,7 +14,7 @@ You own every word a judge reads and the submission itself. Rule for every sente
 - [ ] Rules compliance check against the Graph Hacks rules page: Track 02 fit, new work inside the hackathon window, repo visibility at submit time (public or judges' access), team locked at submit, video length limit, required links.
 
 ## Blog (Sat night)
-- [ ] 600 to 900 words, one image (`docs/media/hive-receipt.png` shows the receipt path). Structure: the problem (one poisoned source contaminates shared agent memory); naive fixes and their cost (25 and 19 of 25); what the graph does (6, with a path as the receipt); how we tested it (unseen random crews, counterfactual replay, ten attackers, what they found and what we fixed); honest limits; what's next.
+- [ ] 600 to 900 words, one image (`docs/media/hive-receipt.png` shows the receipt path; re-captured from the current page on 2026-10-17; never use an image that says "precise"). Structure: the problem (one poisoned source contaminates shared agent memory); naive fixes and their cost (25 and 19 of 25); what the graph does (6, with a path as the receipt); how we tested it (unseen random crews, counterfactual replay, ten attackers, what they found and what we fixed); honest limits; what's next.
 - [ ] Every claim in the blog appears in the README or a doc. No new numbers.
 
 ## Sunday

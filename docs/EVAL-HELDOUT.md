@@ -34,7 +34,7 @@ Two more bugs this found: a step whose inputs were all poisoned beyond repair ha
 
 ## A real bug this found
 
-A hop bound in the closure query (`*1..10`) silently left poisoned memories deeper than ten hops marked clean. The random worlds did not hit it (they have short alternative paths), but a hand-built chain world did: with 9 chained steps the graph already missed the last step and the artifact, which would then keep being used. Fixed by removing the bound (the graph is a DAG because reads only point backwards in time), with a regression test on a 40-step chain and mutation checks that fail if any of the closure, per-agent baseline or receipt is bounded again.
+A hop bound in the closure query (`*1..10`) silently left poisoned memories deeper than ten hops marked clean. The random worlds did not hit it (they have short alternative paths), but a hand-built chain world did: with 9 chained steps the graph already missed the last step and the artifact, which would then keep being used. Fixed by removing the bound (the graph is a DAG because reads only point backwards in time), with a regression test on a 40-step chain and mutation checks that fail if `TAINT_CLOSURE` (the closure this eval and `reconcile` use), the per-agent baseline or the receipt is bounded again. `FLAG_AND_CLOSE`, the statement `quarantine flag` runs, is checked separately against the oracle on a 60-step chain (`test_rule5_graph_algorithm_is_a_tool_and_actually_runs`); no mutant targets its text.
 
 ## What this does and does not show
 

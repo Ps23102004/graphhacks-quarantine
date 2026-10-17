@@ -8,7 +8,7 @@ Several layers, from fastest to most convincing. Anyone on the team (or a judge)
 - FalkorDB 6.0.2 pinned by digest. FalkorDB is source-available (SSPL), not open source.
 
 ```bash
-docker run -d --name quarantine-falkordb -p 6379:6379 -p 3000:3000 \
+docker run -d --name quarantine-falkordb -p 127.0.0.1:6379:6379 -p 127.0.0.1:3000:3000 \
   falkordb/falkordb:6.0.2@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6
 uv sync --all-extras                      # --all-extras installs the optional MCP SDK the MCP tests need
 ```
@@ -21,7 +21,7 @@ uv run pytest -q          # expect: all tests pass, 0 failed
 
 The number of tests changes as tests are added, so no doc states it: read the count from pytest's summary line.
 
-Tests use their own graphs (`quarantine_test`, `quarantine_cli_test`, `quarantine_web_test`) and delete them afterwards. They never touch the demo graph named `quarantine`.
+Tests use their own graphs (none is named `quarantine`) and delete them afterwards. They never touch the demo graph named `quarantine`.
 
 ## 2. Working-tree validation (a few minutes): close to what a stranger would see
 
@@ -85,7 +85,7 @@ Expect every check to report `passed: true`. This runs the real ledger page (no 
 
 - Agents are scripted: outputs are fixture text, read sets are real captured edges. No LLM on the hero path.
 - Read sets are the per-write lists in `fixture.yaml`, not an agent's whole accumulated context. The independent review reported that counting accumulated context would give a closure of 9, not 6. Say "read set of the write", not "everything the agent ever saw".
-- The read set is written as edges right after the memory node, in separate queries, and checked by audit queries; it is not one atomic transaction.
+- Each memory, its authorship and its read-set edges are written in one statement (`loader._memory`); `s1.complete` marks the end of Session 1, and `flag` refuses a graph without it.
 - The kill-Planner beat is a real `kill -9` of a separate process; the "new Planner" is the CLI process itself in session s2b.
 - Healing is a majority vote over clean episodes, not semantic reasoning.
 - One graph per crew. The closure and receipt are unbounded (the graph is a DAG; a 10-hop cap was removed, see `docs/EVAL-HELDOUT.md`).
