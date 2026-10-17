@@ -44,9 +44,9 @@ graph TD
     EP7A[Episode: ep_7a<br/>Rename requests]:::poisoned -->|EXTRACTED_FROM| D7[Doc: doc_7<br/>Prompt Injection]:::poisoned
     EP7B[Episode: ep_7b<br/>Pin v2.31]:::poisoned -->|EXTRACTED_FROM| D7
 
-    F_CLIENT[Fact: f_http_client]:::poisoned -->|CONSOLIDATED_FROM| EP1[Episode: ep_1]:::episode
-    F_CLIENT -->|CONSOLIDATED_FROM| EP2[Episode: ep_2]:::episode
-    F_CLIENT -->|CONSOLIDATED_FROM| EP3[Episode: ep_3]:::episode
+    F_CLIENT[Fact: f_http_client<br/>stored reqeusts]:::poisoned -->|CONSOLIDATED_FROM| EP2[Episode: ep_2]:::episode
+    F_CLIENT -->|CONSOLIDATED_FROM| EP5[Episode: ep_5]:::episode
+    F_CLIENT -->|CONSOLIDATED_FROM| EP8[Episode: ep_8]:::episode
     F_CLIENT -->|CONSOLIDATED_FROM| EP7A
     F_PIN[Fact: f_http_pin]:::poisoned -->|CONSOLIDATED_FROM| EP7B
 
@@ -131,7 +131,7 @@ docker run -d --name quarantine-falkordb -p 6379:6379 -p 3000:3000 \
 ### 2. Install & Run Tests
 ```bash
 uv sync --all-extras                      # --all-extras installs the optional MCP SDK the MCP tests need
-uv run pytest -q                              # 95 passed in ~60 s (see docs/TESTING.md)
+uv run pytest -q                              # all tests pass; counts and timing in docs/TESTING.md
 ```
 
 ### 3. Run the 3-Minute Demo Commands
