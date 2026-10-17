@@ -46,7 +46,10 @@ def shape_not_in_graph(what: str) -> dict:
 
 
 def shape_unknown(entity: str, kind: str = "entity") -> dict:
-    return {"shape": "unknown", "answer": f"unknown {kind}: {entity!r} does not resolve to a node; nothing was run",
+    # an over-length id is rejected before any lookup, so "does not resolve" would be a claim about the graph we never checked
+    why = f"id longer than {MAX_ID} characters is not accepted" if isinstance(entity, str) and len(entity) > MAX_ID \
+        else "does not resolve to a node"
+    return {"shape": "unknown", "answer": f"unknown {kind}: {entity!r} {why}; nothing was run",
             "entity": entity}
 
 

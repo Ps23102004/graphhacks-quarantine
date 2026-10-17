@@ -55,9 +55,7 @@ async def _run_mcp(action: str, tool_name: str | None = None, tool_args: dict | 
                         out_data = text
                 else:
                     out_data = {}
-                if res.isError:
-                    raise RuntimeError(f"Tool {tool_name} returned error: {out_data}")
-                return out_data
+                return out_data, res.isError
             else:
                 raise ValueError(f"Unknown action: {action}")
 
@@ -88,7 +86,9 @@ def main() -> int:
                 sys.stderr.write(f"Invalid JSON arguments: {e}\n")
                 return 2
 
-            data = asyncio.run(_run_mcp("call", tool_name=args.tool, tool_args=tool_args))
+            data, is_error = asyncio.run(_run_mcp("call", tool_name=args.tool, tool_args=tool_args))
+            if is_error:                                                  # raised here, outside the TaskGroup, so the message survives
+                raise RuntimeError(f"Tool {args.tool} returned error: {data}")
             print(json.dumps(data, indent=2))
             return 0
     except Exception as e:
