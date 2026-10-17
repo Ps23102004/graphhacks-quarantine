@@ -4,7 +4,7 @@ Every answer an agent or a page gets back is one of:
   - "path":          answered, with the hops shown alongside the answer
   - "memory":        answered from memory, with when it was learned (tick and session)
   - "not_in_graph":  the graph holds no such connection (deliberately different from "nothing is wrong")
-  - "unknown":       the entity does not resolve to a real node; nothing ran
+  - "unknown":       the id is malformed, matches no node, or names a node of another kind; the tool's query did not run
 
 Rules this file enforces (see docs/GUIDELINE-CONFORMANCE.md):
   - the agent never writes Cypher: every query here is human-written and fixed;
@@ -45,12 +45,22 @@ def shape_not_in_graph(what: str) -> dict:
                                                "That is a statement about the graph, not a clean bill of health."}
 
 
-def shape_unknown(entity: str, kind: str = "entity") -> dict:
-    # an over-length id is rejected before any lookup, so "does not resolve" would be a claim about the graph we never checked
-    why = f"id longer than {MAX_ID} characters is not accepted" if isinstance(entity, str) and len(entity) > MAX_ID \
-        else "does not resolve to a node"
-    return {"shape": "unknown", "answer": f"unknown {kind}: {entity!r} {why}; nothing was run",
-            "entity": entity}
+def shape_unknown(entity, kind: str = "entity", g=None) -> dict:
+    """Say WHY nothing ran, truthfully: a malformed id was never looked up, and a real node of the wrong kind is named."""
+    shown = entity
+    if not isinstance(entity, str) or not entity:
+        why = "is not a valid id"
+    elif len(entity) > MAX_ID:                                          # rejected before any lookup; never echo megabytes back
+        shown = f"{entity[:64]}... ({len(entity)} characters)"
+        why = f"is longer than {MAX_ID} characters and is not accepted"
+    elif "\x00" in entity:
+        why = "contains a NUL character and is not accepted"
+    elif not valid_id(entity):
+        why = "is not valid UTF-8 and is not accepted"
+    else:
+        labels = rq(g, "MATCH (n {id: $id}) RETURN labels(n) LIMIT 1", id=entity) if g is not None else []
+        why = f"is a {':'.join(labels[0][0])}, not a {kind}" if labels else "does not resolve to a node"
+    return {"shape": "unknown", "answer": f"unknown {kind}: {shown!r} {why}; nothing was run", "entity": shown}
 
 
 VERBS = {"INFLUENCED_BY": "was written after reading", "CONSOLIDATED_FROM": "was consolidated from",
@@ -114,18 +124,29 @@ def why_quarantined(g, memory_id: str) -> dict:
     """Why is this memory red? A path to the flagged document, or 'not in the graph' if it is clean."""
     m = resolve_memory(g, memory_id)
     if m is None:
-        return shape_unknown(memory_id, "memory")
-    if not m["quarantined"]:
-        return shape_not_in_graph(f"{memory_id} has no provenance path to any flagged document")
-    # the advisory that quarantined it is recorded on the memory, so the receipt survives the doc being un-flagged
-    docs = [r[0] for r in rq(g, "MATCH (m:Memory {id: $id}) WHERE m.quarantine_doc IS NOT NULL RETURN m.quarantine_doc", id=memory_id)]
-    docs += [r[0] for r in rq(g, "MATCH (d:Doc {flagged: true}) RETURN d.id ORDER BY d.id") if r[0] not in docs]
+        return shape_unknown(memory_id, "memory", g)
+    # only a document that is flagged RIGHT NOW can be cited; the recorded cause goes first when it still is.
+    # The edges decide, not the bit, so a torn write (flag without closure, unflag without reconcile) is reported.
+    flagged = [r[0] for r in rq(g, "MATCH (d:Doc {flagged: true}) RETURN d.id ORDER BY d.id")]
+    cause = rq(g, "MATCH (m:Memory {id: $id}) RETURN m.quarantine_doc", id=memory_id)
+    cause = cause[0][0] if cause else None
+    docs = ([cause] if cause in flagged else []) + [d for d in flagged if d != cause]
+    torn = "torn write; run `quarantine session2`"
     for doc in docs:
         rows = rq(g, Q.RECEIPT, **{"from": memory_id, "doc": doc})
         if rows and rows[0][0]:
             hops, _length, via = rows[0]
-            return shape_path(f"{memory_id} is quarantined because its provenance reaches flagged {doc}", hops, via)
-    return shape_not_in_graph(f"{memory_id} is flagged but no provenance path to a flagged document was found")
+            if m["quarantined"]:
+                return shape_path(f"{memory_id} is quarantined because its provenance reaches flagged {doc}", hops, via)
+            out = shape_path(f"{memory_id} reaches flagged {doc} but is not marked quarantined yet", hops, via)
+            out["warning"] = f"{memory_id} should be quarantined ({torn})"
+            return out
+    if m["quarantined"]:
+        out = shape_not_in_graph(f"{memory_id} is marked quarantined but its provenance reaches no flagged document ({torn})")
+        out["warning"] = torn
+        out["recorded_cause"] = cause                                   # history, not a receipt: that doc is not flagged now
+        return out
+    return shape_not_in_graph(f"{memory_id} has no provenance path to any flagged document")
 
 
 def why_connected(g, from_id: str, to_id: str) -> dict:
@@ -134,9 +155,9 @@ def why_connected(g, from_id: str, to_id: str) -> dict:
     the result says which one answered ("method")."""
     a, b = resolve_node(g, from_id), resolve_node(g, to_id)
     if a is None:
-        return shape_unknown(from_id)
+        return shape_unknown(from_id, "memory or document", g)
     if b is None:
-        return shape_unknown(to_id)
+        return shape_unknown(to_id, "memory or document", g)
     rows: list = []
     method = "algo.SPpaths"
     try:
@@ -162,11 +183,17 @@ def recall(g, memory_id: str) -> dict:
     """What does memory X say? Answered from memory, with when it was learned."""
     m = resolve_memory(g, memory_id)
     if m is None:
-        return shape_unknown(memory_id, "memory")
+        return shape_unknown(memory_id, "memory", g)
     # a quarantined memory's text may BE the injection: an agent asking "what does X say?" must not be handed it
     content = WITHHELD if m["quarantined"] else m["content"]
+    rep = rq(g, "MATCH (:Memory {id: $id})<-[:SUPERSEDES]-(r:Memory {quarantined: false}) RETURN r.id", id=memory_id) \
+        if m["quarantined"] else []
+    if rep:
+        content += f" Clean replacement: {rep[0][0]} (recall that instead)."
     out = shape_memory(content, m["id"], m["tick"], m["session"], m["agent"])
     out["quarantined"] = m["quarantined"]
+    if m["quarantined"]:
+        out["superseded_by"] = rep[0][0] if rep else None
     return out
 
 
@@ -177,7 +204,7 @@ def blast_radius(g, doc_id: str) -> dict:
     """'And then': everything this document led to, as the closure the harness would quarantine. Read-only."""
     d = resolve_doc(g, doc_id)
     if d is None:
-        return shape_unknown(doc_id, "document")
+        return shape_unknown(doc_id, "document", g)
     rows = rq(g, f"MATCH (d:Doc {{id: $doc}})<-[:{PROVENANCE}*1..]-(m:Memory) RETURN collect(DISTINCT m.id)", doc=doc_id)
     ids = sorted(rows[0][0]) if rows else []
     if not ids:

@@ -64,7 +64,7 @@ def test_rule1_agent_never_writes_cypher_fixed_catalog_with_validation(g):
             out = fn(g, *args)
             assert out["shape"] == "unknown", out
             assert calls, "the resolver must actually consult the graph"
-            assert all("Memory {id: $id}" in c or "Doc {id: $id}" in c for c in calls), calls   # resolvers only
+            assert all("{id: $id}" in c and "SET" not in c for c in calls), calls   # resolvers only (and the kind lookup)
         # hostile and malformed ids never reach the server: no query at all, still shape "unknown"
         for bad in ("\x00", "a\x00b", "\ud800", "x" * 100000, "", "x' }) MATCH (n) DETACH DELETE n //", "$id"):
             assert answers.why_connected(g, "a_cache_py", bad)["shape"] == "unknown", bad

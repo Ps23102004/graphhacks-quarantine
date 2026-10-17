@@ -296,8 +296,9 @@ def test_every_decision_is_explainable_by_a_graph_path(fx):
         rework(g, "step_3", "planner", "[regenerated]", [], 51, "s2", task="rework_step_3", needs_regeneration=True)
         prov = rq(g, "MATCH (m:Memory {id: 'step_3_v2'})-[r]->(x) RETURN collect(DISTINCT type(r))")[0][0]
         assert {"SUPERSEDES", "REWORKED_FOR", "RAN_IN"} <= set(prov) and rq(g, "MATCH (m:Memory {id: 'step_3_v2'}) RETURN m.ungrounded, m.needs_regeneration")[0] == [True, True]
-        # un-flagging the document later does not erase why a memory went red
+        # a raw un-flag (no reconcile) keeps the recorded cause, but no receipt cites a doc that is not flagged now
         q(g, "MATCH (d:Doc {id: 'doc_7'}) SET d.flagged = false")
-        assert answers.why_quarantined(g, "a_requirements")["hops"][-1] == "doc_7"
+        out = answers.why_quarantined(g, "a_requirements")
+        assert out["shape"] == "not_in_graph" and out["recorded_cause"] == "doc_7" and "torn" in out["warning"]
     finally:
         g.delete()
