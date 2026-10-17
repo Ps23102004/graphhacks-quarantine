@@ -365,3 +365,236 @@ def test_tools_never_hand_quarantined_text_to_an_agent():
         assert recall(g, "f_goal")["answer"] != WITHHELD                             # clean memory still answers
     finally:
         connect("reg_withhold").delete()
+
+
+# ---------------------------------------------------------------- round 2 (engine): supersession chains, the clock, torn states, hostile worlds
+def _cli(*argv):
+    from quarantine import cli
+
+    cli.main(list(argv))
+
+
+def _unfinished(g):
+    return q(g, "MATCH (t:Task) WHERE t.state <> 'done' RETURN t.id, t.state ORDER BY t.id")
+
+
+def test_a_second_advisory_after_a_heal_reworks_through_the_supersedes_chain(capsys):
+    """session2 died after its first heal; then doc_5 reaches the healed twin. The blocker resolves to the chain head."""
+    g = "r2engine_chain"
+    try:
+        _cli("session1", "--graph", g)
+        _cli("flag", "doc_7", "--graph", g)
+        q(connect(g), Q.HEAL_FACTS, session="s2", tick=41)               # then the process died
+        _cli("flag", "doc_5", "--graph", g)
+        _cli("session2", "--graph", g)
+        gg = connect(g)
+        assert _unfinished(gg) == []
+        assert q(gg, "MATCH (:Memory {id: 'step_3_v2'})-[:INFLUENCED_BY]->(x) RETURN x.id ORDER BY x.id") \
+            == [["f_deps"], ["f_http_client_v2_v2"]]
+        st = __import__("quarantine.agent_runtime", fromlist=["x"]).recovery_status(gg)
+        assert st["agents"]["planner"]["unresolved"] == st["agents"]["coder"]["unresolved"] == 0, st["agents"]
+    finally:
+        connect(g).delete()
+
+
+def _outvote_world():
+    """f: x from da, y from db (3 episodes), z from dc (2). Flag da heals f to y; flag db then kills that twin while f
+    itself still has a clean z majority, which HEAL_FACTS does not re-heal."""
+    eps = {"ea": "da", "eb1": "db", "eb2": "db", "eb3": "db", "ec1": "dc", "ec2": "dc"}
+    claims = {"ea": "x", "eb1": "y", "eb2": "y", "eb3": "y", "ec1": "z", "ec2": "z"}
+    return world(docs={d: {"uri": d} for d in ("da", "db", "dc")},
+                 episodes={e: {"doc": d, "tick": i + 1, "text": e} for i, (e, d) in enumerate(eps.items())},
+                 facts={"f": {"subject": "s", "slot": "x", "tick": 10, "value": "x",
+                              "support": [{"ep": e, "claim": c} for e, c in claims.items()]}})
+
+
+def test_session2_fails_loudly_when_tasks_remain_at_its_fixpoint(tmp_path):
+    import yaml
+
+    p = tmp_path / "ov.yaml"
+    p.write_text(yaml.safe_dump(_outvote_world()))
+    g = "r2engine_unfinished"
+    try:
+        _cli("session1", "--fixture", str(p), "--graph", g)
+        _cli("flag", "da", "--fixture", str(p), "--graph", g)
+        q(connect(g), Q.HEAL_FACTS, session="s2", tick=41)               # then the process died
+        _cli("flag", "db", "--fixture", str(p), "--graph", g)
+        with pytest.raises(SystemExit) as e:
+            _cli("session2", "--fixture", str(p), "--graph", g)
+        assert "unfinished" in str(e.value) and "rework_s" in str(e.value)
+    finally:
+        connect(g).delete()
+
+
+def test_a_restarted_session2_starts_after_every_live_lease(capsys):
+    """--kill-planner died right after s2b took over the lease: a rerun must be able to outlast that lease."""
+    g = "r2engine_clock"
+    try:
+        _cli("session1", "--graph", g)
+        _cli("flag", "doc_7", "--graph", g)
+        gg = connect(g)
+        q(gg, Q.HEAL_FACTS, session="s2", tick=41)
+        q(gg, Q.PROMOTE_READY)
+        assert q(gg, Q.CLAIM, task="rework_step_3", me="planner", now=48, lease=5, session="s2b")   # then it died
+        _cli("session2", "--graph", g)
+        assert "could not" not in capsys.readouterr().out
+        assert _unfinished(gg) == []
+    finally:
+        connect(g).delete()
+
+
+def test_status_does_not_call_a_half_written_session1_complete():
+    from quarantine.agent_runtime import recovery_status
+
+    g = _demo("r2engine_torn_s1")
+    try:
+        q(g, "MATCH (s:Session {id: 's1'}) REMOVE s.complete")           # session1 was killed before its last write
+        st = recovery_status(g)
+        assert st["complete"] is False and any("session 1 did not finish" in w for w in st["warnings"])
+    finally:
+        connect("r2engine_torn_s1").delete()
+
+
+def test_unflag_is_one_write_and_a_retry_repairs_a_torn_one():
+    from quarantine.loader import unflag
+
+    g = _demo("r2engine_unflag")
+    try:
+        q(g, Q.FLAG_AND_CLOSE, doc="doc_7", reason="t", tick=40)
+        q(g, Q.FLAG_AND_CLOSE, doc="doc_5", reason="t", tick=41)
+        q(g, Q.UNFLAG_DOC, doc="doc_5")                                  # the process dies right after this statement
+        assert red_ids(g) == SIX
+        assert {r[0] for r in q(g, "MATCH (m:Memory {quarantined: true}) RETURN DISTINCT m.quarantine_doc")} == {"doc_7"}
+        q(g, Q.FLAG_AND_CLOSE, doc="doc_5", reason="t", tick=42)
+        q(g, "MATCH (d:Doc {id: 'doc_5'}) SET d.flagged = false")        # a torn retraction written by an older version
+        out = unflag(g, "doc_5")                                         # the retry repairs it instead of 'nothing to do'
+        assert red_ids(g) == SIX and out["repaired"] == ["ep_5"]
+    finally:
+        connect("r2engine_unflag").delete()
+
+
+def test_a_second_advisory_does_not_list_done_tasks_or_resolved_memories(capsys):
+    from quarantine.agent_runtime import recovery_status
+
+    g = "r2engine_second"
+    try:
+        _cli("session1", "--graph", g)
+        _cli("flag", "doc_7", "--graph", g)
+        _cli("session2", "--graph", g)
+        capsys.readouterr()
+        _cli("flag", "doc_2", "--graph", g)
+        _cli("session2", "--graph", g)
+        out = capsys.readouterr().out
+        assert "  done  waiting_on [f" not in out and "  done  waiting_on [s" not in out
+        st = recovery_status(connect(g))
+        assert st["agents"]["planner"]["unresolved"] == st["agents"]["coder"]["unresolved"] == 0, st["agents"]
+        assert all(t["blocked_by"] == [] for t in st["tasks"] if t["state"] == "done"), st["tasks"]
+        _cli("flag", "doc_7", "--graph", g)                              # re-flag after healing: nothing is blocked
+        assert "blocked_by" not in capsys.readouterr().out
+    finally:
+        connect(g).delete()
+
+
+import datetime  # noqa: E402
+
+
+@pytest.mark.parametrize("breakage,match", [
+    (lambda w: w["docs"]["d1"].update(published=datetime.date(2026, 1, 1)), "published"),
+    (lambda w: w["sessions"]["s1"].update(meta={"a": 1}), "meta"),
+    (lambda w: w["sessions"]["s1"].update(complete=True), "reserved"),
+    (lambda w: w["sessions"]["s1"].update({"": 1}), "key"),
+    (lambda w: w["docs"]["d1"].update(score=float("nan")), "score"),
+    (lambda w: w["docs"]["d1"].update(tags=[[1]]), "tags"),
+    (lambda w: w["episodes"]["e1"].update(tick=2 ** 63), "tick"),
+    (lambda w: w["episodes"]["e1"].update(text="a\x00b"), "NUL"),
+    (lambda w: w["episodes"].update({"e\x00": {"doc": "d1", "tick": 1, "text": "x"}}), "NUL"),
+    (lambda w: w["episodes"].update({"e" * 300: {"doc": "d1", "tick": 1, "text": "x"}}), "id"),
+    (lambda w: w["docs"].update({"d" * 300: {}}), "id"),
+    (lambda w: w["steps"]["s"].update(agent=["planner"]), "agent"),
+    (lambda w: w.update(procedure=5), "procedure"),
+    (lambda w: w.update(procedure={"lease_ticks": -3}), "lease_ticks"),
+    (lambda w: w.update(procedure={"lease_ticks": 0}), "lease_ticks"),
+    (lambda w: w.update(procedure={"heal_min_clean": 3}), "heal_min_clean"),
+    (lambda w: w.update(flag=5), "flag"),
+    (lambda w: w.update(flag=["d3"]), "flag"),
+    (lambda w: w.update(flag={"doc": "d3", "tick": "40", "reason": "bad"}), "tick"),
+    (lambda w: w.update(flag={"doc": "d3", "reason": "bad"}), "tick"),
+    (lambda w: w.update(flag={"doc": "nope", "tick": 40, "reason": "bad"}), "doc"),
+    (lambda w: w.update(rework=5), "rework"),
+    (lambda w: w.update(rework={"s": {"text": "redo", "reads": "f_v2"}}), "reads"),
+    (lambda w: w.update(rework={"s": {"reads": ["f_v2"]}}), "text"),
+])
+def test_validate_fixture_refuses_values_falkordb_or_the_cli_cannot_use(breakage, match):
+    w = copy.deepcopy(world())
+    breakage(w)
+    with pytest.raises(ValueError, match=match):
+        validate_fixture(w)
+
+
+def test_session1_probes_the_world_before_deleting_the_graph(tmp_path, monkeypatch):
+    """Even a world validation misses can never cost the user the graph they had."""
+    import yaml
+
+    from quarantine import cli
+
+    good, bad = tmp_path / "good.yaml", tmp_path / "bad.yaml"
+    good.write_text(yaml.safe_dump(world()))
+    w = world()
+    w["docs"]["d1"]["published"] = datetime.date(2026, 1, 1)             # FalkorDB cannot store a date
+    bad.write_text(yaml.safe_dump(w))
+    g = "r2engine_probe"
+    try:
+        cli.main(["session1", "--fixture", str(good), "--graph", g])
+        monkeypatch.setattr(cli, "validate_fixture", lambda fx: None)
+        monkeypatch.setattr("quarantine.loader.validate_fixture", lambda fx: None)
+        with pytest.raises(SystemExit) as e:
+            cli.main(["session1", "--fixture", str(bad), "--graph", g])
+        assert str(e.value).startswith("quarantine: ") and "left as it was" in str(e.value)
+        assert q(connect(g), "MATCH (m:Memory) RETURN count(m)") == [[8]]
+    finally:
+        connect(g).delete()
+
+
+@pytest.mark.parametrize("content,match", [
+    ("? [x, y]\n: 1\n", "unhashable"),
+    ("steps: {s: {agent: [planner]}}\n", None),
+])
+def test_odd_yaml_keys_give_one_line_errors(tmp_path, content, match):
+    from quarantine import cli
+
+    p = tmp_path / "x.yaml"
+    p.write_text(content)
+    with pytest.raises(SystemExit) as e:
+        cli.main(["session1", "--fixture", str(p), "--graph", "r2engine_never_created"])
+    assert str(e.value).startswith("quarantine: ") and (match is None or match in str(e.value))
+
+
+def test_yaml_merge_keys_are_read_like_safe_load(tmp_path):
+    p = tmp_path / "m.yaml"
+    p.write_text("a: &b {x: 1, y: 1}\nc: {<<: *b, y: 2}\n")
+    assert read_fixture(p) == {"a": {"x": 1, "y": 1}, "c": {"x": 1, "y": 2}}
+    p.write_text("a: &b {x: 1}\nc: {<<: *b, y: 2, y: 3}\n")
+    with pytest.raises(ValueError, match="duplicate key"):
+        read_fixture(p)
+
+
+def test_steps_listed_out_of_tick_order_or_reading_an_artifact_load():
+    w = world()
+    w["steps"] = {"s2": {"order": 2, "tick": 14, "text": "second", "reads": ["s1", "a"]},
+                  "s1": {"order": 1, "tick": 11, "text": "first", "reads": ["f"]}}
+    w["artifacts"] = {"a": {"path": "a.py", "tick": 12, "text": "art", "reads": ["s1"]}}
+    validate_fixture(w)
+    g = fresh("r2engine_order")
+    try:
+        load(g, w)
+        assert q(g, "MATCH (:Memory {id: 's2'})-[:INFLUENCED_BY]->(x) RETURN x.id ORDER BY x.id") == [["a"], ["s1"]]
+    finally:
+        connect("r2engine_order").delete()
+
+
+def test_the_unknown_key_message_does_not_claim_note_is_stored():
+    w = world()
+    w["facts"]["f"]["reads"] = ["e1"]
+    with pytest.raises(ValueError) as e:
+        validate_fixture(w)
+    assert "not stored" in str(e.value)

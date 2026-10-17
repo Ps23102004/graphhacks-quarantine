@@ -51,7 +51,13 @@ class _UniqueKeyLoader(yaml.SafeLoader):
     def construct_mapping(self, node, deep=False):
         seen = set()
         for key_node, _ in node.value:
+            if key_node.tag == "tag:yaml.org,2002:merge":           # `<<: *anchor`: SafeLoader merges it below; an
+                continue                                           # explicit key may override a merged one, as in YAML
             key = self.construct_object(key_node, deep=deep)
+            try:
+                hash(key)
+            except TypeError:
+                raise yaml.constructor.ConstructorError(None, None, "found unhashable key", key_node.start_mark) from None
             if key in seen:
                 raise yaml.constructor.ConstructorError(None, None, f"duplicate key {key!r}", key_node.start_mark)
             seen.add(key)
@@ -59,7 +65,10 @@ class _UniqueKeyLoader(yaml.SafeLoader):
 
 
 TWIN_SUFFIX = re.compile(r"_v\d+$")                      # healed and reworked twins are named <id>_v2
-RESERVED = {"Doc": ("id", "flagged", "flag_reason", "flag_tick"), "Agent": ("name",), "Session": ("id",)}
+RESERVED = {"Doc": ("id", "flagged", "flag_reason", "flag_tick"), "Agent": ("name",), "Session": ("id", "complete")}
+INT64 = (-2 ** 63, 2 ** 63 - 1)                           # FalkorDB integers
+MAX_ID = 256                                              # answers.valid_id: a longer id could never be explained
+MAX_TICK = 2 ** 53                                        # room for session2 to count on without overflowing int64
 REQUIRED = {"episodes": (("doc", str), ("tick", int), ("text", str)),
             "facts": (("subject", str), ("slot", str), ("value", str), ("tick", int), ("support", list)),
             "steps": (("order", int), ("tick", int), ("text", str), ("reads", list)),
@@ -72,6 +81,7 @@ def validate_fixture(fx: dict) -> None:
     checked here, so a bad world is refused before the CLI deletes or writes anything."""
     if not isinstance(fx, dict):
         raise ValueError("fixture must be a mapping of sections")
+    _check_values(fx, "fixture")
     required = ("sessions", "agents", "docs", "episodes", "facts", "steps", "artifacts")
     for sec in required:
         if sec not in fx or not isinstance(fx[sec], dict):
@@ -82,13 +92,14 @@ def validate_fixture(fx: dict) -> None:
         for key, props in fx[sec].items():
             if not isinstance(props, dict):
                 raise ValueError(f"{label} {key!r} must be a mapping")
+            _check_id(key, label)
             clash = [k for k in RESERVED[label] if k in props]
             if clash:
                 raise ValueError(f"{label} {key!r} sets reserved key(s) {clash}; they are written by the harness")
+            _check_props(props, f"{label} {key!r}")
     for sec, fields in REQUIRED.items():
         for mid, m in fx[sec].items():
-            if not isinstance(mid, str) or not mid:
-                raise ValueError(f"{sec}: memory id {mid!r} must be a non-empty string")
+            _check_id(mid, f"{sec}: memory")
             if TWIN_SUFFIX.search(mid):
                 raise ValueError(f"{sec}: id {mid!r} ends in the reserved suffix _v<n> used for healed and reworked twins")
             if not isinstance(m, dict):
@@ -97,11 +108,14 @@ def validate_fixture(fx: dict) -> None:
             if unknown:
                 # e.g. `reads:` on a fact or episode would be silently dropped, hiding provenance: refuse instead
                 raise ValueError(f"{sec}: {mid!r} has unknown key(s) {sorted(unknown)}; only {[f for f, _ in fields]} "
-                                 f"(+ agent, note) are read, so anything else would be ignored")
+                                 f"(+ agent) are read, and note is accepted as a comment and not stored, so anything "
+                                 f"else would be ignored")
             for field_name, typ in fields:
                 if not isinstance(m.get(field_name), typ) or isinstance(m.get(field_name), bool):
                     raise ValueError(f"{sec}: {mid!r} needs {field_name!r} as {typ.__name__}, got {m.get(field_name)!r}")
             agent = m.get("agent", DEFAULT_AGENT[sec])
+            if not isinstance(agent, str):
+                raise ValueError(f"{sec}: {mid!r} needs 'agent' as str, got {agent!r}")
             if agent not in fx["agents"]:
                 raise ValueError(f"{sec}: {mid!r} names unknown agent {agent!r}")
         if sec == "facts":
@@ -119,56 +133,113 @@ def validate_fixture(fx: dict) -> None:
 
     known_docs = set(fx["docs"].keys())
     known_memories: dict[str, int] = {}
-
+    for sec in REQUIRED:
+        for mid, m in fx[sec].items():
+            if mid in known_memories:
+                raise ValueError(f"Duplicate memory ID: {mid!r}")
+            if not 0 < m["tick"] <= MAX_TICK:
+                raise ValueError(f"{sec}: {mid!r} has invalid tick: {m['tick']!r} (ticks run from 1 to 2**53)")
+            known_memories[mid] = m["tick"]
     for eid, e in fx["episodes"].items():
-        if e.get("doc") not in known_docs:
-            raise ValueError(f"Episode {eid} references unknown doc: {e.get('doc')!r}")
-        tick = e.get("tick")
-        if not isinstance(tick, int) or tick <= 0:
-            raise ValueError(f"Episode {eid} has invalid tick: {tick!r}")
-        if eid in known_memories:
-            raise ValueError(f"Duplicate memory ID: {eid!r}")
-        known_memories[eid] = tick
-
+        if e["doc"] not in known_docs:
+            raise ValueError(f"Episode {eid} references unknown doc: {e['doc']!r}")
     for fid, f in fx["facts"].items():
-        tick = f.get("tick")
-        if not isinstance(tick, int) or tick <= 0:
-            raise ValueError(f"Fact {fid} has invalid tick: {tick!r}")
-        if fid in known_memories:
-            raise ValueError(f"Duplicate memory ID: {fid!r}")
-        known_memories[fid] = tick
-        for s in f.get("support", []):
-            ep_id = s.get("ep")
-            if ep_id not in fx["episodes"]:
-                raise ValueError(f"Fact {fid} references unknown episode: {ep_id!r}")
-            if known_memories[ep_id] >= tick:
-                raise ValueError(f"Temporal violation: Fact {fid} (tick {tick}) cites later episode {ep_id}")
+        for s in f["support"]:
+            if s["ep"] not in fx["episodes"]:
+                raise ValueError(f"Fact {fid} references unknown episode: {s['ep']!r}")
+            if known_memories[s["ep"]] >= f["tick"]:
+                raise ValueError(f"Temporal violation: Fact {fid} (tick {f['tick']}) cites later episode {s['ep']}")
+    # any memory may be read, in any section and listed in any order; load() writes reads before their readers
+    for sec, label in (("steps", "Step"), ("artifacts", "Artifact")):
+        for mid, m in fx[sec].items():
+            for rid in m["reads"]:
+                if rid not in known_memories:
+                    raise ValueError(f"{label} {mid} references unknown memory in read set: {rid!r}")
+                if known_memories[rid] >= m["tick"]:
+                    raise ValueError(f"Temporal violation: {label} {mid} (tick {m['tick']}) cites later memory {rid}")
+    _check_sections(fx, known_docs)
 
-    for sid, s in fx["steps"].items():
-        tick = s.get("tick")
-        if not isinstance(tick, int) or tick <= 0:
-            raise ValueError(f"Step {sid} has invalid tick: {tick!r}")
-        if sid in known_memories:
-            raise ValueError(f"Duplicate memory ID: {sid!r}")
-        known_memories[sid] = tick
-        for rid in s.get("reads", []):
-            if rid not in known_memories:
-                raise ValueError(f"Step {sid} references unknown memory in read set: {rid!r}")
-            if known_memories[rid] >= tick:
-                raise ValueError(f"Temporal violation: Step {sid} (tick {tick}) cites later memory {rid}")
 
-    for aid, a in fx["artifacts"].items():
-        tick = a.get("tick")
-        if not isinstance(tick, int) or tick <= 0:
-            raise ValueError(f"Artifact {aid} has invalid tick: {tick!r}")
-        if aid in known_memories:
-            raise ValueError(f"Duplicate memory ID: {aid!r}")
-        known_memories[aid] = tick
-        for rid in a.get("reads", []):
-            if rid not in known_memories:
-                raise ValueError(f"Artifact {aid} references unknown memory in read set: {rid!r}")
-            if known_memories[rid] >= tick:
-                raise ValueError(f"Temporal violation: Artifact {aid} (tick {tick}) cites later memory {rid}")
+def _check_id(x, what: str) -> None:
+    if not isinstance(x, str) or not x or len(x) > MAX_ID or "\x00" in x:
+        raise ValueError(f"{what} id {x!r} must be a non-empty string of at most {MAX_ID} characters with no NUL")
+
+
+def _check_values(x, where: str) -> None:
+    """Every value anywhere in the fixture is one FalkorDB can store: a NUL-free UTF-8 string, an int64, a finite float,
+    a bool, null, or a list or mapping (with non-empty string keys) of those."""
+    if isinstance(x, dict):
+        for k, v in x.items():
+            if not isinstance(k, str) or not k or "\x00" in k:
+                raise ValueError(f"{where}: key {k!r} must be a non-empty string with no NUL")
+            _check_values(v, f"{where}.{k}")
+    elif isinstance(x, list):
+        for i, v in enumerate(x):
+            _check_values(v, f"{where}[{i}]")
+    elif isinstance(x, str):
+        if "\x00" in x:
+            raise ValueError(f"{where}: strings may not contain NUL")
+        try:
+            x.encode("utf-8")
+        except UnicodeEncodeError:
+            raise ValueError(f"{where}: string is not valid UTF-8") from None
+    elif isinstance(x, bool) or x is None:
+        pass
+    elif isinstance(x, int):
+        if not INT64[0] <= x <= INT64[1]:
+            raise ValueError(f"{where}: integer {x} does not fit in 64 bits")
+    elif isinstance(x, float):
+        if not math.isfinite(x):
+            raise ValueError(f"{where}: number {x} is not finite")
+    else:
+        raise ValueError(f"{where}: {type(x).__name__} values are not supported (quote dates and times as strings)")
+
+
+def _check_props(props: dict, what: str) -> None:
+    """Node properties: scalars or flat lists of scalars (FalkorDB stores no maps and no nested lists)."""
+    for k, v in props.items():
+        if isinstance(v, dict) or (isinstance(v, list) and any(isinstance(i, (dict, list)) or i is None for i in v)):
+            raise ValueError(f"{what} property {k!r} must be a string, number, boolean or a flat list of those, got {v!r}")
+
+
+def _positive_tick(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and 0 < v <= MAX_TICK
+
+
+def _check_sections(fx: dict, docs: set) -> None:
+    """The optional sections flag, rework and procedure, which the CLI reads in flag and session2."""
+    f = fx.get("flag")
+    if f is not None:
+        if not isinstance(f, dict):
+            raise ValueError(f"flag must be a mapping {{doc, tick, reason}}, got {f!r}")
+        if f.get("doc") not in docs:
+            raise ValueError(f"flag: doc {f.get('doc')!r} is not one of the fixture's docs")
+        if not _positive_tick(f.get("tick")):
+            raise ValueError(f"flag: tick must be a positive integer, got {f.get('tick')!r}")
+        if not isinstance(f.get("reason"), str):
+            raise ValueError(f"flag: reason must be a string, got {f.get('reason')!r}")
+    rw = fx.get("rework")
+    if rw is not None:
+        if not isinstance(rw, dict):
+            raise ValueError(f"rework must be a mapping of memory id to {{text, reads}}, got {rw!r}")
+        for mid, spec in rw.items():
+            if not isinstance(spec, dict) or not isinstance(spec.get("text"), str):
+                raise ValueError(f"rework: {mid!r} needs 'text' as str")
+            if not isinstance(spec.get("reads"), list) or not all(isinstance(r, str) for r in spec["reads"]):
+                raise ValueError(f"rework: {mid!r} needs 'reads' as a list of memory ids, got {spec.get('reads')!r}")
+            if not isinstance(spec.get("needs_regeneration", False), bool):
+                raise ValueError(f"rework: {mid!r} needs_regeneration must be true or false")
+    proc = fx.get("procedure")
+    if proc is not None:
+        if not isinstance(proc, dict):
+            raise ValueError(f"procedure must be a mapping, got {proc!r}")
+        _check_props(proc, "procedure")
+        if "lease_ticks" in proc and not _positive_tick(proc["lease_ticks"]):
+            raise ValueError(f"procedure: lease_ticks must be a positive integer, got {proc['lease_ticks']!r}")
+        if proc.get("id", DEFAULT_PROCEDURE["id"]) != DEFAULT_PROCEDURE["id"]:
+            raise ValueError(f"procedure: id is {DEFAULT_PROCEDURE['id']!r} (the harness reads that node)")
+        if proc.get("heal_min_clean", 2) != 2:
+            raise ValueError("procedure: heal_min_clean is fixed at 2 (queries.HEAL_FACTS); another value would be untrue")
 
 
 def connect(name: str = "quarantine", host: str | None = None, port: int | None = None) -> Graph:
@@ -278,11 +349,19 @@ def load(g: Graph, fx: dict, after_write=None) -> None:
                 "CONSOLIDATED_FROM", "Episode", [{"id": s["ep"], "props": {"claim": s["claim"]}} for s in f["support"]])
         done(fid)
 
-    for kind, label, agent, extra in (("steps", "PlanStep", "planner", "order"), ("artifacts", "Artifact", "coder", "path")):
-        for mid, m in fx[kind].items():
-            _memory(g, label, mid, m.get("agent", agent), "s1", {extra: m[extra], "tick": m["tick"], "text": m["text"]},
-                    "INFLUENCED_BY", "Memory", [{"id": r, "props": {"read_tick": m["tick"], "session": "s1"}} for r in m["reads"]])
-            done(mid)
+    rest = [(label, agent, extra, mid, m) for kind, label, agent, extra in
+            (("steps", "PlanStep", "planner", "order"), ("artifacts", "Artifact", "coder", "path"))
+            for mid, m in fx[kind].items()]
+    seen = set(fx["episodes"]) | set(fx["facts"])
+    for *_, mid, m in rest:
+        if not seen.issuperset(m["reads"]):                       # listed before what it reads: write in tick order,
+            rest.sort(key=lambda r: r[4]["tick"])                 # always valid since reads point at smaller ticks
+            break
+        seen.add(mid)
+    for label, agent, extra, mid, m in rest:
+        _memory(g, label, mid, m.get("agent", agent), "s1", {extra: m[extra], "tick": m["tick"], "text": m["text"]},
+                "INFLUENCED_BY", "Memory", [{"id": r, "props": {"read_tick": m["tick"], "session": "s1"}} for r in m["reads"]])
+        done(mid)
     # the last write: Session 1 finished. `flag` refuses a graph without it (a crash mid-load is visible, not silent)
     q(g, "MATCH (s:Session {id: 's1'}) SET s.complete = true")
 
@@ -307,7 +386,7 @@ def reconcile(g: Graph) -> list[str]:
 
 def derive_rework(g: Graph, memory_id: str) -> dict:
     """Rework spec for any quarantined step/artifact, computed from the graph (no scripted fixture needed):
-    keep each clean read, swap a quarantined read for its healed twin, drop a quarantined read that has no
+    keep each clean read, swap a quarantined read for the clean head of its SUPERSEDES chain, drop a quarantined read that has no
     twin (it can never heal).
 
     The harness cannot author content, and it must NOT copy the quarantined memory's text into a memory that
@@ -317,7 +396,7 @@ def derive_rework(g: Graph, memory_id: str) -> dict:
     rows = q(g, """
         MATCH (m:Memory {id: $id})
         OPTIONAL MATCH (m)-[:INFLUENCED_BY]->(x:Memory)
-        OPTIONAL MATCH (x)<-[:SUPERSEDES]-(t:Memory {quarantined: false})
+        OPTIONAL MATCH (x)<-[:SUPERSEDES*1..]-(t:Memory {quarantined: false})      // the chain's clean head
         RETURN x.id, x.quarantined, t.id
     """, id=memory_id)
     reads = []
@@ -428,8 +507,15 @@ def unflag(g: Graph, doc: str) -> dict:
     if replacements or started:
         raise RuntimeError("healing has already started; un-flagging now would leave replacements without a cause "
                            "(run `quarantine session1` to reset the demo)")
-    if not q(g, Q.UNFLAG_DOC, doc=doc):
-        raise KeyError(f"{doc!r} is not flagged; nothing to retract")
+    red_ids = "MATCH (m:Memory {quarantined: true}) RETURN m.id ORDER BY m.tick"
+    retracted = bool(q(g, Q.UNFLAG_DOC, doc=doc))                       # the retraction and its clearing: one write
+    before = [r[0] for r in q(g, red_ids)]
     still = reconcile(g)
-    red = [r[0] for r in q(g, "MATCH (m:Memory {quarantined: true}) RETURN m.id ORDER BY m.tick")]
-    return {"still_flagged": still, "quarantined": red}
+    red = [r[0] for r in q(g, red_ids)]
+    repaired = [m for m in before if m not in red]                      # what reconcile had to clear: a torn state
+    if not retracted and not repaired:
+        raise KeyError(f"{doc!r} is not flagged; nothing to retract")
+    out = {"still_flagged": still, "quarantined": red}
+    if not retracted:                                                   # an earlier retraction was interrupted
+        out["repaired"] = repaired                                      # before its memories were cleared
+    return out

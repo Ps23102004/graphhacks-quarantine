@@ -28,11 +28,22 @@ RETURN count(DISTINCT m) AS precise, collect(DISTINCT m.id) AS ids
 
 # Reconcile (loader.reconcile): quarantine is derived state, so after any crash it is re-derived from the documents
 # that are flagged. Every statement is idempotent and none clears a memory a still-flagged document reaches.
+# The retraction and the clearing of what only it reached are ONE statement (like FLAG_AND_CLOSE), so a crash can never
+# leave red memories that reach no flagged doc; loader.unflag then runs the full reconcile.
 UNFLAG_DOC = """
 MATCH (d:Doc {id: $doc, flagged: true})
-SET d.flagged = false
-REMOVE d.flag_reason, d.flag_tick
-RETURN d.id
+SET d.flagged = false, d.flag_reason = null, d.flag_tick = null
+WITH d
+OPTIONAL MATCH (d)<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]-(m:Memory)
+WITH DISTINCT d, m
+OPTIONAL MATCH (m)-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]->(o:Doc {flagged: true})
+WITH d, m, o ORDER BY o.flag_tick, o.id
+WITH d, m, collect(DISTINCT o.id) AS others
+FOREACH (x IN CASE WHEN m IS NOT NULL AND size(others) = 0 THEN [m] ELSE [] END |
+  SET x.quarantined = false, x.quarantine_tick = null, x.quarantine_doc = null, x.support_clean = null, x.healable = null)
+FOREACH (x IN CASE WHEN m IS NOT NULL AND size(others) > 0 AND m.quarantine_doc = d.id THEN [m] ELSE [] END |
+  SET x.quarantine_doc = others[0])
+RETURN DISTINCT d.id
 """
 STILL_FLAGGED = "MATCH (d:Doc {flagged: true}) RETURN d.id, d.flag_tick ORDER BY d.flag_tick, d.id"
 DROP_UNFLAGGED_CAUSE = """
@@ -60,6 +71,11 @@ WITH count(s) AS replacements
 OPTIONAL MATCH (t:Task) WHERE t.state IN ['claimed', 'done']
 RETURN replacements, count(t) AS started_tasks
 """
+
+# A memory is resolved when its SUPERSEDES chain reaches a clean memory. A clean memory is only superseded after it is
+# quarantined, so the one clean node on a chain is its head: a second advisory can quarantine a healed twin, and the
+# original then resolves through the twin's own replacement.
+RESOLVED = "(%s)<-[:SUPERSEDES*1..]-(:Memory {quarantined: false})"
 
 # Q1 hero: everything whose provenance reaches the flagged doc. One traversal,
 # three edge types, any depth (the graph is a DAG: reads only point backwards in time). Returns the "precise" count.
@@ -145,6 +161,7 @@ DELETE b
 WITH count(*) AS dummy
 MATCH (t:Task {kind: 'rework'})-[:REWORKS]->(m:Memory)-[:INFLUENCED_BY]->(x:Memory {quarantined: true, healable: true})
 MERGE (t)-[:BLOCKED_BY]->(x)
+WITH t, x WHERE t.state <> 'done'
 RETURN t.id, collect(x.id) AS blocked_by ORDER BY t.id
 """
 
@@ -185,11 +202,11 @@ RETURN f2.id, f2.value, count(e) AS support
 # a whole round changes nothing.
 PROMOTE_READY = """
 MATCH (t:Task {state: 'blocked'})
-OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-(:Memory {quarantined: false})
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT %s
 WITH t, count(x) AS open WHERE open = 0
 SET t.state = 'ready'
 RETURN count(t) AS promoted
-"""
+""" % (RESOLVED % "x")
 
 # Q6 per-agent start-up query. A fresh process asks: what of mine is
 # quarantined and not yet replaced, is there a rework task for it, and what
@@ -198,14 +215,14 @@ RETURN count(t) AS promoted
 STARTUP = """
 MATCH (a:Agent {name: $me})-[:AUTHORED]->(m:Memory {quarantined: true})
 OPTIONAL MATCH (t:Task)-[:REWORKS]->(m)
-OPTIONAL MATCH (m)<-[:SUPERSEDES]-(clean_rep:Memory {quarantined: false})
-WITH a, m, t, clean_rep
-WHERE clean_rep IS NULL OR (t IS NOT NULL AND t.state IN ['ready', 'claimed'])
-OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT (x)<-[:SUPERSEDES]-(:Memory {quarantined: false})
+WITH a, m, t
+// a done task whose replacement was itself quarantined later: the twin's own task carries that work
+WHERE (NOT %s AND coalesce(t.state, '') <> 'done') OR (t IS NOT NULL AND t.state IN ['ready', 'claimed'])
+OPTIONAL MATCH (t)-[:BLOCKED_BY]->(x:Memory) WHERE NOT %s
 RETURN m.id AS memory, m.healable AS healable, t.id AS task, t.state AS state,
        collect(x.id) AS waiting_on
 ORDER BY m.tick
-"""
+""" % (RESOLVED % "m", RESOLVED % "x")
 
 # Q8 lease: claim a ready task, take over an expired claim, or resume your own claim from the same session after a
 # crash, atomically (FalkorDB serialises write queries per graph). 0 rows = someone else holds a live lease.

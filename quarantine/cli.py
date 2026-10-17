@@ -66,20 +66,39 @@ def startup_line(agent: str, memory: str, task, state, waiting) -> str:
 
 
 # ---------------------------------------------------------------- session 1
-def session1(args) -> None:
-    if args.slow < 0 or not math.isfinite(args.slow):
-        sys.exit("error: --slow must be a non-negative finite number")
-
-    fx = read_fixture(args.fixture)
-    validate_fixture(fx)
-
-    g = connect(args.graph)
+def drop(g) -> None:
     try:
         g.delete()
     except Exception as e:
         err = str(e).lower()
         if "not exist" not in err and "empty key" not in err:
             raise
+
+
+def probe(fx: dict, graph: str) -> None:
+    """Load the world into a scratch graph first, so anything FalkorDB refuses is refused before the user's graph is
+    deleted. The real load then runs live into the target (the page watches it fill)."""
+    scratch = connect(f"{graph}__probe")
+    drop(scratch)
+    try:
+        load(connect(scratch.name), fx)
+    except Exception as e:  # noqa: BLE001
+        raise ValueError(f"FalkorDB refused this world ({str(e).splitlines()[0] if str(e) else type(e).__name__}); "
+                         f"graph {graph!r} was left as it was") from None
+    finally:
+        drop(connect(scratch.name))
+
+
+def session1(args) -> None:
+    if args.slow < 0 or not math.isfinite(args.slow):
+        sys.exit("error: --slow must be a non-negative finite number")
+
+    fx = read_fixture(args.fixture)
+    validate_fixture(fx)
+    probe(fx, args.graph)
+
+    g = connect(args.graph)
+    drop(g)
     g = connect(args.graph)
     # what each memory did, from the fixture; printed the moment the loader has written it
     did: dict[str, tuple[str, str, str, int]] = {}
@@ -109,8 +128,9 @@ def session1(args) -> None:
 # ---------------------------------------------------------------- flag
 def flag(args) -> None:
     fx = read_fixture(args.fixture)
+    validate_fixture(fx)
     g = connect(args.graph)
-    f = fx.get("flag") or {"doc": args.doc, "tick": 40, "reason": ""}
+    f = fx.get("flag") or {"doc": args.doc, "tick": 40, "reason": f"flagged {args.doc} from the CLI"}
     reason = args.reason or (f["reason"] if args.doc == f["doc"] else f"flagged {args.doc} from the CLI")
     must(rq(g, "MATCH (d:Doc {id: $doc}) RETURN d.id", doc=args.doc),
          f"no doc {args.doc!r} in graph {args.graph!r} (run `quarantine session1` first)")
@@ -151,7 +171,11 @@ def unflag(args) -> None:
         out = unflag_doc(g, args.doc)
     except (KeyError, RuntimeError) as e:
         raise SystemExit(f"quarantine: {e.args[0]}") from None
-    say(f"retracted advisory on {args.doc}")
+    if "repaired" not in out:
+        say(f"retracted advisory on {args.doc}")
+    else:
+        say(f"{args.doc} was already retracted; an interrupted retraction left {ids(out['repaired'])} quarantined, "
+            f"now re-derived from the documents still flagged")
     say(f"still flagged: {ids(out['still_flagged']) if out['still_flagged'] else 'none'} | quarantined now: {len(out['quarantined'])}")
 
 
@@ -174,7 +198,7 @@ def kill_planner(g, task: str, tick: int, lease: int = LEASE) -> int:
     for memory, _h, t, state, waiting in rq(g, Q.STARTUP, me="coder"):
         say("  " + startup_line("coder", memory, t, state, waiting))
 
-    live = tick + 2
+    live = tick + min(2, LEASE)                                         # inside the lease, whatever its length
     if claim(live, "s2b"):
         sys.exit("error: second planner claim succeeded while the lease was live")
     say(f"  planner (new process, session s2b): claim refused at tick {live}, lease live until tick {tick + LEASE}")
@@ -187,6 +211,7 @@ def kill_planner(g, task: str, tick: int, lease: int = LEASE) -> int:
 
 def session2(args) -> None:
     fx = read_fixture(args.fixture)
+    validate_fixture(fx)
     g = connect(args.graph)
     rq(g, "MATCH (s:Session) RETURN count(s)")                          # read first: a missing graph is an error, not created
     reconcile(g)                                                        # repair any torn write from an earlier crash
@@ -201,8 +226,9 @@ def session2(args) -> None:
         for memory, _h, task, state, waiting in rq(g, Q.STARTUP, me=agent):
             say("  " + startup_line(agent, memory, task, state, waiting))
 
-    max_tick_rows = rq(g, "MATCH (m:Memory) RETURN max(m.tick)")
-    base_tick = max_tick_rows[0][0] if max_tick_rows and max_tick_rows[0][0] else 40
+    # the logical clock starts after every memory AND every lease, so a lease left by a dead process can expire
+    base_tick = max(rq(g, "MATCH (m:Memory) RETURN max(m.tick)")[0][0] or 40,
+                    rq(g, "OPTIONAL MATCH ()-[c:CLAIMED_BY]->() RETURN max(c.lease_until)")[0][0] or 0)
     tick, changes, killed = max(41, base_tick + 1), [], False
     lease = procedure_lease(g)
     say(f"procedure: rework_procedure (lease {lease} ticks), read from the graph")
@@ -258,6 +284,10 @@ def session2(args) -> None:
         if n == 0:
             break
     say(f"fixpoint: rounds {changes}, {rq(g, Q.COUNT_MEMORIES)[0][0]} memories")
+    left = rq(g, "MATCH (t:Task) WHERE t.state <> 'done' RETURN t.id + ':' + t.state ORDER BY t.id")
+    if left:                                                            # a fixpoint is not recovery while work is stuck
+        sys.exit(f"error: fixpoint reached with {len(left)} unfinished task(s) {ids(r[0] for r in left)}; "
+                 f"see `quarantine status`")
 
 
 def hold(args) -> None:

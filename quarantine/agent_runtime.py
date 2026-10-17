@@ -10,6 +10,8 @@ import os
 from typing import Any
 from falkordb import Graph
 
+from quarantine.queries import RESOLVED
+
 
 def recovery_status(g: Graph) -> dict[str, Any]:
     """Inspects FalkorDB graph state and returns an auditable recovery status dictionary."""
@@ -32,10 +34,10 @@ def recovery_status(g: Graph) -> dict[str, Any]:
         OPTIONAL MATCH (t)-[:REWORKS]->(m:Memory)
         OPTIONAL MATCH (t)-[c:CLAIMED_BY]->(a:Agent)
         OPTIONAL MATCH (t)-[:BLOCKED_BY]->(b:Memory)
-        WHERE NOT (b)<-[:SUPERSEDES]-(:Memory {quarantined: false})
+        WHERE t.state <> 'done' AND NOT %s
         RETURN t.id, t.state, m.id, a.name, c.lease_until, collect(DISTINCT b.id)
         ORDER BY t.id
-    """)
+    """ % (RESOLVED % "b"))
     tasks = []
     unfinished_tasks = 0
     for tid, state, mid, holder, lease, blockers in task_rows:
@@ -56,10 +58,11 @@ def recovery_status(g: Graph) -> dict[str, Any]:
     for agent_name in names:                                            # whoever wrote memory, in any world
         memories = _query("""
             MATCH (a:Agent {name: $me})-[:AUTHORED]->(m:Memory)
-            OPTIONAL MATCH (m)<-[:SUPERSEDES]-(clean_rep:Memory {quarantined: false})
+            OPTIONAL MATCH (m)<-[:SUPERSEDES*1..]-(clean_rep:Memory {quarantined: false})   // the chain's clean head
+            WITH m, count(clean_rep) > 0 AS resolved
             RETURN count(m) AS total,
                    count(CASE WHEN m.quarantined = true THEN 1 END) AS quarantined,
-                   count(CASE WHEN clean_rep IS NOT NULL THEN 1 END) AS superseded
+                   count(CASE WHEN m.quarantined = true AND resolved THEN 1 END) AS superseded
         """, me=agent_name)
         if memories:
             tot, quar, super_ = memories[0]
@@ -84,13 +87,15 @@ def recovery_status(g: Graph) -> dict[str, Any]:
          "quarantined memory(ies) reach no flagged doc (torn write; run `quarantine session2`)"),
         ("MATCH (m:Memory) WHERE (m:PlanStep OR m:Artifact) AND NOT (m)-[:INFLUENCED_BY]->() AND NOT (m)-[:SUPERSEDES]->() "
          "RETURN count(m)", "step(s) or artifact(s) have no read set (session 1 may have crashed; rerun it)"),
-        ("MATCH (f:Fact {quarantined: true, healable: true}) WHERE NOT (f)<-[:SUPERSEDES]-() RETURN count(f)",
+        ("MATCH (f:Fact {quarantined: true, healable: true}) WHERE NOT %s RETURN count(f)" % (RESOLVED % "f"),
          "healable fact(s) not healed yet"),
         ("MATCH (m:Memory {quarantined: false}) WHERE (m.needs_regeneration = true OR m.ungrounded = true) "
          "AND NOT (m)<-[:SUPERSEDES]-() RETURN count(m)",
          "replacement(s) are placeholders that an agent must regenerate (needs regeneration)"),
     )
-    drift = 0
+    drift = _query("MATCH (s:Session {id: 's1'}) WHERE s.complete IS NULL OR s.complete <> true RETURN count(s)")[0][0]
+    if drift:                                                           # killed mid-load: what is here is not the world
+        warnings.append("session 1 did not finish (s1.complete missing; rerun `quarantine session1`)")
     for cypher, what in checks:
         n = _query(cypher)[0][0]
         if n:
