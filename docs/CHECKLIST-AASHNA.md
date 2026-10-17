@@ -29,7 +29,7 @@ Use ONLY the README's Quickstart, word for word, in a new terminal. Do not use a
 - [ ] `scripts/validate.sh` -> expect `0 failed` (on Windows the kill-planner check expects exit 1, not -9) (starts its own FalkorDB on :6390)
 - [ ] `scripts/validate_compose.sh` -> expect all pass
 - [ ] `uv run python scripts/heldout_eval.py --worlds 50 --pipeline-worlds 10` -> expect `0` in the "graph != oracle" and "violations" columns
-- [ ] `uv run python scripts/counterfactual_eval.py --worlds 20` -> expect `0` false negatives, `0` invented receipts, `0` wrong 'clean' answers, `0` page != graph
+- [ ] `uv run python scripts/counterfactual_eval.py --worlds 20` -> exit code 0; `0` in the false-negatives column on the first three rows (the UNRECORDED-influence row is nonzero by design, about 7-9%: that is the measured miss when influence is not recorded as a read); `0` invented receipts, wrong 'clean' answers and page != graph on every row
 - [ ] Optional if time: `uv run python scripts/mutation_check.py` (about 20 min) -> 0 unexpected survivors
 
 ## 3. Try to break it (pick at least five, 30 min)

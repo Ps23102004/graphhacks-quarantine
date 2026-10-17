@@ -10,7 +10,11 @@ Run:
 from __future__ import annotations
 
 import os
+from typing import Annotated, Any
+
 from mcp.server.fastmcp import FastMCP
+from pydantic import WithJsonSchema
+from quarantine.agent_runtime import recovery_status
 from quarantine.answers import WITHHELD, blast_radius as _blast_radius
 from quarantine.answers import recall as _recall
 from quarantine.answers import why_connected as _why_connected
@@ -18,6 +22,10 @@ from quarantine.answers import why_quarantined
 from quarantine.loader import connect
 
 mcp = FastMCP("quarantine-memory")
+
+# advertised as a string, but validated by the tool itself: a null, number, list or missing id gets the "unknown" shape,
+# not a protocol error raised before the tool's own guard can run
+Id = Annotated[Any, WithJsonSchema({"type": "string"})]
 
 def graph_name() -> str:
     """Resolved per call so one server process can be re-pointed (and tests can set it) without re-import."""
@@ -56,7 +64,7 @@ def inspect_quarantined_memories() -> dict:
 
 
 @mcp.tool()
-def trace_provenance_receipt(memory_id: str) -> dict:
+def trace_provenance_receipt(memory_id: Id = None) -> dict:
     """Why is this memory quarantined? Answer shapes: path (hops + sentence), not_in_graph (clean memory),
     unknown (id does not resolve; nothing runs). The argument is resolved against the graph before any query."""
     if not memory_id or not isinstance(memory_id, str):
@@ -71,7 +79,7 @@ def trace_provenance_receipt(memory_id: str) -> dict:
 
 
 @mcp.tool()
-def why_connected(from_id: str, to_id: str) -> dict:
+def why_connected(from_id: Id = None, to_id: Id = None) -> dict:
     """How does A lead to B? Fewest-hops (unweighted) path over provenance edges via algo.SPpaths; shortestPath only if the procedure raises.
     Both ids are resolved first: an unresolved id returns shape "unknown" and nothing runs."""
     if not isinstance(from_id, str) or not isinstance(to_id, str) or not from_id or not to_id:
@@ -81,7 +89,7 @@ def why_connected(from_id: str, to_id: str) -> dict:
 
 
 @mcp.tool()
-def recall(memory_id: str) -> dict:
+def recall(memory_id: Id = None) -> dict:
     """What does this memory say? Answered from memory with when it was learned (tick, session, author),
     or shape "unknown" if the id does not resolve."""
     if not isinstance(memory_id, str) or not memory_id:
@@ -91,7 +99,7 @@ def recall(memory_id: str) -> dict:
 
 
 @mcp.tool()
-def blast_radius(doc_id: str) -> dict:
+def blast_radius(doc_id: Id = None) -> dict:
     """'And then': every memory derived from this document, read-only (what the harness would quarantine if flagged).
     Shape not_in_graph when nothing derives from it; unknown when the document does not resolve."""
     if not isinstance(doc_id, str) or not doc_id:
@@ -109,24 +117,19 @@ def get_recovery_status() -> dict:
 
 
 def _recovery(g) -> dict:
-    for mod_name in ("quarantine", "quarantine.queries", "quarantine.loader", "quarantine.cli", "quarantine.agent_runtime"):
-        try:
-            mod = __import__(mod_name, fromlist=["recovery_status"])
-            if hasattr(mod, "recovery_status"):
-                try:
-                    status = getattr(mod, "recovery_status")(g)
-                except Exception as e:  # noqa: BLE001  (graph missing: an honest "not in the graph", not a crash)
-                    if "empty key" in str(e).lower() or "not exist" in str(e).lower():
-                        return {"shape": "not_in_graph", "answer": f"graph {graph_name()!r} does not exist on this server", "graph": graph_name()}
-                    raise
-                tick = _ro_query(g, "MATCH (m:Memory) RETURN max(m.tick)")
-                status.update(shape="memory", answer=f"recovery status as of tick {tick[0][0] if tick else None}",
-                              learned_tick=tick[0][0] if tick else None)
-                return status
-        except Exception:
-            continue
-    return {"shape": "unknown", "answer": "recovery status is not available: no recovery_status implementation found",
-            "error": "core recovery_status(g) not yet implemented", "graph": graph_name()}
+    try:
+        status = recovery_status(g)
+    except Exception as e:  # noqa: BLE001  (graph missing: an honest "not in the graph"; anything else, the real error)
+        if "empty key" in str(e).lower() or "not exist" in str(e).lower():
+            return {"shape": "not_in_graph", "answer": f"graph {graph_name()!r} does not exist on this server", "graph": graph_name()}
+        return {"shape": "unknown", "answer": f"recovery status unavailable for graph {graph_name()!r}: {e}",
+                "error": str(e), "graph": graph_name()}
+    # "as of" = the latest write the status reflects: memory, flag, quarantine and task ticks alike
+    row = _ro_query(g, "MATCH (n) WHERE n:Memory OR n:Doc OR n:Task RETURN max(n.tick), max(n.flag_tick), "
+                       "max(n.quarantine_tick), max(n.created_tick), max(n.done_tick)")
+    tick = max((t for t in (row[0] if row else []) if t is not None), default=None)
+    status.update(shape="memory", answer=f"recovery status as of tick {tick}", learned_tick=tick)
+    return status
 
 
 if __name__ == "__main__":

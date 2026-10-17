@@ -21,7 +21,7 @@ def make_world(seed: int, read_mode: str = "declared", deep: bool = False) -> di
     """read_mode: "declared" = each write reads only what it lists (the demo's model);
     "cumulative" = each step/artifact also counts everything its author read or wrote before
     (the pessimistic model: an agent's whole context influences every later write).
-    deep=True chains steps so the provenance path is longer than the closure's hop bound."""
+    deep=True chains steps into long provenance paths (the regression case for the removed 10-hop cap)."""
     r = random.Random(seed)
     n_docs = r.randint(6, 12)
     docs = {f"doc_{i}": {"uri": f"u/{i}", "title": f"doc {i}"} for i in range(1, n_docs + 1)}

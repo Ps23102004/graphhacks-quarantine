@@ -1,12 +1,12 @@
 # VALIDATION — status of the Quarantine build (Helix-style)
 
-Updated Fri 2026-10-16 (branch `improve`; `freeze-v1` tag = the Thursday baseline). Re-fill the "status" column after every change; do not record a pass you did not just see.
+Updated Sat 2026-10-17 (branch `r2-docs`; `freeze-v1` tag = the Thursday baseline). Re-fill the "status" column after every change; do not record a pass you did not just see.
 
 | field | value |
 |---|---|
 | repo | `~/Developer/graphhacks-quarantine` (GitHub: `Ps23102004/graphhacks-quarantine`, private) |
 | commit validated | see `git log -1`; `scripts/validate.sh` copies the working tree, uncommitted edits included; run it on a clean tree to validate a commit |
-| problem statement | when one ingested document is found prompt-injected, quarantine exactly the memories it influenced across agents and sessions, explain each with a path, heal facts that still have clean support, and redo only the poisoned work in dependency order |
+| problem statement | when one ingested document is flagged as prompt-injected, quarantine every memory whose recorded reads reach it across agents and sessions (provenance-level: about 63% of flags on random worlds would not have changed, and influence that was never recorded as a read is missed, see `docs/COUNTERFACTUAL.md`), explain each with a path, heal facts that still have clean support, and redo the quarantined work in dependency order |
 | image | `falkordb/falkordb:6.0.2@sha256:107455e8...` (source-available, SSPL) |
 
 ## Test results
@@ -39,7 +39,7 @@ Updated Fri 2026-10-16 (branch `improve`; `freeze-v1` tag = the Thursday baselin
 | 11 | dead `is None` check in `receipt()` | fixed |
 | 12 | any agent could claim any task | fixed (author only), tested, mutation-checked. Lease boundary is inclusive (a 5-tick lease covers 6 ticks): documented, not changed |
 | 13 | receipt has two tied shortest paths | test now accepts both valid receipts; demo script says not to promise which |
-| 14 | reading a missing graph creates it; closure depth cap is silent | closure depth: fixed (unbounded, regression test on a 40-step chain, see `docs/EVAL-HELDOUT.md`); mistyped `--graph` still creates an empty graph: **open** |
+| 14 | reading a missing graph creates it; closure depth cap is silent | closure depth: fixed (unbounded, regression test on a 40-step chain, see `docs/EVAL-HELDOUT.md`); mistyped `--graph`: fixed (`flag`, `unflag`, `session2` and `status` refuse a graph that does not exist and create none) |
 
 Demo-script mismatches the reviewer found (wrong `--slow` usage, nodes not appearing live, wording of log lines, GRAPH.LIST, simulated kill) are fixed: `session1` now prints and the page fills as each memory is written, the kill-Planner beat is a real SIGKILL of a separate process, and `docs/DEMO-SCRIPT.md` is captured from real output.
 

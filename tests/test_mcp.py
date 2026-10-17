@@ -222,3 +222,96 @@ def test_over_length_id_that_exists_is_not_called_unresolved():
         assert "longer than 256 characters" in out["answer"]
     finally:
         g.delete()
+
+
+# ---------------------------------------------------------------- round-2 attack regressions (tools/MCP)
+R2 = "quarantine_mcp_r2"
+
+
+@pytest.fixture
+def r2g():
+    g = connect(R2, port=PORT)
+    try:
+        g.delete()
+    except Exception:
+        pass
+    yield g
+    try:
+        g.delete()
+    except Exception:
+        pass
+
+
+def test_receipt_never_cites_a_doc_that_is_no_longer_flagged(r2g):
+    """Torn unflag: the memory is still red but its doc was retracted; no 'reaches flagged doc_x' receipt."""
+    from quarantine.answers import why_quarantined
+    q(r2g, "CREATE (:Memory:Episode {id: 'ep_x', tick: 1, quarantined: true, quarantine_doc: 'doc_x'})"
+           "-[:EXTRACTED_FROM]->(:Doc {id: 'doc_x', flagged: false})")
+    out = why_quarantined(r2g, "ep_x")
+    assert out["shape"] != "path" and "torn" in out["answer"], out
+
+
+def test_receipt_finds_a_path_to_a_flagged_doc_even_if_the_bit_is_unset(r2g):
+    """Torn flag: doc flagged, closure not written yet; the path exists, so the answer must not say it does not."""
+    from quarantine.answers import why_quarantined
+    q(r2g, "CREATE (:Memory:Episode {id: 'ep_x', tick: 1, quarantined: false})"
+           "-[:EXTRACTED_FROM]->(:Doc {id: 'doc_x', flagged: true})")
+    out = why_quarantined(r2g, "ep_x")
+    assert out["shape"] == "path" and out["hops"] == ["ep_x", "doc_x"] and "torn" in out["warning"], out
+
+
+def test_unknown_names_the_kind_of_a_real_node_instead_of_denying_it(r2g):
+    from quarantine.answers import blast_radius, recall, why_connected
+    q(r2g, "CREATE (:Memory:Episode {id: 'ep_x', tick: 1, quarantined: true})-[:EXTRACTED_FROM]->"
+           "(:Doc {id: 'doc_x', flagged: true}), (:Session {id: 's1'})")
+    for out, kind in ((blast_radius(r2g, "ep_x"), "Episode"), (recall(r2g, "doc_x"), "Doc"),
+                      (why_connected(r2g, "ep_x", "s1"), "Session")):
+        assert out["shape"] == "unknown" and "does not resolve" not in out["answer"] and kind in out["answer"], out
+    assert "does not resolve to a node" in recall(r2g, "nope")["answer"]
+
+
+def test_unknown_gives_honest_reasons_for_nul_and_over_length_ids(r2g):
+    from quarantine.answers import blast_radius, recall
+    out = recall(r2g, "x\x00y")
+    assert "NUL" in out["answer"] and "does not resolve" not in out["answer"]
+    big = blast_radius(r2g, "d" * 2_000_000)
+    assert big["shape"] == "unknown" and len(json.dumps(big)) < 1000 and "2000000" in big["answer"]
+
+
+def test_recall_of_a_quarantined_memory_points_to_its_clean_replacement(r2g):
+    from quarantine.answers import recall
+    q(r2g, "CREATE (:Memory:Artifact {id: 'a_v2', tick: 9, quarantined: false, text: 'requests'})-[:SUPERSEDES]->"
+           "(:Memory:Artifact {id: 'a', tick: 1, quarantined: true, text: 'reqeusts'})")
+    out = recall(r2g, "a")
+    assert "reqeusts" not in json.dumps(out) and out["superseded_by"] == "a_v2" and "a_v2" in out["answer"]
+
+
+def test_recovery_status_reports_the_real_error_and_the_latest_tick(r2g):
+    import quarantine.mcp_server as srv
+    from falkordb import FalkorDB
+    db = FalkorDB(port=PORT)
+    db.connection.set(R2 + "_str", "x")
+    try:
+        os.environ["QUARANTINE_GRAPH"] = R2 + "_str"
+        out = srv.get_recovery_status()
+        assert out["shape"] == "unknown" and "implement" not in json.dumps(out) and "wrong" in out["answer"].lower(), out
+    finally:
+        db.connection.delete(R2 + "_str")
+        os.environ["QUARANTINE_GRAPH"] = R2
+    q(r2g, "CREATE (:Memory:Episode {id: 'ep_x', tick: 33, quarantined: true, quarantine_tick: 40})"
+           "-[:EXTRACTED_FROM]->(:Doc {id: 'doc_x', flagged: true, flag_tick: 40})")
+    out = srv.get_recovery_status()
+    assert out["learned_tick"] == 40 and "tick 40" in out["answer"], out
+
+
+def test_junk_arguments_get_the_unknown_shape_over_real_stdio(r2g):
+    q(r2g, "CREATE (:Doc {id: 'doc_x'})")
+    calls = [("trace_provenance_receipt", {"memory_id": None}), ("trace_provenance_receipt", {"memory_id": 123}),
+             ("trace_provenance_receipt", {"memory_id": ["a"]}), ("trace_provenance_receipt", {}),
+             ("recall", {}), ("blast_radius", {"doc_id": 7}), ("why_connected", {"from_id": None})]
+    tools, results = _stdio(R2, calls)
+    for name, res in results:
+        assert not res.isError, (name, res.content)
+        assert json.loads(res.content[0].text)["shape"] == "unknown", name
+    schema = next(t.inputSchema for t in tools if t.name == "recall")
+    assert schema["properties"]["memory_id"]["type"] == "string"          # clients are still told it is a string
