@@ -398,8 +398,8 @@ def test_a_second_advisory_after_a_heal_reworks_through_the_supersedes_chain(cap
 
 
 def _outvote_world():
-    """f: x from da, y from db (3 episodes), z from dc (2). Flag da heals f to y; flag db then kills that twin while f
-    itself still has a clean z majority, which HEAL_FACTS does not re-heal."""
+    """f: x from da, y from db (3 episodes), z from dc (2). Flag da heals f to y; flag db then kills that twin while the
+    root f still has a clean z majority, which HEAL_FACTS re-heals from the root's full support (f_v2_v2 = z)."""
     eps = {"ea": "da", "eb1": "db", "eb2": "db", "eb3": "db", "ec1": "dc", "ec2": "dc"}
     claims = {"ea": "x", "eb1": "y", "eb2": "y", "eb3": "y", "ec1": "z", "ec2": "z"}
     return world(docs={d: {"uri": d} for d in ("da", "db", "dc")},
@@ -419,9 +419,11 @@ def test_session2_fails_loudly_when_tasks_remain_at_its_fixpoint(tmp_path):
         _cli("flag", "da", "--fixture", str(p), "--graph", g)
         q(connect(g), Q.HEAL_FACTS, session="s2", tick=41)               # then the process died
         _cli("flag", "db", "--fixture", str(p), "--graph", g)
+        # no advisory order strands a task any more (see test_healing_is_independent_...), so strand one by hand
+        q(connect(g), "CREATE (:Task {id: 'rework_ghost', kind: 'rework', state: 'claimed'})")
         with pytest.raises(SystemExit) as e:
             _cli("session2", "--fixture", str(p), "--graph", g)
-        assert "unfinished" in str(e.value) and "rework_s" in str(e.value)
+        assert "unfinished" in str(e.value) and "rework_ghost" in str(e.value) and "rework_s" not in str(e.value)
     finally:
         connect(g).delete()
 
@@ -598,3 +600,73 @@ def test_the_unknown_key_message_does_not_claim_note_is_stored():
     with pytest.raises(ValueError) as e:
         validate_fixture(w)
     assert "not stored" in str(e.value)
+
+
+# ---------------------------------------------------------------- healing does not depend on the order advisories arrive
+def _heal_world():
+    w = world()
+    w["docs"] = {d: {"uri": d, "title": d} for d in ("da", "db", "dc")}
+    eps = {"ea": ("da", 1), "eb1": ("db", 2), "eb2": ("db", 3), "eb3": ("db", 4), "ec1": ("dc", 5), "ec2": ("dc", 6)}
+    w["episodes"] = {e: {"doc": d, "tick": t, "text": e} for e, (d, t) in eps.items()}
+    w["facts"] = {"f": {"subject": "s", "slot": "v", "tick": 10, "value": "x",
+                        "support": [{"ep": e, "claim": c} for e, c in
+                                    (("ea", "x"), ("eb1", "y"), ("eb2", "y"), ("eb3", "y"), ("ec1", "z"), ("ec2", "Z "))]}}
+    w["steps"] = {"st": {"order": 1, "tick": 20, "text": "uses f", "reads": ["f"]}}
+    w["artifacts"] = {"ar": {"path": "a.py", "tick": 30, "text": "code", "reads": ["st"]}}
+    return w
+
+
+def _advise_and_heal(g, docs, tick):
+    from quarantine.loader import reconcile
+
+    for d in docs:
+        q(g, Q.FLAG_AND_CLOSE, doc=d, reason="t", tick=tick)
+        tick += 1
+    reconcile(g)
+    while q(g, Q.HEAL_FACTS, session="s2", tick=tick):
+        tick += 1
+        reconcile(g)
+    return tick + 1
+
+
+def _healed_state(g):
+    heads = q(g, "MATCH (f:Fact {quarantined: false}) WHERE f.id STARTS WITH 'f_v2' OR f.id = 'f' "
+                 "RETURN f.id, f.value, f.support_clean ORDER BY f.id")
+    unhealed = q(g, "MATCH (f:Fact {quarantined: true, healable: true}) WHERE NOT (f)<-[:SUPERSEDES*1..]-(:Memory {quarantined: false}) "
+                    "RETURN f.id")
+    return [(r[1], r[2]) for r in heads], unhealed
+
+
+@pytest.mark.parametrize("steps", [[["da"], ["db"]], [["db"], ["da"]], [["da", "db"]], [["dc"], ["db"], ["da"]]])
+def test_healing_is_independent_of_the_order_advisories_arrive(steps):
+    g = fresh("qheal_order")
+    try:
+        load(g, _heal_world())
+        tick = 900
+        for docs in steps:
+            tick = _advise_and_heal(g, docs, tick)
+        got = _healed_state(g)
+    finally:
+        connect("qheal_order").delete()
+    g = fresh("qheal_order_ref")
+    try:
+        load(g, _heal_world())
+        _advise_and_heal(g, [d for docs in steps for d in docs], 900)
+        want = _healed_state(g)
+    finally:
+        connect("qheal_order_ref").delete()
+    assert got == want
+
+
+def test_a_second_advisory_rebuilds_the_fact_from_the_roots_full_clean_support():
+    g = fresh("qheal_order_chain")
+    try:
+        load(g, _heal_world())
+        t = _advise_and_heal(g, ["da"], 900)
+        assert q(g, "MATCH (f:Fact {id: 'f_v2', quarantined: false}) RETURN f.value, f.support_clean") == [["y", 3]]
+        _advise_and_heal(g, ["db"], t)                  # quarantines the healed twin; the outvoted z voters are still clean
+        assert q(g, "MATCH (f:Fact {id: 'f_v2_v2'})-[:SUPERSEDES]->(:Fact {id: 'f_v2'}) RETURN f.value, f.quarantined, f.support_clean, f.runner_up_count") \
+            == [["Z ", False, 2, 0]]
+        assert q(g, "MATCH (f:Fact {id: 'f_v2_v2'})-[:CONSOLIDATED_FROM]->(e) RETURN e.id ORDER BY e.id") == [["ec1"], ["ec2"]]
+    finally:
+        connect("qheal_order_chain").delete()
