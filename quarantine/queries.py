@@ -127,11 +127,16 @@ RETURN [n IN nodes(path) | n.id] AS hops, pathWeight AS len
 # are reworked by their author once their healable inputs are superseded.
 SUPPORT_AND_HEALABLE = """
 MATCH (m:Memory)
-OPTIONAL MATCH (m)-[c:CONSOLIDATED_FROM]->(e:Episode) WHERE NOT e.quarantined
+// a healed twin is voted from the ROOT of its chain (the original fact: it alone links every episode that ever voted),
+// so a second advisory that quarantines a twin leaves the same rebuildable majority as a single heal of both advisories
+OPTIONAL MATCH (m)-[:SUPERSEDES*1..]->(r:Memory) WHERE NOT (r)-[:SUPERSEDES]->()
+WITH m, coalesce(r, m) AS root
+OPTIONAL MATCH (root)-[c:CONSOLIDATED_FROM]->(e:Episode) WHERE NOT e.quarantined
 WITH m, toLower(trim(c.claim)) AS claim, count(DISTINCT e) AS n ORDER BY n DESC
 WITH m, collect(n) AS ns
-WITH m, reduce(t = 0, x IN ns | t + x) AS clean, head(ns) AS best,
-     CASE WHEN size(ns) > 1 THEN ns[1] ELSE 0 END AS second
+WITH m, head(ns) AS best, CASE WHEN size(ns) > 1 THEN ns[1] ELSE 0 END AS second
+OPTIONAL MATCH (m)-[:CONSOLIDATED_FROM]->(own:Episode) WHERE NOT own.quarantined
+WITH m, best, second, count(DISTINCT own) AS clean
 SET m.support_clean = CASE WHEN m:Fact THEN clean ELSE null END,
     m.healable = CASE WHEN NOT m.quarantined THEN null
                       WHEN m:Episode THEN false
@@ -170,8 +175,11 @@ RETURN t.id, collect(x.id) AS blocked_by ORDER BY t.id
 # create the replacement, link it to the same clean support, SUPERSEDES the
 # poisoned one. Pure Cypher: no LLM decides what "clean" means.
 HEAL_FACTS = """
-MATCH (f:Fact {quarantined: true, healable: true})-[c:CONSOLIDATED_FROM]->(e:Episode)
-WHERE NOT (f)<-[:SUPERSEDES]-() AND NOT e.quarantined
+MATCH (f:Fact {quarantined: true, healable: true}) WHERE NOT (f)<-[:SUPERSEDES]-()
+// the head of a chain votes over the full clean support of the chain's root, never over its own winners-only edges
+OPTIONAL MATCH (f)-[:SUPERSEDES*1..]->(r:Memory) WHERE NOT (r)-[:SUPERSEDES]->()
+WITH f, coalesce(r, f) AS root
+MATCH (root)-[c:CONSOLIDATED_FROM]->(e:Episode) WHERE NOT e.quarantined
 // claims that differ only in case or surrounding spaces are one vote; the winner is shown in its smallest spelling
 WITH f, c, e ORDER BY c.claim
 WITH f, toLower(trim(c.claim)) AS key, head(collect(c.claim)) AS claim, collect(DISTINCT e) AS eps ORDER BY size(eps) DESC, key
