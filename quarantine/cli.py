@@ -215,8 +215,13 @@ def session2(args) -> None:
     g = connect(args.graph)
     rq(g, "MATCH (s:Session) RETURN count(s)")                          # read first: a missing graph is an error, not created
     reconcile(g)                                                        # repair any torn write from an earlier crash
-    must(rq(g, "MATCH (m:Memory {quarantined: true}) RETURN m.id LIMIT 1"),
-         "nothing is quarantined (run `quarantine flag DOC` first)")
+    if not rq(g, "MATCH (m:Memory {quarantined: true}) RETURN m.id LIMIT 1"):
+        flagged = [r[0] for r in rq(g, "MATCH (d:Doc {flagged: true}) RETURN d.id ORDER BY d.id")]
+        if flagged:                                                    # flagged, but no memory was derived from it
+            say(f"nothing to repair: {ids(flagged)} flagged, and no memory was derived from "
+                f"{'it' if len(flagged) == 1 else 'them'}")
+            return
+        sys.exit("error: no advisory is flagged (run `quarantine flag DOC` first)")
 
     # whoever authored something with a rework task, in the order their quarantined work was written
     agents = [r[0] for r in rq(g, "MATCH (a:Agent)-[:AUTHORED]->(m:Memory)<-[:REWORKS]-(:Task) "

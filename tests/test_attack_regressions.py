@@ -670,3 +670,26 @@ def test_a_second_advisory_rebuilds_the_fact_from_the_roots_full_clean_support()
         assert q(g, "MATCH (f:Fact {id: 'f_v2_v2'})-[:CONSOLIDATED_FROM]->(e) RETURN e.id ORDER BY e.id") == [["ec1"], ["ec2"]]
     finally:
         connect("qheal_order_chain").delete()
+
+
+def test_session2_says_nothing_to_repair_when_a_flagged_doc_reaches_no_memory(capsys, tmp_path):
+    import yaml
+
+    from quarantine import cli
+
+    w = world()
+    w["docs"]["dx"] = {"uri": "ux", "title": "a document nothing was derived from"}
+    p = tmp_path / "w.yaml"
+    p.write_text(yaml.safe_dump(w))
+    base = ["--fixture", str(p), "--graph", "reg_nothing_to_repair"]
+    try:
+        cli.main(["session1", *base])
+        cli.main(["flag", "dx", *base])
+        capsys.readouterr()
+        cli.main(["session2", *base])
+        assert "nothing to repair: [dx] flagged" in capsys.readouterr().out
+        cli.main(["unflag", "dx", *base])
+        with pytest.raises(SystemExit, match="no advisory is flagged"):
+            cli.main(["session2", *base])
+    finally:
+        connect("reg_nothing_to_repair").delete()
