@@ -29,7 +29,7 @@ You own every word a judge reads, and the submission itself. Rule for every sent
 - [ ] Every claim in the blog appears in the README or a doc. No new numbers.
 
 ## Sunday
-- [ ] 09:00 to 10:00: Parth sends the video link. Check it is 3:00 or less, unlisted, and plays logged out.
+- [ ] 09:00 to 10:00: Parth sends the video link. Check it is 3:00 or less (it was published public, 2:51), and plays logged out.
 - [ ] 10:00 to 11:30: submission form: repo link, video link, blog link, Track 02, team members, short description (from `docs/SUBMISSION.md`), AI-use disclosure.
 - [ ] Before pressing submit: the repo is public; the README renders on GitHub; the submitted commit is the one that passed the checks.
 - [ ] Screenshot the confirmation page and send it to the team.

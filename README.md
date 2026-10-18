@@ -126,6 +126,8 @@ With FalkorDB running:
 uv run pytest -q
 ```
 
+Run one test suite at a time per FalkorDB instance: several tests use fixed graph names, so two concurrent runs collide.
+
 The last line of the output gives the pass count. It should report no failures.
 
 ### Run the scenario

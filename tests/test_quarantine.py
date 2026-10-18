@@ -63,7 +63,7 @@ def open_session2(g, fx) -> int:
 
 def session2_rounds(g, fx, tick: int = 41, lease: int = 5) -> list[int]:
     """Harness scheduler for Session 2: each round promotes ready tasks, then every
-    agent (fresh process, start-up query only) does the work that is ready for it.
+    agent (start-up query only) does the work that is ready for it.
     Stops when a whole round changes nothing. Returns changes per round."""
     changes = []
     while True:

@@ -66,7 +66,7 @@ uv run quarantine flag doc_7 --graph validate >/dev/null
 out="$(uv run quarantine session2 --kill-planner --graph validate)"
 has "$out" "kill -9, exit $KILLEXIT" "kill-planner: the planner process is really killed (exit $KILLEXIT here)"
 has "$out" "claim refused at tick" "kill-planner: live lease refuses a second claim"
-has "$out" "took over lease from planner" "kill-planner: new process takes over expired lease"
+has "$out" "took over lease from planner" "kill-planner: session s2b takes over expired lease"
 has "$out" "rounds [1, 2, 2, 0]" "kill-planner: same fixpoint"
 
 echo "== control: a different doc gives a different, hand-derived closure"
