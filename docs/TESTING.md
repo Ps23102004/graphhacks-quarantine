@@ -55,7 +55,7 @@ This is slow: one pytest run per mutation. It breaks one thing at a time in a th
 - both baselines (bounds, healed twins, an off-by-one tick);
 - one fixture read set, the receipt's hop bound, and the page's twin detection.
 
-A mutant whose name says "equivalent mutant" changes a guard that another check already covers. It may survive and is not counted as a failure. The current list has three: the heal query's own `>= 2` check, its own tie check (both covered by the `healable` flag), and the receipt's recorded advisory (every flagged document is tried anyway).
+A mutant whose name says "equivalent mutant" changes a guard that another check already covers. It may survive and is not counted as a failure. The current list has two: the heal query's own `>= 2` check and its own tie check (both covered by the `healable` flag).
 
 ## 4. Browser regressions (optional, needs the Playwright CLI)
 

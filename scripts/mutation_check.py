@@ -51,7 +51,7 @@ MUTATIONS = [
     ("COMPLETE ignores the lease session",    "quarantine/queries.py", "CLAIMED_BY {session: $session}]", "CLAIMED_BY]"),
     ("COMPLETE needs no replacement",         "quarantine/queries.py", "<-[:SUPERSEDES]-(rep:Memory {quarantined: false})\nMATCH (t)-[c:CLAIMED_BY", "\nMATCH (t)-[c:CLAIMED_BY"),
     ("any agent can claim any task",          "quarantine/queries.py", "(:Memory)<-[:AUTHORED]-(a:Agent {name: $me})\nOPTIONAL MATCH (t)-[c:CLAIMED_BY]", "(:Memory)\nMATCH (a:Agent {name: $me})\nOPTIONAL MATCH (t)-[c:CLAIMED_BY]"),
-    ("receipt forgets the recorded advisory (equivalent mutant: every currently flagged doc is tried)", "quarantine/answers.py", "cause = rq(g, \"MATCH (m:Memory {id: $id}) RETURN m.quarantine_doc\", id=memory_id)", "cause = []"),
+    ("receipt ignores the recorded advisory (every currently flagged doc is still tried)", "quarantine/answers.py", "cause = rq(g, \"MATCH (m:Memory {id: $id}) RETURN m.quarantine_doc\", id=memory_id)", "cause = []"),
     ("page twin detection removed",           "web/server.py", "OPTIONAL MATCH (m)-[:SUPERSEDES]->(old:Memory)", "OPTIONAL MATCH (m)-[:NOPE]->(old:Memory)"),
 ]
 

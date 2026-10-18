@@ -18,7 +18,7 @@ A memory is *truly affected* if its content would differ, or it could not exist,
 
 ## Result
 
-The table is the 150-world run from 2026-10-17 (commit `69f5908`), with 1,340 (world, document) runs per row. The engine has changed since then (heal order, SUPERSEDES chains), and the 150-world run was not repeated. A 20-world run on commit `b31ba1e` (180 runs per row) gives the same pattern: 0 in the four gated columns on the first three rows, 60% to 66% of flags unchanged, and the unrecorded-influence row missing 9% of truly affected memories (55 memories in 21 runs). Run the command above for current numbers.
+The table is the 150-world run (`uv run python scripts/counterfactual_eval.py --worlds 150`), first made on 2026-10-17 and repeated on the final code on 2026-10-18 with identical numbers (the seeds are fixed). Output: `docs/RUNS.md`.
 
 | world model | truly affected | quarantined | poisoned memory left clean | quarantined but unchanged | invented receipts | clean memory answered as red | page differs from graph |
 |---|---|---|---|---|---|---|---|

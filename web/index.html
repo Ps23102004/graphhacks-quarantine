@@ -438,7 +438,7 @@ function updateBanner(data) {
   const plural = (k, one, many) => `${k} ${k === 1 ? one : many}`;
   const rebuilt = data.nodes.filter(healed).length, pend = data.nodes.filter(n => n.twin_of && !n.red && placeholder(n)).length,
         redTw = data.nodes.filter(n => n.twin_of && n.red).length;
-  const twins = [rebuilt && `${plural(rebuilt, "memory", "memories")} rebuilt from clean sources`,
+  const twins = [rebuilt && `${plural(rebuilt, "memory", "memories")} rebuilt from unquarantined episodes`,
                  pend && `${plural(pend, "placeholder", "placeholders")} awaiting regeneration`,
                  redTw && `${plural(redTw, "replacement", "replacements")} quarantined`].filter(Boolean).join(" · ");
   $("banner").innerHTML =

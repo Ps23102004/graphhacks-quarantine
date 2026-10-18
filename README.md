@@ -1,9 +1,11 @@
 # QUARANTINE
-## Trace affected agent memory. Rebuild only what needs rework.
+## Flag one bad source. See what it reached. Keep the rest.
+
+In the bundled demo, flagging one poisoned document quarantines 6 of 25 agent memories. Resetting every agent it touched would discard 25, and rolling back by time would discard 19.
 
 QUARANTINE is a prototype for one job: a source in shared agent memory turns out to be bad, and you need to find and repair everything built on it. It follows recorded dependencies from the flagged source, quarantines the memories connected to it, and shows the path that connects each one.
 
-We tested it on generated scenarios. When agents were influenced by things they never recorded, it missed about **7% of truly affected memories**. When agents recorded their reads, about **63% of quarantined memories would have kept the same content** without the flagged source. These numbers come from a 150-world run of synthetic worlds on an earlier commit, not from real agents. A 20-world run on the current code shows the same pattern, with 9% missed. The model, counts and rerun command are in [docs/COUNTERFACTUAL.md](docs/COUNTERFACTUAL.md).
+We tested it on generated scenarios. When agents were influenced by things they never recorded, it missed about **7% of truly affected memories**. When agents recorded their reads, about **63% of quarantined memories would have kept the same content** without the flagged source. These numbers come from a 150-world run of synthetic worlds, repeated on the final code with identical results. They are not measurements on real agents. The model, counts and rerun command are in [docs/COUNTERFACTUAL.md](docs/COUNTERFACTUAL.md).
 
 **The research, planner and coder agents in the demo are scripted.** The FalkorDB graph, dependency queries, task leases and recovery writes are real. The project does not detect prompt injections by itself, and it does not show recovery for arbitrary LLM workflows.
 
@@ -35,12 +37,12 @@ Resetting every agent involved, or throwing away everything written after the so
 
 Quarantined means **touched by** a flagged source through recorded reads. It does not mean "proven wrong".
 
-We measured the gap. We generated four kinds of random crews the code was never tuned on, with 1,340 (world, flagged document) runs each. For each run we replayed the world without the flagged document and compared every memory with the graph's answer. The table is the 150-world run from 2026-10-17 (commit `69f5908`). The engine has changed since then and the 150-world run was not repeated; a 20-world run on the current code gives 0 in the same gated rows, 9% missed in the unrecorded-influence case, and 60% to 66% of flags unchanged. Details in [docs/COUNTERFACTUAL.md](docs/COUNTERFACTUAL.md); rerun with `uv run python scripts/counterfactual_eval.py` (150 worlds by default; add `--worlds 20` for a quick check).
+We measured the gap. We generated four kinds of random crews the code was never tuned on, with 1,340 (world, flagged document) runs each. For each run we replayed the world without the flagged document and compared every memory with the graph's answer. The table is the 150-world run, first made on 2026-10-17 and repeated on the final code (`docs/RUNS.md`) with identical numbers. Details in [docs/COUNTERFACTUAL.md](docs/COUNTERFACTUAL.md); rerun with `uv run python scripts/counterfactual_eval.py` (150 worlds by default; add `--worlds 20` for a quick check).
 
 | what could go wrong | result |
 |---|---|
 | a memory connected to the source by recorded reads is left clean | 0 in 4,020 runs (true by construction: the replay follows the same recorded reads) |
-| an agent was influenced by something it never recorded (truth: its whole context) | **7% of truly affected memories missed** (9% in the 20-world run) |
+| an agent was influenced by something it never recorded (truth: its whole context) | **7% of truly affected memories missed** |
 | a receipt with a hop that is not a recorded edge, or that does not end at the flagged document | 0 |
 | a clean memory answered as quarantined by the tools | 0 |
 | the page shows a different red set or count than the graph | 0 |
@@ -60,7 +62,7 @@ When you flag `doc_7`, the demo:
 2. Shows a path from an affected artifact back to the source.
 3. Rebuilds eligible facts from the supporting episodes that are not quarantined.
 4. Reworks dependent plans and artifacts in dependency order.
-5. Kills a planner process mid-task and shows another process taking over after its task lease expires.
+5. Kills the process that holds the planner's task lease, then shows a second session taking the lease over after it expires.
 
 Old memories stay in the graph. Each replacement links to the memory it replaces with a `SUPERSEDES` edge, so you can inspect the recovery history. Clean episodes that lose a heal vote get a separate `OUTVOTED` edge, which the quarantine and receipt queries do not follow.
 
@@ -89,7 +91,7 @@ git rev-parse HEAD
 uv sync --all-extras                      # --all-extras installs the optional MCP SDK the MCP tests need
 ```
 
-`improve` is the team's working branch. `main` is updated from it after review.
+`improve` is the working branch. `main` was brought up to match it on Oct 18, without a second reviewer.
 
 ### Start FalkorDB
 
@@ -111,7 +113,7 @@ With FalkorDB running:
 uv run pytest -q
 ```
 
-The last line of the output gives the pass count. It should say 0 failed.
+The last line of the output gives the pass count. It should report no failures.
 
 ### Open the viewer
 
@@ -269,7 +271,7 @@ Not covered: no AI-driven security scan was run. The mutation check (`uv run pyt
 ## Limits to keep in mind
 
 - **Flagging is external.** A person or another system has to identify the suspicious source.
-- **Tracking is only as complete as the recorded inputs.** Untracked context, summaries or tool results can carry influence the graph cannot see. In the test where the truth was each agent's whole context but only per-write reads were recorded, the closure missed 7% of truly affected memories (9% in a smaller run on the current code).
+- **Tracking is only as complete as the recorded inputs.** Untracked context, summaries or tool results can carry influence the graph cannot see. In the test where the truth was each agent's whole context but only per-write reads were recorded, the closure missed 7% of truly affected memories.
 - **Reading is not proof of contamination.** Quarantine by dependency also catches outputs that did not adopt the bad instruction (about 63% in the synthetic declared-read scenario).
 - **Healing counts episodes, not independent documents.** Several planted documents that nobody has flagged yet can outvote real ones, and unflagged sources can still be wrong. Agreeing episodes may share the same underlying source.
 - **No depth bound.** The closure and receipt queries have no hop limit. We removed a 10-hop cap after a hand-built chain world showed it left poisoned memories marked clean ([docs/EVAL-HELDOUT.md](docs/EVAL-HELDOUT.md)). The graph has no cycles because reads only point backwards in time.
@@ -283,7 +285,7 @@ The next useful test is a real agent workflow with contamination judged independ
 
 ## AI assistance
 
-The team used Anthropic Claude and OpenAI models for architecture exploration, Cypher experiments, fixture generation, test scaffolding, attack and review passes, and documentation. The validation notes in this repository record how the team ran and reviewed the implementation against FalkorDB 6.0.2.
+The team used Anthropic Claude and OpenAI models for architecture exploration, Cypher experiments, fixture generation, test scaffolding, attack and review passes, and documentation. `docs/RUNS.md` records what was run against FalkorDB 6.0.2, on which commit. The planned second-person code review was not completed.
 
 ## License
 

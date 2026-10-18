@@ -2,12 +2,10 @@
 
 ## Status Sun 2026-10-18
 
-Aman had not answered this checklist by Sunday morning. What exists:
-- README: Aman rewrote it on Oct 17 (commits 21c94f2 and 591bbd2). Parth merged that rewrite with the current engine, numbers and limits (e92cd46 and later commits).
-- Blog draft `docs/BLOG.md` and submission text `docs/SUBMISSION.md`: written by Parth with Claude on Oct 18 (commit b31ba1e). The blog draft is 934 words by `wc -w`, a little over the 900 target.
-- Fresh clone: Parth ran one from GitHub with Claude on Oct 18 (221 tests passed). Nobody has run one on Aman's laptop.
-- Video: not recorded yet. The README still says `VIDEO_LINK_GOES_HERE`.
-- The repo is still private. It must be public before submitting.
+- README: Aman rewrote it on Oct 17 (commit 21c94f2) and edited it again on Oct 18 (591bbd2). Parth merged those edits with the current engine, numbers and limits.
+- Blog draft `docs/BLOG.md` and submission text `docs/SUBMISSION.md`: drafted by Parth with Claude on Oct 18 so the work was not blocked. Aman can edit both.
+- Fresh clone: Parth ran one from GitHub on macOS on Oct 18 with Claude. A clone on Aman's laptop was not run.
+- Video: Parth records it on Oct 18; the README line `VIDEO_LINK_GOES_HERE` gets the link before submitting.
 
 The plan as written on Saturday follows.
 

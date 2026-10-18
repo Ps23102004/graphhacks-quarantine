@@ -2,9 +2,11 @@
 
 ## Status Sun 2026-10-18
 
-Aashna had not sent this checklist back by Sunday morning. Parth ran a fresh clone from GitHub with Claude instead (commit b31ba1e): 221 tests passed, and `scripts/ten_worlds.py`, `scripts/validate_compose.sh`, the demo path in section 1 and the junk-input MCP call in section 3 all passed. Nobody has done the section 4 review or the merge decision in section 5. Parth pushed `improve` to `main` himself (GitHub `main` = b31ba1e).
+Aashna ran two tests and sent reports. On Oct 16 she ran the demo from a zip on Windows. On Oct 18 she tested branch `improve` at e92cd46 on Windows: 131 tests passed, the demo matched the README, and she found seven defects (D1 to D7). Each was fixed in later commits (see `tests/test_attack_regressions.py` and `git log`). Her `kill -9` finding is why the README notes that the killed process exits with 1 on Windows.
 
-A second pass on 2026-10-18 ran these commands in Parth's working copy at b31ba1e, with its own graph names. It was not a fresh clone. The demo path, the CLI side of every section 3 item, held-out 50/10, counterfactual 20 worlds and ten worlds all matched "expect". The page states in section 3 (two advisories, unflag, 375 px) were checked by `scripts/check_browser.js`, which feeds the page substitute graph data. Not re-run in that pass: `scripts/validate.sh` and `scripts/mutation_check.py`.
+Parth, working with Claude, also ran a fresh clone from GitHub on macOS: 221 tests passed, and `scripts/ten_worlds.py`, `scripts/validate_compose.sh`, the demo path in section 1 and the junk-input MCP call in section 3 passed. The section 4 code review and the merge decision in section 5 were not done by a second person.
+
+`docs/RUNS.md` lists what was run on the final commit.
 
 The plan as written on Saturday follows.
 
