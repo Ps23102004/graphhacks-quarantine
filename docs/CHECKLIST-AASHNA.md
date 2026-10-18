@@ -22,7 +22,7 @@ Tag `freeze-sat` was added on Sunday morning, after this checklist was written; 
 - Still open (not blocking): a live deployment needs the public hostname added to `ALLOWED_HOSTS` (see `deploy/docker-compose.yml`). We are not deploying.
 
 ## 0. Get the code (5 min)
-- [ ] Accept the GitHub collaborator invite (the repo is private until Parth makes it public).
+- [ ] The repo is public; no invite needed.
 - [ ] `git clone https://github.com/Ps23102004/graphhacks-quarantine.git && cd graphhacks-quarantine && git checkout freeze-sat`
 
 ## 1. Follow the README cold (20 min)

@@ -44,6 +44,10 @@ Run on commit `c4de91d`, which has the same engine code as `3874be2`. The number
 | UNRECORDED influence (graph: declared reads; truth: whole context) | 1340 | 4458 | 10496 | 169 runs, 329 memories (7% of truly affected) | 6367 (61% of flagged) | 457 | 0 | 0 | 0 |
 ```
 
+## After publishing
+
+An anonymous clone of the public repository (`git clone https://github.com/Ps23102004/graphhacks-quarantine.git`, commit `531d7eb`, no credentials): `uv run pytest -q` gave 221 passed, and the demo path printed `quarantined 6 | wipe agents 25 | roll back 19`, `kill -9, exit -9` and `fixpoint: rounds [1, 2, 2, 0], 28 memories`.
+
 ## What was not run
 
 - A dedicated security scanner (the AI attackers in `docs/ATTACK-LOG.md` included one on web security).

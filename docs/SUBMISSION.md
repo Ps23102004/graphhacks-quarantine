@@ -15,7 +15,7 @@ Limits we state up front. Quarantined means "touched by, through a recorded read
 
 **Why the graph does real work:** provenance is edges. The blast radius is one variable-length traversal, the receipt is one shortest-path query, and healing, task blocking and leases are graph state. At 25 memories a recursive SQL query could do the same work; the case for a graph is the shape of the problem, not speed.
 
-**Repository:** https://github.com/Ps23102004/graphhacks-quarantine (must be public before submitting)
+**Repository:** https://github.com/Ps23102004/graphhacks-quarantine (public)
 
 **Demo video:** (paste the link; our target is 3:00 or less, the rules set no length)
 
@@ -31,7 +31,7 @@ Limits we state up front. Quarantined means "touched by, through a recorded read
 
 ## Before pressing submit
 
-- [ ] Repository is public, and the README renders on GitHub
+- [x] Repository is public, and the README renders on GitHub
 - [ ] README line "Demo video" has the real link (replace VIDEO_LINK_GOES_HERE)
 - [ ] Video plays logged out (team target: 3:00 or less)
 - [ ] `git rev-parse HEAD` of the submitted repo equals the tag that passed the checks

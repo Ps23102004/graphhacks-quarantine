@@ -52,7 +52,7 @@ The agents are scripted: their outputs and read sets come from `fixture.yaml`. T
 
 ### Tasks
 1. **Rules and release check:**
-   - The repo has an MIT `LICENSE` and must be public before submitting.
+   - The repo has an MIT `LICENSE` and has been public since Oct 18.
    - Search the code for leaked API keys, tokens or local absolute paths.
    - Terminology: FalkorDB is **source-available (SSPL)**, not "open source".
 2. **Review the `README.md`:**

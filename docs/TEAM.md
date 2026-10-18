@@ -12,7 +12,7 @@ Deadline Sun 2026-10-18 14:29 EDT; submit target Sun 12:00 EDT.
 | merge rule | Parth pushed `improve` to `main` himself, so the rule below (Aashna reviews first) was not followed |
 | live deployment | none; the README gives the complete local setup |
 | video | Parth records it on Oct 18; the link goes into the README before submitting |
-| repository | private until Parth publishes it on Oct 18 |
+| repository | public since Oct 18 (an anonymous clone passed all tests; see `docs/RUNS.md`) |
 
 ## Status Thu 09:40 (historical)
 
