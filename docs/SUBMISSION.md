@@ -34,7 +34,7 @@ Limits we state up front. Quarantined means "touched by, through a recorded read
 ## Before pressing submit
 
 - [x] Repository is public, and the README renders on GitHub
-- [x] README line "Demo video" has the real link (replace VIDEO_LINK_GOES_HERE)
+- [x] README line "Demo video" has the real link
 - [x] Video is public (2:51; YouTube oEmbed returns 200)
 - [x] The submitted HEAD is `3874be2` plus later commits that change documentation, comments, strings and two browser-check patterns only (`docs/RUNS.md` line 3 gives the diff command)
 - [ ] Screenshot of the confirmation page sent to the team
