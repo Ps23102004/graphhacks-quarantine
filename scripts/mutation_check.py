@@ -34,8 +34,8 @@ MUTATIONS = [
     ("heal query drops its own tie check (equivalent mutant: the healable flag already guards it)", "quarantine/queries.py", "WHERE size(agree) >= 2 AND size(agree) > second_cnt", "WHERE size(agree) >= 2"),
     ("episodes become healable",              "quarantine/queries.py", "WHEN m:Episode THEN false", "WHEN m:Episode THEN true"),
     ("rework not blocked by healable inputs", "quarantine/queries.py", "x:Memory {quarantined: true, healable: true})\nMERGE (t)-[:BLOCKED_BY]", "x:Memory {quarantined: true, healable: false})\nMERGE (t)-[:BLOCKED_BY]"),
-    ("lease never expires",                   "quarantine/queries.py", "(c IS NULL OR c.lease_until < $now)", "(c IS NULL)"),
-    ("lease ignores live holder",             "quarantine/queries.py", "(c IS NULL OR c.lease_until < $now)", "(true)"),
+    ("lease never expires",                   "quarantine/queries.py", "(c IS NULL OR c.lease_until < $now OR (c.session = $session AND holder.name = $me))", "(c IS NULL OR (c.session = $session AND holder.name = $me))"),
+    ("lease ignores live holder",             "quarantine/queries.py", "(c IS NULL OR c.lease_until < $now OR (c.session = $session AND holder.name = $me))", "(true)"),
     ("rework guard removed",                  "quarantine/loader.py",  "    if bad:\n", "    if False:\n"),
     ("per-agent baseline counts nothing",     "quarantine/queries.py", "RETURN count(DISTINCT all) AS naive,", "RETURN 0 AS naive,"),
     ("time baseline off by one tick",         "quarantine/queries.py", "WHERE m.tick >= t0", "WHERE m.tick > t0"),
@@ -51,7 +51,7 @@ MUTATIONS = [
     ("COMPLETE ignores the lease session",    "quarantine/queries.py", "CLAIMED_BY {session: $session}]", "CLAIMED_BY]"),
     ("COMPLETE needs no replacement",         "quarantine/queries.py", "<-[:SUPERSEDES]-(rep:Memory {quarantined: false})\nMATCH (t)-[c:CLAIMED_BY", "\nMATCH (t)-[c:CLAIMED_BY"),
     ("any agent can claim any task",          "quarantine/queries.py", "(:Memory)<-[:AUTHORED]-(a:Agent {name: $me})\nOPTIONAL MATCH (t)-[c:CLAIMED_BY]", "(:Memory)\nMATCH (a:Agent {name: $me})\nOPTIONAL MATCH (t)-[c:CLAIMED_BY]"),
-    ("receipt forgets the recorded advisory (needs the doc to still be flagged)", "quarantine/answers.py", "WHERE m.quarantine_doc IS NOT NULL RETURN m.quarantine_doc", "WHERE false RETURN m.quarantine_doc"),
+    ("receipt forgets the recorded advisory (equivalent mutant: every currently flagged doc is tried)", "quarantine/answers.py", "cause = rq(g, \"MATCH (m:Memory {id: $id}) RETURN m.quarantine_doc\", id=memory_id)", "cause = []"),
     ("page twin detection removed",           "web/server.py", "OPTIONAL MATCH (m)-[:SUPERSEDES]->(old:Memory)", "OPTIONAL MATCH (m)-[:NOPE]->(old:Memory)"),
 ]
 
