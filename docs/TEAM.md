@@ -8,7 +8,7 @@ Deadline Sun 2026-10-18 14:29 EDT; submit target Sun 12:00 EDT.
 |---|---|
 | tests | all passed in a fresh GitHub clone run by Parth with Claude on Oct 18; commands and results in `docs/RUNS.md` |
 | Aashna | reported on Windows twice (Oct 16 zip; Oct 18 branch `improve` at e92cd46). Her seven defects were fixed. The code review (checklist section 4) and merge decision were not done by a second person |
-| Aman | rewrote the README (Oct 17) and edited it again on Oct 17. The blog draft and submission text were drafted by Parth with Claude; Aman can edit them |
+| Aman | rewrote the README (commit 21c94f2, Oct 17) and edited it again that evening (591bbd2). The blog draft and submission text were drafted by Parth with Claude; Aman can edit them |
 | merge rule | Parth pushed `improve` to `main` himself, so the rule below (Aashna reviews first) was not followed |
 | live deployment | none; the README gives the complete local setup |
 | video | Parth records it on Oct 18; the link goes into the README before submitting |

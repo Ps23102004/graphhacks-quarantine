@@ -5,7 +5,7 @@ In the bundled demo, flagging one poisoned document quarantines 6 of 25 agent me
 
 QUARANTINE is a prototype for one job: a source in shared agent memory turns out to be bad, and you need to find and repair everything built on it. It follows recorded dependencies from the flagged source, quarantines the memories connected to it, and shows the path that connects each one.
 
-We tested it on generated scenarios. When agents were influenced by things they never recorded, it missed about **7% of truly affected memories**. When agents recorded their reads, about **63% of quarantined memories would have kept the same content** without the flagged source. These numbers come from a 150-world run of synthetic worlds, repeated later on the same engine code (commit `c4de91d`) with identical results. They are not measurements on real agents. The model, counts and rerun command are in [docs/COUNTERFACTUAL.md](docs/COUNTERFACTUAL.md).
+We tested it on generated scenarios. When agents were influenced by things they never recorded, it missed about **7% of truly affected memories**. When agents recorded their reads, about **63% of quarantined memories would have kept the same content** without the flagged source. These numbers come from a 150-world run of synthetic worlds, repeated on the final engine code (commit `c4de91d`) with identical results. They are not measurements on real agents. The model, counts and rerun command are in [docs/COUNTERFACTUAL.md](docs/COUNTERFACTUAL.md).
 
 **The research, planner and coder agents in the demo are scripted.** The FalkorDB graph, dependency queries, task leases and recovery writes are real. The project does not detect prompt injections by itself, and it does not show recovery for arbitrary LLM workflows.
 
@@ -88,10 +88,10 @@ The viewer draws the graph as a ledger on light paper. It has five columns (sour
 | --- | --- | --- | --- |
 | Episodic memory | `Episode` nodes extracted from documents | `tests/test_track02_bar.py::test_three_memory_kinds_each_with_provenance` | |
 | Semantic memory | `Fact` nodes consolidated from episodes, with a claim on each edge | same test | |
-| Procedural memory | a `Procedure` node holds the recovery rules (lease length, heal threshold as data); every rework task `FOLLOWS` it; plan steps record how work was done | same test; `quarantine/loader.py` | only the lease length is read back from the node; the heal rule is still written in the Cypher; plan steps are descriptive and no agent reads them; no test shows a changed lease length changing behaviour |
-| Persistent history | memories are never deleted; `SUPERSEDES` and `OUTVOTED` keep the history; two separate OS processes see the same graph | `test_memory_persists_and_updates_across_separate_processes` | memories and replacements are kept; `unflag` erases quarantine marks and unstarted tasks, and the lease edge is deleted when a task is claimed or completed, so who held a task and who took it over is not kept |
+| Procedural memory | a `Procedure` node holds the recovery rules (lease length, heal threshold as data); every rework task `FOLLOWS` it; plan steps record how work was done | same test; `quarantine/loader.py` | only the lease length is read back from the node; the heal threshold is stored as `heal_min_clean` but is fixed at 2 (other values are rejected) and the rule itself is written in the Cypher; plan steps are descriptive and no agent reads them; no test shows a changed lease length changing behaviour |
+| Persistent history | memories are never deleted; `SUPERSEDES` and `OUTVOTED` keep the history; two separate OS processes see the same graph | `test_memory_persists_and_updates_across_separate_processes` | memories and replacements are kept; `unflag` erases quarantine marks, the document's flag record and unstarted tasks, and the lease edge is deleted when a task is claimed or completed, so who held a task and who took it over is not kept |
 | Shared state and handoffs | tasks, leases and `BLOCKED_BY` edges live in the graph; a restarted process resumes from them | `test_handoff_is_a_graph_read_not_a_message` | a task can only be claimed by the agent that wrote the memory it reworks, so takeover is between processes of the same agent; across agents, handoff is unblocking through `BLOCKED_BY` |
-| High-concurrency reads and writes | 16 threads race for one task and exactly one wins; 16 threads write memories and all land with their edges (one reader thread; atomicity comes from single-query writes) | `test_concurrent_claims_exactly_one_winner_and_concurrent_writes_all_land` | tested at 16 threads, not at scale; "exactly one wins" relies on FalkorDB running write queries on one graph one at a time; two `session2` runs started together can take each other's lease (see limits) |
+| High-concurrency reads and writes | 16 threads in one process race for one task and exactly one wins; 16 threads write memories and all land with their edges (one reader thread; atomicity comes from single-query writes) | `test_concurrent_claims_exactly_one_winner_and_concurrent_writes_all_land` | tested at 16 threads, not at scale; "exactly one wins" relies on FalkorDB running write queries on one graph one at a time; two `session2` runs started together can take each other's lease (see limits) |
 | Separate memory per user or tenant | one graph per tenant on one FalkorDB instance; the same question gets a different answer from a different graph | `test_separate_memory_per_tenant_same_question_different_answer` | the test uses two tenants; isolation is by graph name, not by credential |
 
 ## Run it locally
@@ -188,7 +188,7 @@ Nodes are documents, memory episodes, facts, plan steps, artifacts, agents, sess
 
 ### Find affected memories
 
-This is `queries.TAINT_CLOSURE`, with its output alias `precise` renamed to `quarantined_count` for readability. `quarantine flag` runs `queries.FLAG_AND_CLOSE`, which sets the flag and runs the same traversal pattern (`OPTIONAL MATCH` plus `FOREACH`, `FLAG_AND_CLOSE` in `quarantine/queries.py`) in one write:
+This is `queries.TAINT_CLOSURE`, with its output alias `precise` renamed to `quarantined_count` for readability. `quarantine flag` runs `queries.FLAG_AND_CLOSE`, which sets the flag and does this traversal in one write (`OPTIONAL MATCH` plus `FOREACH`, `FLAG_AND_CLOSE` in `quarantine/queries.py`):
 
 ```cypher
 MATCH (d:Doc {id: $doc})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]-(m:Memory)
@@ -296,7 +296,7 @@ uv run python scripts/counterfactual_eval.py --worlds 150  # reproduce the docum
 
 Write down the commit SHA next to your results so someone else can check the same version. [docs/VALIDATION.md](docs/VALIDATION.md) has recorded results and open items, [docs/TESTING.md](docs/TESTING.md) has testing details, and [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md) has the walkthrough.
 
-Not covered: no dedicated security scanner was run (one AI attacker covered web security; see `docs/ATTACK-LOG.md`). The mutation check (`uv run python scripts/mutation_check.py`, one pytest run per mutation, slow) is not part of the default test suite, and it was not re-run for this commit ([docs/VALIDATION.md](docs/VALIDATION.md)).
+Not covered: no dedicated security scanner was run (one AI attacker covered web security; see `docs/ATTACK-LOG.md`). The mutation check (`uv run python scripts/mutation_check.py`, one pytest run per mutation, slow) is not part of the default test suite. It was run on commit `3874be2` (Python 3.13): 0 unexpected survivors of 32 mutations ([docs/RUNS.md](docs/RUNS.md)); engine code has not changed since.
 
 ## Limits to keep in mind
 
