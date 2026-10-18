@@ -9,6 +9,18 @@ Built for **Graph Hacks 2026 (FalkorDB × WeMakeDevs)**, Track 02: Agent Memory 
 
 **Team:** Parth Singh, Amandeep Kaushik, and Aashna Tyagi.
 
+**Demo video (3:00 or less):** VIDEO_LINK_GOES_HERE
+
+| Graph Hacks asks for | Where it is |
+| --- | --- |
+| Public repository | this repository |
+| README with setup and the graph data model | [Run it locally](#run-it-locally), [How the graph works](#how-the-graph-works) |
+| The Cypher the product depends on | [How the graph works](#how-the-graph-works) and [quarantine/queries.py](quarantine/queries.py) |
+| Demo video | link above |
+| Live deployment or complete local setup | complete local setup below (no live deployment) |
+| Track | Track 02: Agent Memory and Coordination |
+| AI-assistant disclosure | [AI assistance](#ai-assistance) |
+
 ## Why we built it
 
 A bad source can travel further than the agent that first reads it. A researcher may turn it into a fact, a planner may use that fact, and a coder may produce an artifact based on the plan.

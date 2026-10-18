@@ -38,7 +38,8 @@ print('Seeded graph quarantine via', connection_kwargs())
 
 echo "== 5. Verify HTTP endpoints =="
 # Check root page
-curl -s -f "http://127.0.0.1:$PORT/" | grep -q "QUARANTINE"
+page="$(curl -s -f "http://127.0.0.1:$PORT/")"   # read first: `curl | grep -q` under pipefail fails when grep exits early
+grep -qi "<title>quarantine" <<<"$page"
 echo "  PASS: GET /"
 
 # Check /receipt JSON (the page loads nothing else; the server's routes are /, /index.html, /graph and /receipt)

@@ -1,6 +1,6 @@
 # Aman: README, blog and submission checklist (Sat evening to Sun 11:30 EDT)
 
-You own every word a judge reads and the submission itself. Rule for every sentence: **if you cannot point to a command or a file that proves it, cut it.** "Precise" is never used alone; say "sound, never misses a memory the poison reached through a recorded read, and much narrower than a rollback" (see `docs/COUNTERFACTUAL.md`).
+You own every word a judge reads and the submission itself. Rule for every sentence: **if you cannot point to a command or a file that proves it, cut it.** "Precise" is not used; say "marks every memory whose recorded reads lead back to the source; misses influence that was never recorded (7% in our generated crews); about 63% of what it flags would not have changed" (see `docs/COUNTERFACTUAL.md`).
 
 ## Tonight (Sat)
 - [ ] Get access: accept the GitHub collaborator invite; `git clone https://github.com/Ps23102004/graphhacks-quarantine.git && cd graphhacks-quarantine && git checkout freeze-sat`.
