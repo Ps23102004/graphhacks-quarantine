@@ -88,10 +88,10 @@ The viewer draws the graph as a ledger on light paper. It has five columns (sour
 | --- | --- | --- | --- |
 | Episodic memory | `Episode` nodes extracted from documents | `tests/test_track02_bar.py::test_three_memory_kinds_each_with_provenance` | |
 | Semantic memory | `Fact` nodes consolidated from episodes, with a claim on each edge | same test | |
-| Procedural memory | a `Procedure` node holds the recovery rules (lease length, heal threshold as data); every rework task `FOLLOWS` it; plan steps record how work was done | same test; `quarantine/loader.py` | only the lease length is read back from the node; the heal rule is still written in the Cypher; plan steps are descriptive and no agent reads them |
-| Persistent history | memories are never deleted; `SUPERSEDES` and `OUTVOTED` keep the history; two separate OS processes see the same graph | `test_memory_persists_and_updates_across_separate_processes` | memories and replacements are kept; the lease edge is deleted when a task is claimed or completed, so who held a task and who took it over is not kept |
-| Shared state and handoffs | tasks, leases and `BLOCKED_BY` edges live in the graph; a restarted process resumes from them | `test_handoff_is_a_graph_read_not_a_message` | |
-| High-concurrency reads and writes | 16 threads race for one task and exactly one wins; 16 threads write memories and all land with their edges | `test_concurrent_claims_exactly_one_winner_and_concurrent_writes_all_land` | tested at 16 threads, not at scale; "exactly one wins" relies on FalkorDB running write queries on one graph one at a time; two `session2` runs started together can take each other's lease (see limits) |
+| Procedural memory | a `Procedure` node holds the recovery rules (lease length, heal threshold as data); every rework task `FOLLOWS` it; plan steps record how work was done | same test; `quarantine/loader.py` | only the lease length is read back from the node; the heal rule is still written in the Cypher; plan steps are descriptive and no agent reads them; no test shows a changed lease length changing behaviour |
+| Persistent history | memories are never deleted; `SUPERSEDES` and `OUTVOTED` keep the history; two separate OS processes see the same graph | `test_memory_persists_and_updates_across_separate_processes` | memories and replacements are kept; `unflag` erases quarantine marks and unstarted tasks, and the lease edge is deleted when a task is claimed or completed, so who held a task and who took it over is not kept |
+| Shared state and handoffs | tasks, leases and `BLOCKED_BY` edges live in the graph; a restarted process resumes from them | `test_handoff_is_a_graph_read_not_a_message` | a task can only be claimed by the agent that wrote the memory it reworks, so takeover is between processes of the same agent; across agents, handoff is unblocking through `BLOCKED_BY` |
+| High-concurrency reads and writes | 16 threads race for one task and exactly one wins; 16 threads write memories and all land with their edges (one reader thread; atomicity comes from single-query writes) | `test_concurrent_claims_exactly_one_winner_and_concurrent_writes_all_land` | tested at 16 threads, not at scale; "exactly one wins" relies on FalkorDB running write queries on one graph one at a time; two `session2` runs started together can take each other's lease (see limits) |
 | Separate memory per user or tenant | one graph per tenant on one FalkorDB instance; the same question gets a different answer from a different graph | `test_separate_memory_per_tenant_same_question_different_answer` | the test uses two tenants; isolation is by graph name, not by credential |
 
 ## Run it locally
@@ -103,11 +103,8 @@ You need Git, Python 3.12 or later, [uv](https://docs.astral.sh/uv/), and Docker
 ```bash
 git clone https://github.com/Ps23102004/graphhacks-quarantine.git
 cd graphhacks-quarantine
-git rev-parse HEAD
 uv sync --all-extras                      # --all-extras installs the optional MCP SDK the MCP tests need
 ```
-
-`main` and `improve` are kept equal.
 
 ### Start FalkorDB
 
@@ -131,30 +128,13 @@ uv run pytest -q
 
 The last line of the output gives the pass count. It should report no failures.
 
-### Open the viewer
+### Run the scenario
 
-In one terminal:
+In one terminal, start the viewer and open [localhost:8765](http://localhost:8765):
 
 ```bash
 uv run python web/server.py
 ```
-
-Open [localhost:8765](http://localhost:8765).
-
-### One-command local setup (Docker Compose)
-
-```bash
-docker compose -f deploy/docker-compose.yml up -d --build
-```
-
-This starts FalkorDB and the viewer on `http://127.0.0.1:8765`. The viewer port is 8765, so stop the manual viewer first if it is running. The graph starts empty: seed it, then open the page.
-
-```bash
-docker compose -f deploy/docker-compose.yml exec web /app/.venv/bin/quarantine session1
-docker compose -f deploy/docker-compose.yml exec web /app/.venv/bin/quarantine flag doc_7
-``` The compose check in `scripts/validate_compose.sh` runs this path; it passed on Oct 18. Use the steps above if you want to run the CLI.
-
-### Run the scenario
 
 In a second terminal, from the repository directory:
 
@@ -170,6 +150,16 @@ uv run quarantine status
 After flagging, expect `quarantined 6 | wipe agents 25 | roll back 19`. Session 2 prints each recovery round and the lease takeover. In the viewer you can click a memory to see its provenance. To retract a false alarm before healing starts, run `uv run quarantine unflag doc_7`. Once healing has started, `unflag` refuses and tells you to reset with `session1`.
 
 `--kill-planner` kills a separate demo worker process to show task recovery. The agents' decisions and replacement contents are still scripted. On Windows there is no real `kill -9`, so that step prints exit code 1 instead of -9. The lease takeover works the same. Use macOS or Linux to record the demo.
+
+### Alternative: Docker Compose
+
+```bash
+docker compose -f deploy/docker-compose.yml up -d --build
+docker compose -f deploy/docker-compose.yml exec web /app/.venv/bin/quarantine session1
+docker compose -f deploy/docker-compose.yml exec web /app/.venv/bin/quarantine flag doc_7
+```
+
+This starts FalkorDB and the viewer in containers on `http://127.0.0.1:8765`. The graph starts empty, so the last two commands seed and flag it. Stop the manual viewer first if it is running (same port). The compose check in `scripts/validate_compose.sh` runs this path; its result is in [docs/RUNS.md](docs/RUNS.md).
 
 ## How the graph works
 
@@ -198,7 +188,7 @@ Nodes are documents, memory episodes, facts, plan steps, artifacts, agents, sess
 
 ### Find affected memories
 
-This is `queries.TAINT_CLOSURE`, with its output alias `precise` renamed to `quarantined_count` for readability. `quarantine flag` runs `queries.FLAG_AND_CLOSE`, which sets the flag and runs the same traversal pattern (`OPTIONAL MATCH` plus `FOREACH`, `queries.py:19`) in one write:
+This is `queries.TAINT_CLOSURE`, with its output alias `precise` renamed to `quarantined_count` for readability. `quarantine flag` runs `queries.FLAG_AND_CLOSE`, which sets the flag and runs the same traversal pattern (`OPTIONAL MATCH` plus `FOREACH`, `FLAG_AND_CLOSE` in `quarantine/queries.py`) in one write:
 
 ```cypher
 MATCH (d:Doc {id: $doc})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]-(m:Memory)

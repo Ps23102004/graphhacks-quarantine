@@ -34,5 +34,5 @@ Limits we state up front. Quarantined means "touched by, through a recorded read
 - [x] Repository is public, and the README renders on GitHub
 - [ ] README line "Demo video" has the real link (replace VIDEO_LINK_GOES_HERE)
 - [ ] Video plays logged out (team target: 3:00 or less)
-- [ ] `git rev-parse HEAD` of the submitted repo equals the tag that passed the checks
+- [ ] `git rev-parse HEAD` of the submitted repo equals the commit recorded in `docs/RUNS.md` (or a later commit that changes only documentation)
 - [ ] Screenshot of the confirmation page sent to the team

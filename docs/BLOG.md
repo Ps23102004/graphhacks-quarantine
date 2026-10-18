@@ -38,7 +38,7 @@ These numbers come from the 150-world run in `docs/COUNTERFACTUAL.md`, repeated 
 
 We ran ten AI attacker agents, each on one area: engine edge cases, multi-step sequences, crash consistency, the tool interface, web security, whether the page tells the truth, hostile input files, every claim in our docs, a fresh clone, and gaps in the specification. Three AI skeptics then checked each finding rated medium or worse. They found real defects. Two would have made us say false things. A crash could leave a flagged document with nothing marked red. And our own evaluation ignored a fact's stored value, so it called the demo's poisoned fact a cautious flag when it really was poisoned. A second round attacked the fixes. The titles of what they reported are in `docs/ATTACK-LOG.md`.
 
-The fixes came with regression tests (36 of them are in `tests/test_attack_regressions.py`). The test suite, the ten-world end-to-end check and the mutation check were run on several Python versions; the commands, the commit they ran on and their output are in `docs/RUNS.md`.
+The fixes came with regression tests (36 of them are in `tests/test_attack_regressions.py`). The test suite, the ten-world end-to-end check and the mutation check were run on Python 3.12, 3.13 and 3.14; the commands, the commit they ran on and their output are in `docs/RUNS.md`.
 
 ## What it is not
 
