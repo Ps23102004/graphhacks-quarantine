@@ -181,7 +181,7 @@ def unflag(args) -> None:
 
 # ---------------------------------------------------------------- session 2
 def kill_planner(g, task: str, tick: int, lease: int = LEASE) -> int:
-    """Planner process s2 claims `task` and dies. Returns the tick at which a new process (s2b) holds the lease."""
+    """Planner process s2 claims `task` and dies. Returns the tick at which session s2b (run by this process, not a new OS process) holds the lease."""
     LEASE = lease  # noqa: N806  (the procedure's lease, read from the graph by the caller)
 
     def claim(now: int, session: str):
@@ -201,11 +201,11 @@ def kill_planner(g, task: str, tick: int, lease: int = LEASE) -> int:
     live = tick + min(2, LEASE)                                         # inside the lease, whatever its length
     if claim(live, "s2b"):
         sys.exit("error: second planner claim succeeded while the lease was live")
-    say(f"  planner (new process, session s2b): claim refused at tick {live}, lease live until tick {tick + LEASE}")
+    say(f"  planner (session s2b): claim refused at tick {live}, lease live until tick {tick + LEASE}")
 
     tick += LEASE + 1
     (_, old), = must(claim(tick, "s2b"), "planner could not take over the expired lease")
-    say(f"  planner (new process, session s2b) took over lease from {old}")
+    say(f"  planner (session s2b) took over lease from {old}")
     return tick
 
 
@@ -226,7 +226,7 @@ def session2(args) -> None:
     # whoever authored something with a rework task, in the order their quarantined work was written
     agents = [r[0] for r in rq(g, "MATCH (a:Agent)-[:AUTHORED]->(m:Memory)<-[:REWORKS]-(:Task) "
                                  "RETURN a.name, min(m.tick) AS t ORDER BY t")] or list(AGENTS)
-    say("session 2: fresh processes, start-up query only")
+    say("session 2: start-up query only")
     for agent in agents:
         for memory, _h, task, state, waiting in rq(g, Q.STARTUP, me=agent):
             say("  " + startup_line(agent, memory, task, state, waiting))

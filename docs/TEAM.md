@@ -11,7 +11,7 @@ Deadline Sun 2026-10-18 14:29 EDT; submit target Sun 12:00 EDT.
 | Aman | rewrote the README (commit 21c94f2, Oct 17) and edited it again that evening (591bbd2). The blog draft and submission text were drafted by Parth with Claude; Aman can edit them |
 | merge rule | Parth pushed `improve` to `main` himself, so the rule below (Aashna reviews first) was not followed |
 | live deployment | none; the README gives the complete local setup |
-| video | Parth records it on Oct 18; the link goes into the README before submitting |
+| video | recorded and public: https://youtu.be/BZ3Qp1WWYB8 (2:51); linked in README line 18 and docs/SUBMISSION.md |
 | repository | public since Oct 18 (an anonymous clone passed all tests; see `docs/RUNS.md`) |
 
 ## Status Thu 09:40 (historical)
@@ -23,7 +23,7 @@ Deadline Sun 2026-10-18 14:29 EDT; submit target Sun 12:00 EDT.
 | page (`uv run python web/server.py`, http://localhost:8765) | v1 worked: counters 6 / 25 / 19 frozen at flag time, red wave, green replacements, click a red node to see the receipt path |
 | page test (`tests/test_web.py`) | done |
 | README body, LICENSE, disclosure, MCP bridge, compose file | done since (see README) |
-| live deployment, MCP beat in the video, video, blog, submission | not done then: `docs/CHECKLIST-AASHNA.md` and `docs/CHECKLIST-AMAN.md` list the steps |
+| live deployment, MCP beat in the video, video, blog, submission | not done then (the video, blog draft and submission text have since been done; there is no live deployment): `docs/CHECKLIST-AASHNA.md` and `docs/CHECKLIST-AMAN.md` list the steps |
 
 ## Who does what (re-split Fri 2026-10-16 by Parth)
 

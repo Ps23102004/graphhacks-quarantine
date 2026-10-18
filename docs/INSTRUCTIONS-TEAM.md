@@ -2,7 +2,7 @@
 **Project: QUARANTINE (Graph Hacks 2026, Track 02: Agent Memory and Coordination)**
 **Written:** Friday Oct 16, 2026 | **Submission target:** Sunday Oct 18, 12:00 EDT
 
-**Status Sun 2026-10-18:** Aashna reported twice (Oct 16 and Oct 18) and Aman rewrote the README (Oct 17). Parth ran a fresh GitHub clone with Claude on Oct 18 (221 tests, ten worlds, compose check, demo path, junk MCP input). The blog draft (`docs/BLOG.md`) and submission text (`docs/SUBMISSION.md`) were written by Parth with Claude. The video is not recorded yet. See `docs/TEAM.md` for the full status.
+**Status Sun 2026-10-18:** Aashna reported twice (Oct 16 and Oct 18) and Aman rewrote the README (Oct 17). Parth ran a fresh GitHub clone with Claude on Oct 18 (221 tests, ten worlds, compose check, demo path, junk MCP input). The blog draft (`docs/BLOG.md`) and submission text (`docs/SUBMISSION.md`) were written by Parth with Claude. The demo video is recorded and public: https://youtu.be/BZ3Qp1WWYB8 (2:51). See `docs/TEAM.md` for the full status.
 
 ---
 

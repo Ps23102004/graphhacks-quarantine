@@ -16,10 +16,10 @@ Rows below were last filled on Sun 2026-10-18; the commit each was run on is in 
 | unit + integration | `uv run pytest -q` | run on `3874be2`, 2026-10-18: 221 passed, 0 failed on Python 3.12, 3.13 and 3.14; see `docs/RUNS.md`. The count changes as tests are added; read it from pytest's summary line |
 | working-tree copy, throwaway FalkorDB, real CLI + page | `scripts/validate.sh` | run on `3874be2`, 2026-10-18: 29 passed, 0 failed; see `docs/RUNS.md` |
 | mutation check (tests catch breakage) | `uv run python scripts/mutation_check.py` | run on `3874be2` (Python 3.13), 2026-10-18: 0 unexpected survivor(s) of 32 mutations (30 caught, 2 equivalent mutants survived); output in `docs/RUNS.md` |
-| held-out worlds vs independent oracle | `uv run python scripts/heldout_eval.py` | re-run on `b31ba1e`, 2026-10-18: 3 x 2,645 cases, 0 mismatches; 3 x 878 full-pipeline runs, 0 violations (`docs/EVAL-HELDOUT.md`) |
+| held-out worlds vs an independent restatement of the rule (same AI pipeline wrote both) | `uv run python scripts/heldout_eval.py` | re-run on `b31ba1e`, 2026-10-18: 3 x 2,645 cases, 0 mismatches; 3 x 878 full-pipeline runs, 0 violations (`docs/EVAL-HELDOUT.md`) |
 | counterfactual replay | `uv run python scripts/counterfactual_eval.py --worlds 20` | re-run on `b31ba1e`, 2026-10-18: 0 false negatives, invented receipts, wrong clean answers and page mismatches on the three gated models; the unrecorded-influence model missed 9% (`docs/COUNTERFACTUAL.md`) |
 | organizers' guide + Track 02 bar | `uv run pytest -q tests/test_guideline.py tests/test_track02_bar.py` | re-run on `b31ba1e`, 2026-10-18: 12 passed. These tests were tightened after a skeptic review on 2026-10-16 (`docs/GUIDELINE-CONFORMANCE.md`) |
-| independent review (different model, read-only, did not write the code) | Opus 5.5 subagent, 2026-10-15 | 14 findings (2 blockers, 8 should-fix, 4 nits); see below |
+| separate review (separate Opus 5.5 subagent, same model family as the implementer; read-only, did not write the code) | Opus 5.5 subagent, 2026-10-15 | 14 findings (2 blockers, 8 should-fix, 4 nits); see below |
 
 Fail-to-pass evidence: each new test was written against the unfixed behaviour the reviewer reported, or against a surviving mutant. For the findings marked "mutation-checked" below, the mutation check also shows the test goes red when the fix is removed.
 
@@ -62,9 +62,9 @@ The checks ran on the working tree of `fix/demo-verification`, based on `26d2f7f
 
 The graph queries, fixture, loader and CLI did not change in that pass.
 
-## Not yet verified (do before the video)
+## Not verified
 
 - Physical projector, the actual recording setup, and screen-reader and keyboard accessibility with real users.
 - Aashna ran branch `improve` at e92cd46 on Windows; nobody other than Parth has run the final commit. The pinned image's amd64 digest was not re-checked.
-- Live deployment (VM), the MCP beat in the video, and the submission form: not done. A blog draft (`docs/BLOG.md`), submission text (`docs/SUBMISSION.md`), the README, LICENSE and the AI-use disclosure exist; see `docs/CHECKLIST-AASHNA.md` and `docs/CHECKLIST-AMAN.md`.
+- Live deployment (VM): none. The demo video is published (https://youtu.be/BZ3Qp1WWYB8, 2:51). A blog draft (`docs/BLOG.md`), submission text (`docs/SUBMISSION.md`), the README, LICENSE and the AI-use disclosure exist; see `docs/CHECKLIST-AASHNA.md` and `docs/CHECKLIST-AMAN.md`.
 - Colour-blind usability with people. Grayscale browser emulation and non-colour cues were checked, but that does not replace user testing.

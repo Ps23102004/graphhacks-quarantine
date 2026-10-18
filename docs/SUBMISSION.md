@@ -9,9 +9,11 @@ Rules checked against https://www.wemakedevs.org/hackathons/falkordb/rules (subm
 **One line:** When a source turns out to be poisoned, QUARANTINE follows the recorded reads in a FalkorDB graph, marks every agent memory they connect to that source, explains each one with a path back to it, and rebuilds only that work.
 
 **Description (short):**
-Three agents (research, planner, coder) share memory in FalkorDB. Every write is stored with the reads it declares, as edges. When a document is flagged as prompt-injected, one Cypher traversal quarantines every memory whose recorded reads lead back to it. In the demo that is 6 of 25 memories. Resetting every agent it touched would discard 25, and rolling back by time would discard 19. Each quarantined memory has a receipt: the path to the source, written as a sentence. A fact is rebuilt only when at least two clean episodes agree and their claim has more votes than any other. Plan steps and files are reworked by their authors in dependency order under expiring leases. In the demo we kill the planner process with `kill -9` mid-task, and the CLI takes over the task lease as a second session once the lease runs out. A fixed, read-only MCP tool catalog answers in four shapes, and its recall and inspect tools withhold a quarantined memory's text.
+Three agents (research, planner, coder) share memory in FalkorDB (a fourth, `harness`, only writes the shared recovery procedure). Every write is stored with the reads it declares, as edges. When a document is flagged as prompt-injected, one Cypher traversal quarantines every memory whose recorded reads lead back to it. In the demo that is 6 of 25 memories. Resetting every agent it touched would discard 25, and rolling back by time would discard 19. Each quarantined memory has a receipt: the path to the source, written as a sentence. A fact is rebuilt only when at least two clean episodes agree and their claim has more votes than any other. Plan steps and files are reworked by their authors in dependency order under expiring leases. In the demo we kill the planner process with `kill -9` mid-task, and the CLI takes over the task lease as a second session once the lease runs out. A fixed, read-only MCP tool catalog answers in four shapes, and its recall and inspect tools withhold a quarantined memory's text.
 
 Limits we state up front. Quarantined means "touched by, through a recorded read", not "proven wrong". In generated crews about 63% of what it flags would have kept the same content, and it misses influence an agent never recorded (7% of truly affected memories). The demo's agents are scripted. Details and rerun commands: docs/COUNTERFACTUAL.md.
+
+**Track 02 coverage:** episodic, semantic and procedural memory as graph nodes; persistence across separate OS processes; graph leases and `BLOCKED_BY` handoffs; a 16-thread claim race test; one graph per tenant. The README table maps each criterion to its test and states its limit. No chat turns are stored.
 
 **Why the graph does real work:** provenance is edges. The blast radius is one variable-length traversal, the receipt is one shortest-path query, and healing, task blocking and leases are graph state. At 25 memories a relational database could also hold this, and speed at scale is untested. What the graph gives is one statement that follows three edge types to any depth with no hop cap, and a shortest path that is the explanation itself.
 
@@ -33,6 +35,6 @@ Limits we state up front. Quarantined means "touched by, through a recorded read
 
 - [x] Repository is public, and the README renders on GitHub
 - [x] README line "Demo video" has the real link (replace VIDEO_LINK_GOES_HERE)
-- [ ] Video plays logged out (team target: 3:00 or less)
-- [ ] `git rev-parse HEAD` of the submitted repo equals the commit recorded in `docs/RUNS.md` (or a later commit that changes only documentation)
+- [x] Video is public (2:51; YouTube oEmbed returns 200)
+- [x] The submitted HEAD is `3874be2` plus later commits that change documentation, comments, strings and two browser-check patterns only (`docs/RUNS.md` line 3 gives the diff command)
 - [ ] Screenshot of the confirmation page sent to the team

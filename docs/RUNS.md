@@ -53,3 +53,5 @@ An anonymous clone of the public repository (`git clone https://github.com/Ps231
 - A dedicated security scanner (the AI attackers in `docs/ATTACK-LOG.md` included one on web security).
 - Any run by a second person on the final commit.
 - A live deployment (there is none).
+
+The anonymous-clone result above was taken at `531d7eb`. Later commits (up to the submitted HEAD) change only documentation, comments, strings, the CLI's printed wording and two browser-check patterns; the full test suite was re-run after the last wording change (221 passed).

@@ -1,6 +1,6 @@
 # Launch assets
 
-A 20-second clip, `docs/media/launch-20s.mp4`, made from five real screenshots of the page (no mock-ups), with captions added on top. It is a teaser, not the demo video. Every number in it comes from the bundled demo: 6 quarantined, 25 for a full agent wipe, 19 for a time rollback.
+A clip of about 20 seconds (19.4 s), `docs/media/launch-20s.mp4`, made from five real screenshots of the page (no mock-ups), with captions added on top. It is a teaser, not the demo video. Every number in it comes from the bundled demo: 6 quarantined, 25 for a full agent wipe, 19 for a time rollback.
 
 ## 20-second script (matches the clip)
 
