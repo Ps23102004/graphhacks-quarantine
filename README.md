@@ -80,6 +80,18 @@ These numbers come from **one hand-built scenario**, not a general benchmark. Th
 
 The viewer draws the graph as a ledger on light paper. It has five columns (sources, episodes, facts, plan steps, files), a chip for each memory, and a ribbon for each recorded read. Red ink spreads from the flagged source. The receipt path is a yellow highlighter stroke. The two wipe strategies hatch the clean chips they would destroy.
 
+## Track 02 criteria: what is covered
+
+| Track 02 asks for | What the project does | Test or file | Limit |
+| --- | --- | --- | --- |
+| Episodic memory | `Episode` nodes extracted from documents | `tests/test_track02_bar.py::test_three_memory_kinds_each_with_provenance` | |
+| Semantic memory | `Fact` nodes consolidated from episodes, with a claim on each edge | same test | |
+| Procedural memory | a `Procedure` node holds the recovery rules (lease length, heal threshold as data); every rework task `FOLLOWS` it; plan steps record how work was done | same test; `quarantine/loader.py` | only the lease length is read back from the node; the heal rule is still written in the Cypher |
+| Persistent history | memories are never deleted; `SUPERSEDES` and `OUTVOTED` keep the history; two separate OS processes see the same graph | `test_memory_persists_and_updates_across_separate_processes` | |
+| Shared state and handoffs | tasks, leases and `BLOCKED_BY` edges live in the graph; a restarted process resumes from them | `test_handoff_is_a_graph_read_not_a_message` | |
+| High-concurrency reads and writes | 16 threads race for one task and exactly one wins; 16 threads write memories and all land with their edges | `test_concurrent_claims_exactly_one_winner_and_concurrent_writes_all_land` | tested at 16 threads, not at scale; two `session2` runs started together can take each other's lease (see limits) |
+| Separate memory per user or tenant | one graph per tenant on one FalkorDB instance; the same question gets a different answer from a different graph | `test_separate_memory_per_tenant_same_question_different_answer` | isolation is by graph name, not by credential |
+
 ## Run it locally
 
 You need Git, Python 3.12 or later, [uv](https://docs.astral.sh/uv/), and Docker. The scripted demo needs no LLM API key.
