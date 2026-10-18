@@ -111,7 +111,7 @@ WITH shortestPath((a)-[:INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM*]->(d)) A
 RETURN [n IN nodes(p) | n.id] AS hops, length(p) AS len, [r IN relationships(p) | type(r)] AS via
 """
 
-# Q3b the same receipt through FalkorDB's algorithm procedure. Not used on the demo path, and unlike RECEIPT it is capped at 10 hops (maxLen); tests/test_quarantine.py cross-checks it against RECEIPT.
+# Q3b an equal-length receipt through FalkorDB's algorithm procedure. Not used on the demo path, and unlike RECEIPT it is capped at 10 hops (maxLen); tests/test_quarantine.py cross-checks it against RECEIPT.
 RECEIPT_SPPATHS = """
 MATCH (a:Memory {id: $from}), (d:Doc {id: $doc})
 CALL algo.SPpaths({sourceNode: a, targetNode: d,

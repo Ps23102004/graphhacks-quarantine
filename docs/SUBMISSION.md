@@ -25,7 +25,7 @@ Limits we state up front. Quarantined means "touched by, through a recorded read
 
 **Graph data model and Cypher:** README sections "How the graph works" and "Find affected memories". The core statements are in `quarantine/queries.py`; the README copies may rename an output alias, and a few small checks are inline in `quarantine/cli.py`.
 
-**AI use disclosure:** We used Anthropic Claude and OpenAI models for architectural exploration, Cypher experiments, fixture generation, test scaffolding, attack and review passes, and documentation. Parth, working with Claude, ran and validated the implementation against FalkorDB 6.0.2: the test suite, validation scripts, browser checks and a fresh clone from GitHub on macOS. Aashna tested on Windows on Oct 16 and again on commit e92cd46 (Oct 18); her seven defects were fixed. The planned second-person code review was not completed.
+**AI use disclosure:** We used Anthropic Claude and OpenAI models for architectural exploration, Cypher experiments, fixture generation, test scaffolding, attack and review passes, and documentation. Parth, working with Claude, ran and validated the implementation against FalkorDB 6.0.2: the test suite, validation scripts, browser checks and a fresh clone from GitHub on macOS. Aashna tested on Windows on Oct 16 and again on Oct 18 at commit e92cd46; her seven defects were fixed. The planned second-person code review was not completed.
 
 **Team:** Parth Singh, Amandeep Kaushik, Aashna Tyagi
 

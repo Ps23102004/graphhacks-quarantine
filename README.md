@@ -132,7 +132,7 @@ The last line of the output gives the pass count. It should report no failures.
 
 ### Run the scenario
 
-In one terminal, start the viewer and open [localhost:8765](http://localhost:8765):
+In one terminal, start the viewer and open [localhost:8765](http://localhost:8765) (pass `--port` if 8765 is taken):
 
 ```bash
 uv run python web/server.py
@@ -151,7 +151,7 @@ uv run quarantine status
 
 After flagging, expect `quarantined 6 | wipe agents 25 | roll back 19`. Session 2 prints each recovery round and the lease takeover. In the viewer you can click a memory to see its provenance. To retract a false alarm before healing starts, run `uv run quarantine unflag doc_7`. Once healing has started, `unflag` refuses and tells you to reset with `session1`.
 
-`--kill-planner` kills a separate demo worker process to show task recovery. The agents' decisions and replacement contents are still scripted. On Windows there is no real `kill -9`, so that step prints exit code 1 instead of -9. The lease takeover works the same. Use macOS or Linux to record the demo.
+`--kill-planner` kills a separate demo worker process to show task recovery. The agents' decisions and replacement contents are still scripted. On Windows there is no real `kill -9`, so that step prints exit code 1 instead of -9. The lease takeover works the same. Use macOS or Linux to record the demo. Only the killed planner is a separate OS process; the second session that takes over the lease runs inside the CLI process. The demo video was recorded before a wording fix, so where it shows `new process, session s2b` or `fresh processes`, read that as this.
 
 ### Alternative: Docker Compose
 
@@ -311,7 +311,7 @@ Not covered: no dedicated security scanner was run (one AI attacker covered web 
 - **Tracking is only as complete as the recorded inputs.** Untracked context, summaries or tool results can carry influence the graph cannot see. In the test where the truth was each agent's whole context but only per-write reads were recorded, the closure missed 7% of truly affected memories.
 - **Reading is not proof of contamination.** Quarantine by dependency also catches outputs that did not adopt the bad instruction (about 63% in the synthetic declared-read scenario).
 - **Healing counts episodes, not independent documents.** Several planted documents that nobody has flagged yet can outvote real ones, and unflagged sources can still be wrong. Agreeing episodes may share the same underlying source.
-- **No depth bound.** The closure and receipt queries have no hop limit. We removed a 10-hop cap after a hand-built chain world showed it left poisoned memories marked clean ([docs/EVAL-HELDOUT.md](docs/EVAL-HELDOUT.md)). The graph has no cycles because reads only point backwards in time.
+- **No depth bound.** The closure (`TAINT_CLOSURE`, `FLAG_AND_CLOSE`) and `RECEIPT` queries have no hop limit; the unused cross-check `RECEIPT_SPPATHS` is capped at 10 hops. We removed a 10-hop cap after a hand-built chain world showed it left poisoned memories marked clean ([docs/EVAL-HELDOUT.md](docs/EVAL-HELDOUT.md)). The graph has no cycles because reads only point backwards in time.
 - **Recovery is scripted.** Repeated attacks, real LLM decisions and production-scale workloads still need testing. At 25 memories a relational database could also hold this, and speed at scale is untested. What the graph gives is one statement that follows three edge types to any depth with no hop cap, and a shortest path that is the explanation itself.
 - **Concurrent runs.** Two `session2` processes started at the same moment can take each other's live lease, because every run uses the session name `s2`. The lease protects the `--kill-planner` demo and restarts, not parallel runs. Healing does not depend on the order advisories arrive: a rebuilt fact always votes over the original fact's full clean support (`tests/test_attack_regressions.py`).
 - **Tenant isolation is by graph name** on one FalkorDB instance, not by credential.
