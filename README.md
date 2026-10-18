@@ -15,7 +15,7 @@ Built for **Graph Hacks 2026 (FalkorDB × WeMakeDevs)**, Track 02: Agent Memory 
 
 **Timing:** The hackathon window is Oct 15, 00:01 IST to Oct 18, 23:59 IST. The earliest commit in this repository (`6c68104`) is dated 2026-10-14 23:03 EDT, which is Oct 15, 08:33 IST: inside the window. Everything after it is later. That first commit was written with AI assistance during the window; before it only notes and ideas existed.
 
-**Demo video:** VIDEO_LINK_GOES_HERE
+**Demo video:** https://youtu.be/BZ3Qp1WWYB8 (2:51)
 
 **20-second teaser:** [docs/media/launch-20s.mp4](docs/media/launch-20s.mp4) (real screenshots of the page with captions; assets in [docs/BRAG.md](docs/BRAG.md))
 

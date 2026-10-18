@@ -17,7 +17,7 @@ Limits we state up front. Quarantined means "touched by, through a recorded read
 
 **Repository:** https://github.com/Ps23102004/graphhacks-quarantine (public)
 
-**Demo video:** (paste the link; our target is 3:00 or less, the rules set no length)
+**Demo video:** https://youtu.be/BZ3Qp1WWYB8 (2:51)
 
 **Live deployment:** none. Complete local setup is in the README (Docker FalkorDB 6.0.2 and `uv`).
 
@@ -32,7 +32,7 @@ Limits we state up front. Quarantined means "touched by, through a recorded read
 ## Before pressing submit
 
 - [x] Repository is public, and the README renders on GitHub
-- [ ] README line "Demo video" has the real link (replace VIDEO_LINK_GOES_HERE)
+- [x] README line "Demo video" has the real link (replace VIDEO_LINK_GOES_HERE)
 - [ ] Video plays logged out (team target: 3:00 or less)
 - [ ] `git rev-parse HEAD` of the submitted repo equals the commit recorded in `docs/RUNS.md` (or a later commit that changes only documentation)
 - [ ] Screenshot of the confirmation page sent to the team
