@@ -43,7 +43,7 @@ The fixes came with regression tests (36 of them are in `tests/test_attack_regre
 ## What it is not
 
 - The agents in the demo are scripted. Their read sets are written in a fixture, not observed from a model.
-- At 25 nodes a recursive SQL query could do the same traversal. The case for a graph is the shape of the problem, not speed: provenance is edges, the blast radius and the receipt are one query each, and the schema is the audit trail.
+- At 25 memories a relational database could also hold this, and speed at scale is untested. What the graph gives is one statement that follows three edge types to any depth with no hop cap, and a shortest path that is the explanation itself. Provenance stays inspectable as edges.
 - Healing counts episodes, not independent documents. Planted documents nobody has flagged yet could outvote real ones.
 - Memory repair cannot undo actions an agent already took outside the graph.
 

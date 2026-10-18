@@ -35,7 +35,7 @@ The agents are scripted: their outputs and read sets come from `fixture.yaml`. T
    docker run -d --name quarantine-falkordb -p 127.0.0.1:6379:6379 -p 127.0.0.1:3000:3000 \
      falkordb/falkordb:6.0.2@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6
    uv sync --all-extras
-   uv run pytest -q  # must end with 0 failed (221 tests at b31ba1e; see docs/TESTING.md)
+   uv run pytest -q  # must end with 0 failed (the count changes; see docs/RUNS.md)
    ```
 2. **Verify the Docker Compose setup:**
    - Run `bash scripts/validate_compose.sh`. It builds the stack on port 8777, checks the page responds, recreates the containers and checks the data survived. Expect `Compose validation complete: ALL PASS`.

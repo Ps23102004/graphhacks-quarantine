@@ -13,7 +13,7 @@ Three agents (research, planner, coder) share memory in FalkorDB. Every write is
 
 Limits we state up front. Quarantined means "touched by, through a recorded read", not "proven wrong". In generated crews about 63% of what it flags would have kept the same content, and it misses influence an agent never recorded (7% of truly affected memories). The demo's agents are scripted. Details and rerun commands: docs/COUNTERFACTUAL.md.
 
-**Why the graph does real work:** provenance is edges. The blast radius is one variable-length traversal, the receipt is one shortest-path query, and healing, task blocking and leases are graph state. At 25 memories a recursive SQL query could do the same work; the case for a graph is the shape of the problem, not speed.
+**Why the graph does real work:** provenance is edges. The blast radius is one variable-length traversal, the receipt is one shortest-path query, and healing, task blocking and leases are graph state. At 25 memories a relational database could also hold this, and speed at scale is untested. What the graph gives is one statement that follows three edge types to any depth with no hop cap, and a shortest path that is the explanation itself.
 
 **Repository:** https://github.com/Ps23102004/graphhacks-quarantine (public)
 

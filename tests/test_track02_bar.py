@@ -238,7 +238,7 @@ def test_concurrent_claims_exactly_one_winner_and_concurrent_writes_all_land(fx)
 
 # ---------------------------------------------------------------- separate memory per tenant
 def test_separate_memory_per_tenant_same_question_different_answer(fx):
-    """Thousands of graphs per instance: the same question asked against two tenants gets each tenant's own
+    """Separate graphs per tenant (two tenants here): the same question asked against two tenants gets each tenant's own
     answer, and nothing leaks. (The guideline suite proves isolation of writes; this proves it at the answer level.)"""
     a, b = fresh("track02_tenant_a"), fresh("track02_tenant_b")
     try:

@@ -1,6 +1,6 @@
 # Run record
 
-What was run, on which commit, and what it printed. Code commit for all rows: `3874be2` (Oct 18, 10:07 EDT). Commits after it change documentation, the launch assets, and the wording that two checks in `scripts/check_browser.js` look for. Check with `git diff 3874be2..HEAD --stat -- . ':!*.md' ':!docs/media'`, which lists only that script.
+What was run, on which commit, and what it printed. Code commit for all rows: `3874be2` (Oct 18, 10:07 EDT). Commits after it change documentation, the launch assets, and the wording that two checks in `scripts/check_browser.js` look for. Check with `git diff 3874be2..HEAD --stat -- . ':!*.md' ':!docs/media'`, which lists `scripts/check_browser.js` (two banner strings) and `quarantine/queries.py` (one comment line). Neither changes behaviour.
 
 Parth ran everything below with Claude, on macOS, against FalkorDB 6.0.2 (`falkordb/falkordb:6.0.2@sha256:107455e8...`). Aashna ran branch `improve` at e92cd46 on Windows on Oct 18 and reported seven defects, all fixed since (see `docs/CHECKLIST-AASHNA.md`). Nobody else has run the final commit.
 
@@ -33,7 +33,7 @@ PASS  10 mutation py3.13       0 unexpected survivor(s) of 32 mutations (30 caug
 
 ## 150-world counterfactual evaluation (`uv run python scripts/counterfactual_eval.py --worlds 150`)
 
-Run on commit `c4de91d`, which has the same engine code as `3874be2`. The numbers are identical to the first run of Oct 17, because the seeds are fixed.
+Run on commit `c4de91d`, which has the same engine code as `3874be2` (and as the final commit). The numbers are identical to the first run of Oct 17, because the seeds are fixed.
 
 ```
 | world model | (world, doc) runs | truly affected | quarantined | false negatives | needless flags | needless facts that cannot heal | invented receipts | wrong 'clean' answers | page != graph |

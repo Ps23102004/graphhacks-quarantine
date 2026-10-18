@@ -29,7 +29,7 @@ Tag `freeze-sat` was added on Sunday morning, after this checklist was written; 
 Use ONLY the README's "Run it locally" steps, word for word, in a new terminal. Do not use anything you remember from before.
 - [ ] The FalkorDB `docker run` works. If port 6379 is taken, note it.
 - [ ] `uv sync --all-extras` works.
-- [ ] `uv run pytest -q` -> expect all passed, `0 failed` (221 tests at b31ba1e; see `docs/TESTING.md`). Note the time and any skips.
+- [ ] `uv run pytest -q` -> expect all passed, `0 failed` (the count changes; see `docs/RUNS.md`). Note the time and any skips.
 - [ ] Demo, two terminals: `uv run python web/server.py`, open http://localhost:8765; then `uv run quarantine session1 --slow 0.4`, `uv run quarantine flag doc_7`, `uv run quarantine session2 --kill-planner`.
   - [ ] flag prints `quarantined 6 | wipe agents 25 | roll back 19`
   - [ ] page: 6 red chips, headline "6 of 25 memories", the Quarantined list shows ep_7a, ep_7b, f_http_client, f_http_pin, step_3, a_requirements

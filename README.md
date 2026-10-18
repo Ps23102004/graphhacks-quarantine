@@ -5,13 +5,15 @@ In the bundled demo, flagging one poisoned document quarantines 6 of 25 agent me
 
 QUARANTINE is a prototype for one job: a source in shared agent memory turns out to be bad, and you need to find and repair everything built on it. It follows recorded dependencies from the flagged source, quarantines the memories connected to it, and shows the path that connects each one.
 
-We tested it on generated scenarios. When agents were influenced by things they never recorded, it missed about **7% of truly affected memories**. When agents recorded their reads, about **63% of quarantined memories would have kept the same content** without the flagged source. These numbers come from a 150-world run of synthetic worlds, repeated on the final code with identical results. They are not measurements on real agents. The model, counts and rerun command are in [docs/COUNTERFACTUAL.md](docs/COUNTERFACTUAL.md).
+We tested it on generated scenarios. When agents were influenced by things they never recorded, it missed about **7% of truly affected memories**. When agents recorded their reads, about **63% of quarantined memories would have kept the same content** without the flagged source. These numbers come from a 150-world run of synthetic worlds, repeated later on the same engine code (commit `c4de91d`) with identical results. They are not measurements on real agents. The model, counts and rerun command are in [docs/COUNTERFACTUAL.md](docs/COUNTERFACTUAL.md).
 
 **The research, planner and coder agents in the demo are scripted.** The FalkorDB graph, dependency queries, task leases and recovery writes are real. The project does not detect prompt injections by itself, and it does not show recovery for arbitrary LLM workflows.
 
 Built for **Graph Hacks 2026 (FalkorDB × WeMakeDevs)**, Track 02: Agent Memory and Coordination.
 
 **Team:** Parth Singh, Amandeep Kaushik, and Aashna Tyagi.
+
+**Timing:** The hackathon window is Oct 15, 00:01 IST to Oct 18, 23:59 IST. The earliest commit in this repository (`6c68104`) is dated 2026-10-14 23:03 EDT, which is Oct 15, 08:33 IST: inside the window. Everything after it is later. That first commit was written with AI assistance during the window; before it only notes and ideas existed.
 
 **Demo video:** VIDEO_LINK_GOES_HERE
 
@@ -86,11 +88,11 @@ The viewer draws the graph as a ledger on light paper. It has five columns (sour
 | --- | --- | --- | --- |
 | Episodic memory | `Episode` nodes extracted from documents | `tests/test_track02_bar.py::test_three_memory_kinds_each_with_provenance` | |
 | Semantic memory | `Fact` nodes consolidated from episodes, with a claim on each edge | same test | |
-| Procedural memory | a `Procedure` node holds the recovery rules (lease length, heal threshold as data); every rework task `FOLLOWS` it; plan steps record how work was done | same test; `quarantine/loader.py` | only the lease length is read back from the node; the heal rule is still written in the Cypher |
-| Persistent history | memories are never deleted; `SUPERSEDES` and `OUTVOTED` keep the history; two separate OS processes see the same graph | `test_memory_persists_and_updates_across_separate_processes` | |
+| Procedural memory | a `Procedure` node holds the recovery rules (lease length, heal threshold as data); every rework task `FOLLOWS` it; plan steps record how work was done | same test; `quarantine/loader.py` | only the lease length is read back from the node; the heal rule is still written in the Cypher; plan steps are descriptive and no agent reads them |
+| Persistent history | memories are never deleted; `SUPERSEDES` and `OUTVOTED` keep the history; two separate OS processes see the same graph | `test_memory_persists_and_updates_across_separate_processes` | memories and replacements are kept; the lease edge is deleted when a task is claimed or completed, so who held a task and who took it over is not kept |
 | Shared state and handoffs | tasks, leases and `BLOCKED_BY` edges live in the graph; a restarted process resumes from them | `test_handoff_is_a_graph_read_not_a_message` | |
-| High-concurrency reads and writes | 16 threads race for one task and exactly one wins; 16 threads write memories and all land with their edges | `test_concurrent_claims_exactly_one_winner_and_concurrent_writes_all_land` | tested at 16 threads, not at scale; two `session2` runs started together can take each other's lease (see limits) |
-| Separate memory per user or tenant | one graph per tenant on one FalkorDB instance; the same question gets a different answer from a different graph | `test_separate_memory_per_tenant_same_question_different_answer` | isolation is by graph name, not by credential |
+| High-concurrency reads and writes | 16 threads race for one task and exactly one wins; 16 threads write memories and all land with their edges | `test_concurrent_claims_exactly_one_winner_and_concurrent_writes_all_land` | tested at 16 threads, not at scale; "exactly one wins" relies on FalkorDB running write queries on one graph one at a time; two `session2` runs started together can take each other's lease (see limits) |
+| Separate memory per user or tenant | one graph per tenant on one FalkorDB instance; the same question gets a different answer from a different graph | `test_separate_memory_per_tenant_same_question_different_answer` | the test uses two tenants; isolation is by graph name, not by credential |
 
 ## Run it locally
 
@@ -99,13 +101,13 @@ You need Git, Python 3.12 or later, [uv](https://docs.astral.sh/uv/), and Docker
 ### Get the code
 
 ```bash
-git clone --branch improve https://github.com/Ps23102004/graphhacks-quarantine.git
+git clone https://github.com/Ps23102004/graphhacks-quarantine.git
 cd graphhacks-quarantine
 git rev-parse HEAD
 uv sync --all-extras                      # --all-extras installs the optional MCP SDK the MCP tests need
 ```
 
-`improve` is the working branch. `main` is kept equal to `improve`; no second reviewer checked either.
+`main` and `improve` are kept equal.
 
 ### Start FalkorDB
 
@@ -145,11 +147,12 @@ Open [localhost:8765](http://localhost:8765).
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
-This starts FalkorDB and the viewer on `http://127.0.0.1:8765`. If the `quarantine-falkordb` container from the steps above is running, stop it first (`docker stop quarantine-falkordb`), because both try to use port 6379. The compose check in `scripts/validate_compose.sh` runs this path; it passed on Oct 18. Use the steps above if you want to run the CLI.
+This starts FalkorDB and the viewer on `http://127.0.0.1:8765`. The viewer port is 8765, so stop the manual viewer first if it is running. The graph starts empty: seed it, then open the page.
 
-### Timing
-
-The hackathon window is Oct 15, 00:01 IST to Oct 18, 23:59 IST. The earliest commit in this repository (`6c68104`) is dated 2026-10-14 23:03 EDT, which is Oct 15, 08:33 IST: inside the window. Everything after it is later.
+```bash
+docker compose -f deploy/docker-compose.yml exec web /app/.venv/bin/quarantine session1
+docker compose -f deploy/docker-compose.yml exec web /app/.venv/bin/quarantine flag doc_7
+``` The compose check in `scripts/validate_compose.sh` runs this path; it passed on Oct 18. Use the steps above if you want to run the CLI.
 
 ### Run the scenario
 
@@ -195,7 +198,7 @@ Nodes are documents, memory episodes, facts, plan steps, artifacts, agents, sess
 
 ### Find affected memories
 
-This is `queries.TAINT_CLOSURE`, with its output alias `precise` renamed to `quarantined_count` for readability. `quarantine flag` runs `queries.FLAG_AND_CLOSE`, which sets the flag and runs the same traversal in one write:
+This is `queries.TAINT_CLOSURE`, with its output alias `precise` renamed to `quarantined_count` for readability. `quarantine flag` runs `queries.FLAG_AND_CLOSE`, which sets the flag and runs the same traversal pattern (`OPTIONAL MATCH` plus `FOREACH`, `queries.py:19`) in one write:
 
 ```cypher
 MATCH (d:Doc {id: $doc})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]-(m:Memory)
@@ -209,6 +212,17 @@ RETURN count(DISTINCT m) AS quarantined_count, collect(DISTINCT m.id) AS ids
 MATCH (a:Memory {id: $from}), (d:Doc {id: $doc})
 WITH shortestPath((a)-[:INFLUENCED_BY|CONSOLIDATED_FROM|EXTRACTED_FROM*]->(d)) AS p
 RETURN [n IN nodes(p) | n.id] AS hops, length(p) AS len, [r IN relationships(p) | type(r)] AS via
+```
+
+### Explain a connection with the algorithm procedure
+
+The MCP tool `why_connected` calls FalkorDB's shortest-path procedure (`quarantine/answers.py`); it falls back to `shortestPath` only if the procedure raises.
+
+```cypher
+MATCH (a {id: $a}), (b {id: $b})
+CALL algo.SPpaths({sourceNode: a, targetNode: b,
+                   relTypes: ['INFLUENCED_BY', 'CONSOLIDATED_FROM', 'EXTRACTED_FROM'], pathCount: 1})
+YIELD path RETURN [n IN nodes(path) | n.id], [r IN relationships(path) | type(r)]
 ```
 
 ### Rebuild a fact from clean support (same text as `queries.HEAL_FACTS`)
@@ -301,7 +315,7 @@ Not covered: no dedicated security scanner was run (one AI attacker covered web 
 - **Reading is not proof of contamination.** Quarantine by dependency also catches outputs that did not adopt the bad instruction (about 63% in the synthetic declared-read scenario).
 - **Healing counts episodes, not independent documents.** Several planted documents that nobody has flagged yet can outvote real ones, and unflagged sources can still be wrong. Agreeing episodes may share the same underlying source.
 - **No depth bound.** The closure and receipt queries have no hop limit. We removed a 10-hop cap after a hand-built chain world showed it left poisoned memories marked clean ([docs/EVAL-HELDOUT.md](docs/EVAL-HELDOUT.md)). The graph has no cycles because reads only point backwards in time.
-- **Recovery is scripted.** Repeated attacks, real LLM decisions and production-scale workloads still need testing. At the demo's size the closure is small, so the graph is not faster than a relational database here. What it gives is a variable-length path query with no hop cap, the same statements on a graph of thousands of memories (not measured here), and provenance that stays inspectable as edges. Speed at scale is untested.
+- **Recovery is scripted.** Repeated attacks, real LLM decisions and production-scale workloads still need testing. At 25 memories a relational database could also hold this, and speed at scale is untested. What the graph gives is one statement that follows three edge types to any depth with no hop cap, and a shortest path that is the explanation itself.
 - **Concurrent runs.** Two `session2` processes started at the same moment can take each other's live lease, because every run uses the session name `s2`. The lease protects the `--kill-planner` demo and restarts, not parallel runs. Healing does not depend on the order advisories arrive: a rebuilt fact always votes over the original fact's full clean support (`tests/test_attack_regressions.py`).
 - **Tenant isolation is by graph name** on one FalkorDB instance, not by credential.
 - **No live deployment.** Local demo runs and browser checks do not show production readiness.
