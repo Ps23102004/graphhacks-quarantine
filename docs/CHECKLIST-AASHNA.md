@@ -30,6 +30,7 @@ Use ONLY the README's Quickstart, word for word, in a new terminal. Do not use a
 - [ ] `scripts/validate_compose.sh` -> expect all pass
 - [ ] `uv run python scripts/heldout_eval.py --worlds 50 --pipeline-worlds 10` -> expect `0` in the "graph != oracle" and "violations" columns
 - [ ] `uv run python scripts/counterfactual_eval.py --worlds 20` -> exit code 0; `0` in the false-negatives column on the first three rows (the UNRECORDED-influence row is nonzero by design, about 7-9%: that is the measured miss when influence is not recorded as a read); `0` invented receipts, wrong 'clean' answers and page != graph on every row
+- [ ] `uv run python scripts/ten_worlds.py` -> every line `ok` (about 40 s)
 - [ ] Optional if time: `uv run python scripts/mutation_check.py` (about 20 min) -> 0 unexpected survivors
 
 ## 3. Try to break it (pick at least five, 30 min)

@@ -90,3 +90,9 @@ Expect every check to report `passed: true`. This runs the real ledger page (no 
 - Healing is a majority vote over clean episodes, not semantic reasoning.
 - One graph per crew. The closure and receipt are unbounded (the graph is a DAG; a 10-hop cap was removed, see `docs/EVAL-HELDOUT.md`).
 - FalkorDB 6.0.2 limits we hit (see `spikes/day1-results.txt`): no `EXISTS {}`, `shortestPath` only in WITH/RETURN, no `CREATE (n $props)`.
+
+
+## Ten worlds and ten environments
+
+- `uv run python scripts/ten_worlds.py` (about 40 s): drives the real CLI (`session1`, `flag`, `unflag`, `session2`, `status`) on ten different worlds (the demo, the support crew, six generated crews of different shapes, a wide fan-out, a dissent-heavy world). For every document: the red set must equal the independent oracle, `session2` must reach a fixpoint with every task done and the three audits at 0, `unflag` must return to zero red; pairs of documents must give the oracle's union.
+- `scripts/env_matrix.sh` (about 25 minutes, mostly the mutation check): fresh clones of the committed HEAD in ten environments, three Python versions (3.12, 3.13, 3.14), each with its own throwaway FalkorDB: pytest on all three versions, the ten worlds on all three, the counterfactual and held-out evaluations, the demo path, and the mutation check. Prints one PASS or FAIL line per environment and where its log is.
