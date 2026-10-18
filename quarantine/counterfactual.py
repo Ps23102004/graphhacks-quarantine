@@ -125,8 +125,7 @@ def evaluate_counterfactual(g, world: dict, seed: int = 0, mode: str = "declared
         # before the flag: nothing may be red, anywhere the page or an agent can look
         assert not any(n["red"] for n in snapshot(g)["nodes"]), "red before any flag"
 
-        q(g, Q.FLAG_DOC, doc=doc, reason="counterfactual", tick=900)
-        _, ids = q(g, Q.TAINT_CLOSURE, doc=doc, tick=900)[0]
+        _, ids = q(g, Q.FLAG_AND_CLOSE, doc=doc, reason="counterfactual", tick=900)[0]
         flagged = set(ids)
         truth = truly_affected(truth_world, doc)
         flags = {r[0]: r[2] for r in q(g, Q.SUPPORT_AND_HEALABLE)}

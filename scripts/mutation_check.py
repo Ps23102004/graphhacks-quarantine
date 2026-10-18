@@ -21,6 +21,8 @@ SRC = Path(__file__).resolve().parent.parent
 
 # (what we break, file, exact old text, new text)
 MUTATIONS = [
+    ("FLAG_AND_CLOSE (what the CLI runs) bounded at 10 hops", "quarantine/queries.py", "INFLUENCED_BY*1..]-(m:Memory)\nFOREACH (x IN CASE", "INFLUENCED_BY*1..10]-(m:Memory)\nFOREACH (x IN CASE"),
+    ("FLAG_AND_CLOSE ignores read-set edges", "quarantine/queries.py", "EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]-(m:Memory)\nFOREACH (x IN CASE", "EXTRACTED_FROM|CONSOLIDATED_FROM*1..]-(m:Memory)\nFOREACH (x IN CASE"),
     ("closure ignores read-set edges",        "quarantine/queries.py", "EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]-(m:Memory)\nSET m.quarantined", "EXTRACTED_FROM|CONSOLIDATED_FROM*1..]-(m:Memory)\nSET m.quarantined"),
     ("closure depth capped at 1 hop",         "quarantine/queries.py", "INFLUENCED_BY*1..]-(m:Memory)\nSET m.quarantined", "INFLUENCED_BY*1..1]-(m:Memory)\nSET m.quarantined"),
     ("closure bounded at 10 hops (the bug the held-out chain found)", "quarantine/queries.py", "INFLUENCED_BY*1..]-(m:Memory)\nSET m.quarantined", "INFLUENCED_BY*1..10]-(m:Memory)\nSET m.quarantined"),

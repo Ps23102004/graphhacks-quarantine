@@ -38,8 +38,7 @@ def evaluate_world(g, world: dict, seed: int = 0, mode: str = "declared") -> lis
         want_pa, want_time = oracle_baselines(world, doc, want)
         want_heal = oracle_heal(world, want)
 
-        q(g, Q.FLAG_DOC, doc=doc, reason="held-out", tick=900)
-        precise, got_ids = q(g, Q.TAINT_CLOSURE, doc=doc, tick=900)[0]
+        precise, got_ids = q(g, Q.FLAG_AND_CLOSE, doc=doc, reason="held-out", tick=900)[0]
         got = set(got_ids)
         pa = q(g, Q.NAIVE_PER_AGENT, doc=doc)[0][0]
         tb = q(g, Q.NAIVE_TIME_BASED, doc=doc)[0][0]
@@ -100,8 +99,7 @@ def run_pipeline(g, world: dict, doc: str, max_rounds: int = 80) -> list[str]:
         q(g, stmt)
     q(g, "MATCH (t:Task) DETACH DELETE t")
     bad: list[str] = []
-    q(g, Q.FLAG_DOC, doc=doc, reason="held-out", tick=900)
-    q(g, Q.TAINT_CLOSURE, doc=doc, tick=900)
+    q(g, Q.FLAG_AND_CLOSE, doc=doc, reason="held-out", tick=900)
     q(g, Q.SUPPORT_AND_HEALABLE)
     q(g, Q.CREATE_REWORK_TASKS, tick=900)
     q(g, Q.CREATE_BLOCKED_BY)
