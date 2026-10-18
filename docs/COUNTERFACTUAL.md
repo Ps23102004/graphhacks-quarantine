@@ -44,7 +44,7 @@ How to read each column:
 
 ## What to say, and what not to say
 
-- Say: "Quarantined means touched by a flagged source through a recorded read. On random crews it never missed a memory that the recorded reads connect to the source (0 in 4,020 runs), and about two thirds of what it flags would have kept the same value."
+- Say: "Quarantined means touched by a flagged source through a recorded read. On random crews it never missed a memory that the recorded reads connect to the source (0 in 4,020 runs, across the three models where the graph sees every influence), and about two thirds of what it flags would have kept the same value."
 - Say: "If an agent was influenced by something it did not record, we miss it. In our random crews that was 7% of the truly affected memories. Recording reads at the source is the next thing to build."
 - Do not say "only the memories that are wrong", "exactly" or "precise" without the sentence above next to it.
 - What this does not show: that a real agent's influence looks like these generators, or that symbolic content behaves like real content.

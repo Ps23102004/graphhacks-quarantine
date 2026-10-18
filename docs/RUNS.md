@@ -1,6 +1,6 @@
 # Run record
 
-What was run, on which commit, and what it printed. Code commit for all rows: `3874be2` (Oct 18, 10:07 EDT). Commits after it change documentation, the launch assets, and the wording that two checks in `scripts/check_browser.js` look for. Check with `git diff 3874be2..HEAD --stat -- . ':!*.md' ':!docs/media'`, which lists `scripts/check_browser.js` (two banner strings) plus a comment in `quarantine/queries.py` and a docstring in `tests/test_track02_bar.py`. None changes behaviour.
+What was run, on which commit, and what it printed. Code commit for all rows unless stated: `3874be2` (Oct 18, 10:08 EDT). Commits after it change documentation, the launch assets, and the wording that two checks in `scripts/check_browser.js` look for. Check with `git diff 3874be2..HEAD --stat -- . ':!*.md' ':!docs/media'`, which lists `scripts/check_browser.js` (two banner strings) plus a comment in `quarantine/queries.py` and docstrings in `tests/test_track02_bar.py` and `scripts/ten_worlds.py`. None changes behaviour.
 
 Parth ran everything below with Claude, on macOS, against FalkorDB 6.0.2 (`falkordb/falkordb:6.0.2@sha256:107455e8...`). Aashna ran branch `improve` at e92cd46 on Windows on Oct 18 and reported seven defects, all fixed since (see `docs/CHECKLIST-AASHNA.md`). Nobody else has run the final commit.
 
@@ -27,7 +27,7 @@ PASS  10 mutation py3.13       0 unexpected survivor(s) of 32 mutations (30 caug
 |---|---|
 | `scripts/validate.sh` | `validation: 29 passed, 0 failed` (pytest inside it: 221 passed) |
 | `scripts/validate_compose.sh` | `Compose validation complete: ALL PASS` |
-| `scripts/ten_worlds.py` | `ok` on all ten worlds (demo, support crew, six generated crews, wide fan-out, dissent-heavy) |
+| `scripts/ten_worlds.py` | `ok` on all ten worlds (demo, support crew, five generated crews, a 25-step chain, wide fan-out, dissent-heavy) |
 | `scripts/check_browser.js` | 40 of 40 checks passed (rerun after the banner wording in two of the checks was updated, on commit `013cdfd`, which is the first commit with the updated check script) |
 | `scripts/heldout_eval.py --worlds 40 --pipeline-worlds 10` | 0 graph-vs-oracle mismatches in 357 cases per model; 0 invariant violations in 98 runs per model |
 

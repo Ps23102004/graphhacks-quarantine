@@ -13,8 +13,8 @@ Rows below were last filled on Sun 2026-10-18; the commit each was run on is in 
 
 | check | command | result |
 |---|---|---|
-| unit + integration | `uv run pytest -q` | all passed, 0 failed at the last full run (not re-run on 2026-10-18 for this doc). The count changes; read it from pytest's summary line, see `docs/TESTING.md` |
-| working-tree copy, throwaway FalkorDB, real CLI + page | `scripts/validate.sh` | all passed, 0 failed at the last run (not re-run on 2026-10-18 for this doc) |
+| unit + integration | `uv run pytest -q` | run on `3874be2`, 2026-10-18: 221 passed, 0 failed on Python 3.12, 3.13 and 3.14; see `docs/RUNS.md`. The count changes as tests are added; read it from pytest's summary line |
+| working-tree copy, throwaway FalkorDB, real CLI + page | `scripts/validate.sh` | run on `3874be2`, 2026-10-18: 29 passed, 0 failed; see `docs/RUNS.md` |
 | mutation check (tests catch breakage) | `uv run python scripts/mutation_check.py` | run on `3874be2` (Python 3.13), 2026-10-18: 0 unexpected survivor(s) of 32 mutations (30 caught, 2 equivalent mutants survived); output in `docs/RUNS.md` |
 | held-out worlds vs independent oracle | `uv run python scripts/heldout_eval.py` | re-run on `b31ba1e`, 2026-10-18: 3 x 2,645 cases, 0 mismatches; 3 x 878 full-pipeline runs, 0 violations (`docs/EVAL-HELDOUT.md`) |
 | counterfactual replay | `uv run python scripts/counterfactual_eval.py --worlds 20` | re-run on `b31ba1e`, 2026-10-18: 0 false negatives, invented receipts, wrong clean answers and page mismatches on the three gated models; the unrecorded-influence model missed 9% (`docs/COUNTERFACTUAL.md`) |

@@ -4,8 +4,8 @@
 
 For every world and every document in it: flag it, the red set must equal the independent oracle; session2 must reach a
 fixpoint with every task done and the three audit queries at 0; unflag must return the graph to zero red. Then two
-documents flagged together must give the oracle's union. Worlds: the demo, the support crew, six generated crews of different
-shapes, one wide fan-out and one dissent-heavy world built here.
+documents flagged together must give the oracle's union. Worlds: the demo, the support crew, five generated crews of different
+shapes, a 25-step chain, one wide fan-out and one dissent-heavy world built here.
 """
 from __future__ import annotations
 
