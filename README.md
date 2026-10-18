@@ -45,7 +45,7 @@ We measured the gap. We generated four kinds of random crews the code was never 
 
 | what could go wrong | result |
 |---|---|
-| a memory connected to the source by recorded reads is left clean | 0 in 4,020 runs (true by construction: the replay follows the same recorded reads) |
+| a memory connected to the source by recorded reads is left clean | 0 in 4,020 runs, across the three models where the graph sees every influence (true by construction: the replay follows the same recorded reads) |
 | an agent was influenced by something it never recorded (truth: its whole context) | **7% of truly affected memories missed** |
 | a receipt with a hop that is not a recorded edge, or that does not end at the flagged document | 0 |
 | a clean memory answered as quarantined by the tools | 0 |

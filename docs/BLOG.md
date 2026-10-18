@@ -27,7 +27,7 @@ Then session 2 repairs the memory. A fact is rebuilt only from clean episodes, a
 
 Quarantined means the memory was **touched by** the flagged source through a recorded read. It does not mean the memory is wrong. We measured the gap with a counterfactual replay. We generated random crews (150 worlds for each of four world models, 1,340 world and document pairs per model), replayed each world as if the flagged document had never been ingested, and compared every memory with the graph's answer.
 
-- On the recorded reads, no memory the source reached was left clean: 0 in 4,020 runs. This holds by construction, because the replay follows the same edges as the traversal. It shows the query does what it says, not that the recorded reads are complete.
+- On the recorded reads, no memory the source reached was left clean: 0 in 4,020 runs, across the three models where the graph sees every influence. This holds by construction, because the replay follows the same edges as the traversal. It shows the query does what it says, not that the recorded reads are complete.
 - When an agent was influenced by something it never recorded (we model this as its whole context), the graph misses it: 7% of truly affected memories in our generated crews. **The guarantee is only as strong as the recorded reads.**
 - About 63% of what it flags in those crews would have kept the same content without the source. That is the price of quarantining by provenance: a fact the poison merely voted on is still quarantined and then rebuilt from clean support.
 - In the demo all six quarantined memories really change.
