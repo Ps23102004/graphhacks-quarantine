@@ -8,7 +8,7 @@ Deadline Sun 2026-10-18 14:29 EDT; submit target Sun 12:00 EDT.
 |---|---|
 | tests | all passed in a fresh GitHub clone run by Parth with Claude on Oct 18; commands and results in `docs/RUNS.md` |
 | Aashna | reported on Windows twice (Oct 16 zip; Oct 18 branch `improve` at e92cd46). Her seven defects were fixed. The code review (checklist section 4) and merge decision were not done by a second person |
-| Aman | rewrote the README (Oct 17) and edited it again on Oct 18. The blog draft and submission text were drafted by Parth with Claude; Aman can edit them |
+| Aman | rewrote the README (Oct 17) and edited it again on Oct 17. The blog draft and submission text were drafted by Parth with Claude; Aman can edit them |
 | merge rule | Parth pushed `improve` to `main` himself, so the rule below (Aashna reviews first) was not followed |
 | live deployment | none; the README gives the complete local setup |
 | video | Parth records it on Oct 18; the link goes into the README before submitting |
@@ -37,7 +37,7 @@ Merge rule: nothing lands on `main` without Aashna's review and a green `scripts
 
 ## Checkpoints (EDT)
 
-- **D1 Thu 20:00**: `session1` -> `flag doc_7` -> page shows six red, numbers match the test. (True on Parth's laptop; D1 was Aashna and Aman reproducing it.)
+- **D1 Thu 20:00**: `session1` -> `flag doc_7` -> page shows six red, numbers match the test. (True on Parth's laptop; Aashna and Aman had not reproduced it by D1.)
 - **D2 Fri 20:00**: full run on the VM, video take 1, cut-list decisions. Feature freeze Fri 21:30. (No VM run is recorded; see `docs/VALIDATION.md`.)
 - **D3 Sat 19:00**: submittable: repo public-ready, README numbers = test numbers, video 3:00 or less and unlisted, form dry run.
 - **Sun 10:30 to 11:30**: submit. Sun 12:00 to 14:29: hold; fix only a broken link.

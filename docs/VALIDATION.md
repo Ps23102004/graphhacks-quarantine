@@ -1,6 +1,6 @@
 # Validation: status of the Quarantine build
 
-Last updated Sun 2026-10-18 on branch `improve` (commit `b31ba1e`). The `freeze-v1` tag is the Thursday baseline. Re-fill the "result" column after every change, and do not record a pass you did not just see.
+Rows below were last filled on Sun 2026-10-18; the commit each was run on is in `docs/RUNS.md`. The `freeze-v1` tag is the Thursday baseline. Re-fill the "result" column after every change, and do not record a pass you did not just see.
 
 | field | value |
 |---|---|
@@ -65,6 +65,6 @@ The graph queries, fixture, loader and CLI did not change in that pass.
 ## Not yet verified (do before the video)
 
 - Physical projector, the actual recording setup, and screen-reader and keyboard accessibility with real users.
-- A fresh clone on a second person's laptop (Aashna or Aman), including `docker run` of the pinned image on their architecture (the amd64 digest was not re-checked).
+- Aashna ran branch `improve` at e92cd46 on Windows; nobody other than Parth has run the final commit. The pinned image's amd64 digest was not re-checked.
 - Live deployment (VM), the MCP beat in the video, and the submission form: not done. A blog draft (`docs/BLOG.md`), submission text (`docs/SUBMISSION.md`), the README, LICENSE and the AI-use disclosure exist; see `docs/CHECKLIST-AASHNA.md` and `docs/CHECKLIST-AMAN.md`.
 - Colour-blind usability with people. Grayscale browser emulation and non-colour cues were checked, but that does not replace user testing.

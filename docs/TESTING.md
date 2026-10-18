@@ -19,7 +19,7 @@ uv sync --all-extras                      # --all-extras installs the optional M
 uv run pytest -q          # expect: all tests pass, 0 failed
 ```
 
-The number of tests changes as tests are added, so no doc states it. Read the count from pytest's summary line.
+The number of tests changes as tests are added. Counts in dated status lines are historical; read the current count from pytest's summary line.
 
 The tests use their own graphs and delete them afterwards. None of them is named `quarantine`, so they never touch the demo graph.
 
@@ -114,7 +114,7 @@ All are in `tests/test_quarantine.py` except the two page tests, which are in `t
 
 ## Known limits (say them in the README, do not hide them)
 
-- Agents are scripted: their outputs are fixture text, and their read sets are real captured edges. No LLM is on the demo path.
+- Agents are scripted: their outputs are fixture text, and their read sets come from the fixture and are stored as real edges. No LLM is on the demo path.
 - Read sets are the per-write lists in `fixture.yaml`, not an agent's whole accumulated context. If each step and artifact also counted everything its author read or wrote before, the demo closure would be 9 memories, not 6 (the independent review reported this; `worldgen._make_cumulative` on the fixture gives the same 9). Say "read set of the write", not "everything the agent ever saw".
 - Each memory, its authorship and its read-set edges are written in one statement (`loader._memory`). At the end of Session 1 the `s1` Session node gets `complete = true`, and `flag` refuses a graph without it.
 - The kill-Planner beat is a real `kill -9` of a separate process. The "new Planner" is the CLI process itself, in session `s2b`.

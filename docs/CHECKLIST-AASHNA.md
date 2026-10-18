@@ -2,7 +2,7 @@
 
 ## Status Sun 2026-10-18
 
-Aashna ran two tests and sent reports. On Oct 16 she ran the demo from a zip on Windows. On Oct 18 she tested branch `improve` at e92cd46 on Windows: 131 tests passed, the demo matched the README, and she found seven defects (D1 to D7). Each was fixed in later commits (see `tests/test_attack_regressions.py` and `git log`). Her `kill -9` finding is why the README notes that the killed process exits with 1 on Windows.
+Aashna ran two tests and sent reports. On Oct 16 she ran the demo from a zip on Windows. On Oct 18 she tested branch `improve` at e92cd46 on Windows: 131 tests passed (the suite has grown since: later commits added regression tests), the demo matched the README, and she found seven defects (D1 to D7). Each was fixed in later commits (see `tests/test_attack_regressions.py` and `git log`). Her `kill -9` finding is why the README notes that the killed process exits with 1 on Windows.
 
 Parth, working with Claude, also ran a fresh clone from GitHub on macOS: 221 tests passed, and `scripts/ten_worlds.py`, `scripts/validate_compose.sh`, the demo path in section 1 and the junk-input MCP call in section 3 passed. The section 4 code review and the merge decision in section 5 were not done by a second person.
 
@@ -14,7 +14,7 @@ The plan as written on Saturday follows.
 
 Goal: prove a stranger can run QUARANTINE from a clean clone, and that nothing on screen is false. Write down every step that differs from "expect". Send the filled checklist to Parth by **Sunday 08:00 EDT (17:30 IST)**. If something fails, stop and send it right away. Do not fix code yourself unless Parth asks.
 
-Tag: `freeze-sat` (commit b31ba1e on `improve`). Tools: Docker Desktop running, `uv`, `git`, Chrome.
+Tag `freeze-sat` was added on Sunday morning, after this checklist was written; check out `improve` or the tag. Tools: Docker Desktop running, `uv`, `git`, Chrome.
 
 ## Windows notes (from your first report)
 - Clone the tag fresh. Do not reuse the Oct 16 zip. Fixed since then: the test port default (now 6379), the Windows venv path in `tests/test_packaging.py`, MCP tests no longer depend on the working directory, the README shows the real healing query and no longer mentions Graphiti or Vector TTL, and a missing graph shows an empty page (no traceback).

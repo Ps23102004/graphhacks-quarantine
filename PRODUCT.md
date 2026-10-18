@@ -2,7 +2,7 @@
 
 Notes on who the page is for and what it must show, written on 2026-10-17 from the team brief.
 
-- **What it is:** shared graph memory for a crew of AI agents. It can forget one bad source without wiping clean work. Before every write, the harness records what the agent read as edges in FalkorDB. When a source is flagged as a prompt injection, one query quarantines every memory whose recorded reads lead back to it. A path is the receipt. Facts are rebuilt from unquarantined episodes, and rework runs in dependency order with leases. The agents in the demo are scripted.
+- **What it is:** shared graph memory for a crew of AI agents. It can forget one bad source without wiping clean work. Each write is stored with the reads declared in `fixture.yaml`, as edges in FalkorDB. When a source is flagged as a prompt injection, one query quarantines every memory whose recorded reads lead back to it. A path is the receipt. Facts are rebuilt from unquarantined episodes, and rework runs in dependency order with leases. The agents in the demo are scripted.
 - **Who looks at it:** Graph Hacks 2026 judges (Track 02) opening the page on a laptop, and people watching a video of at most 3 minutes. Most are engineers. Few are graph-database experts.
 - **What they must get in 90 seconds:** 6 of 25 memories are quarantined, not 25 or 19. Why a memory is red (the path). Scripted agents rework the flagged memories in dependency order.
 - **Mode:** a live inspection tool with one staged moment, the red ink spreading.

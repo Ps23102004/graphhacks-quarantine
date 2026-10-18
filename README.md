@@ -15,6 +15,8 @@ Built for **Graph Hacks 2026 (FalkorDB × WeMakeDevs)**, Track 02: Agent Memory 
 
 **Demo video:** VIDEO_LINK_GOES_HERE
 
+**20-second teaser:** [docs/media/launch-20s.mp4](docs/media/launch-20s.mp4) (real screenshots of the page with captions; assets in [docs/BRAG.md](docs/BRAG.md))
+
 | Graph Hacks asks for | Where it is |
 | --- | --- |
 | Public repository | this repository |
@@ -91,7 +93,7 @@ git rev-parse HEAD
 uv sync --all-extras                      # --all-extras installs the optional MCP SDK the MCP tests need
 ```
 
-`improve` is the working branch. `main` was brought up to match it on Oct 18, without a second reviewer.
+`improve` is the working branch. `main` is kept equal to `improve`; no second reviewer checked either.
 
 ### Start FalkorDB
 
@@ -266,7 +268,7 @@ uv run python scripts/counterfactual_eval.py --worlds 150  # reproduce the docum
 
 Write down the commit SHA next to your results so someone else can check the same version. [docs/VALIDATION.md](docs/VALIDATION.md) has recorded results and open items, [docs/TESTING.md](docs/TESTING.md) has testing details, and [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md) has the walkthrough.
 
-Not covered: no AI-driven security scan was run. The mutation check (`uv run python scripts/mutation_check.py`, one pytest run per mutation, slow) is not part of the default test suite, and it was not re-run for this commit ([docs/VALIDATION.md](docs/VALIDATION.md)).
+Not covered: no dedicated security scanner was run (one AI attacker covered web security; see `docs/ATTACK-LOG.md`). The mutation check (`uv run python scripts/mutation_check.py`, one pytest run per mutation, slow) is not part of the default test suite, and it was not re-run for this commit ([docs/VALIDATION.md](docs/VALIDATION.md)).
 
 ## Limits to keep in mind
 

@@ -1,6 +1,6 @@
 # Review brief for Aashna: merge gate for branch `improve`
 
-**Status Sun 2026-10-18:** this review did not happen. Aashna had not sent results by Sunday morning, and Parth pushed `improve` to `main` himself (GitHub `main` = `improve` = tag `freeze-sat` = b31ba1e). No `submit-candidate` tag exists. The steps below are still the right checks for anyone reviewing the code. Section 1 was run on Oct 18 in a fresh GitHub clone by Parth with Claude (221 tests, ten worlds, compose check, demo path, junk MCP input); see `docs/CHECKLIST-AASHNA.md`.
+**Status Sun 2026-10-18:** Aashna tested branch `improve` on Windows (commit e92cd46) and sent her results; her seven defects were fixed. The code review in sections 2 and 3 was not done by a second person, and Parth pushed `improve` to `main` himself. The steps below are still the right checks for anyone reviewing the code. Section 1 was run on Oct 18 in a fresh GitHub clone by Parth with Claude (221 tests, ten worlds, compose check, demo path, junk MCP input); see `docs/CHECKLIST-AASHNA.md`.
 
 ---
 
@@ -10,7 +10,7 @@ When this brief was written (Fri 2026-10-16) the change was 14 commits, 30 files
 
 ## 0. Get the code
 
-Repo: https://github.com/Ps23102004/graphhacks-quarantine (branches `main` and `improve`, tags `freeze-v1` and `freeze-sat`). It is private until Parth makes it public. To get in, ask Parth to add your GitHub username as a collaborator (Settings, Collaborators) and accept the emailed invite. Then:
+Repo: https://github.com/Ps23102004/graphhacks-quarantine (branches `main` and `improve`, tags `freeze-v1` and `freeze-sat`). Then:
 
 ```bash
 git clone https://github.com/Ps23102004/graphhacks-quarantine.git && cd graphhacks-quarantine
@@ -30,7 +30,7 @@ scripts/validate.sh                   # expect: "validation: N passed, 0 failed"
 scripts/validate_compose.sh           # expect: "Compose validation complete: ALL PASS" (fixed and re-run on Oct 18, commit b31ba1e)
 uv run python scripts/heldout_eval.py --worlds 100 --pipeline-worlds 30   # expect: 0 graph != oracle, 0 invariant violations
 uv run python scripts/counterfactual_eval.py --worlds 20   # expect: 0 invented receipts, 0 wrong 'clean' answers, 0 page != graph; misses only in the UNRECORDED influence row (see docs/COUNTERFACTUAL.md)
-uv run python scripts/mutation_check.py   # about 20 min; expect: 0 unexpected survivors (3 documented equivalent mutants are excluded)
+uv run python scripts/mutation_check.py   # about 20 min; expect: 0 unexpected survivors (2 documented equivalent mutants are excluded)
 ```
 
 Then the demo by hand, in two terminals. This is the exact video path:

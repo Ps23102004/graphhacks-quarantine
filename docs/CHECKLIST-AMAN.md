@@ -2,7 +2,7 @@
 
 ## Status Sun 2026-10-18
 
-- README: Aman rewrote it on Oct 17 (commit 21c94f2) and edited it again on Oct 18 (591bbd2). Parth merged those edits with the current engine, numbers and limits.
+- README: Aman rewrote it on Oct 17 (commit 21c94f2) and edited it again that evening (591bbd2). Parth merged those edits with the current engine, numbers and limits.
 - Blog draft `docs/BLOG.md` and submission text `docs/SUBMISSION.md`: drafted by Parth with Claude on Oct 18 so the work was not blocked. Aman can edit both.
 - Fresh clone: Parth ran one from GitHub on macOS on Oct 18 with Claude. A clone on Aman's laptop was not run.
 - Video: Parth records it on Oct 18; the README line `VIDEO_LINK_GOES_HERE` gets the link before submitting.
