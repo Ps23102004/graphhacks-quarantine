@@ -127,6 +127,18 @@ uv run python web/server.py
 
 Open [localhost:8765](http://localhost:8765).
 
+### One-command local setup (Docker Compose)
+
+```bash
+docker compose -f deploy/docker-compose.yml up -d --build
+```
+
+This starts FalkorDB and the viewer on `http://127.0.0.1:8765`. If the `quarantine-falkordb` container from the steps above is running, stop it first (`docker stop quarantine-falkordb`), because both try to use port 6379. The compose check in `scripts/validate_compose.sh` runs this path; it passed on Oct 18. Use the steps above if you want to run the CLI.
+
+### Timing
+
+The hackathon window is Oct 15, 00:01 IST to Oct 18, 23:59 IST. The earliest commit in this repository (`6c68104`) is dated 2026-10-14 23:03 EDT, which is Oct 15, 08:33 IST: inside the window. Everything after it is later.
+
 ### Run the scenario
 
 In a second terminal, from the repository directory:
@@ -277,7 +289,7 @@ Not covered: no dedicated security scanner was run (one AI attacker covered web 
 - **Reading is not proof of contamination.** Quarantine by dependency also catches outputs that did not adopt the bad instruction (about 63% in the synthetic declared-read scenario).
 - **Healing counts episodes, not independent documents.** Several planted documents that nobody has flagged yet can outvote real ones, and unflagged sources can still be wrong. Agreeing episodes may share the same underlying source.
 - **No depth bound.** The closure and receipt queries have no hop limit. We removed a 10-hop cap after a hand-built chain world showed it left poisoned memories marked clean ([docs/EVAL-HELDOUT.md](docs/EVAL-HELDOUT.md)). The graph has no cycles because reads only point backwards in time.
-- **Recovery is scripted.** Repeated attacks, real LLM decisions and production-scale workloads still need testing. With 25 memories, a recursive SQL query could do the same work. We use a graph for the shape of the problem (provenance is edges, the closure and receipt are one query each, the schema is the audit trail), not for speed.
+- **Recovery is scripted.** Repeated attacks, real LLM decisions and production-scale workloads still need testing. At the demo's size the closure is small, so the graph is not faster than a relational database here. What it gives is a variable-length path query with no hop cap, the same statements on a graph of thousands of memories (not measured here), and provenance that stays inspectable as edges. Speed at scale is untested.
 - **Concurrent runs.** Two `session2` processes started at the same moment can take each other's live lease, because every run uses the session name `s2`. The lease protects the `--kill-planner` demo and restarts, not parallel runs. Healing does not depend on the order advisories arrive: a rebuilt fact always votes over the original fact's full clean support (`tests/test_attack_regressions.py`).
 - **Tenant isolation is by graph name** on one FalkorDB instance, not by credential.
 - **No live deployment.** Local demo runs and browser checks do not show production readiness.
