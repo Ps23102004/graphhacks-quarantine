@@ -1,15 +1,13 @@
 # QUARANTINE
 ## Trace affected agent memory. Rebuild only what needs rework.
 
-QUARANTINE is a prototype for recovering shared agent memory after a source is flagged as untrustworthy. It records where memories came from, follows those connections across agents, and preserves unrelated work while affected items are quarantined and reworked.
+QUARANTINE is a prototype for tracing and recovering shared agent memory after a source is flagged as untrustworthy. It follows recorded dependencies to quarantine connected memories and explain their connection to the source. In the team's synthetic counterfactual evaluation, it missed about **7% of truly affected memories when agent influence was not recorded**; in the declared-read scenario, about **63% of quarantined memories would have kept the same content without the flagged source**. These are results from generated scenarios, not real-agent accuracy estimates. See [the evaluation model, counts, and rerun command](docs/COUNTERFACTUAL.md).
 
 **The current demo uses scripted research, planner, and coder actions.** The FalkorDB graph, dependency queries, task leases, and recovery writes are real. The project does not automatically detect prompt injections or demonstrate recovery for arbitrary LLM workflows.
 
 Built for **Graph Hacks 2026 (FalkorDB × WeMakeDevs)**, Track 02: Agent Memory and Coordination.
 
 **Team:** Parth Singh, Amandeep Kaushik, and Aashna Tyagi.
-
-**In one paragraph.** Flag a poisoned document and QUARANTINE marks every memory whose recorded reads lead back to it, with the path as the receipt: 6 of 25 memories in the demo, against 19 for a time rollback and 25 for wiping every agent it touched. About 63% of what it flags on random worlds would not have changed (it follows provenance, not values), and influence an agent never recorded is not caught: 7% of truly affected memories in our tests. In 300 random crews it took about 29% of memories, against 78% for a time rollback and 92% for wiping the agents. Numbers and how to rerun them: [docs/COUNTERFACTUAL.md](docs/COUNTERFACTUAL.md), [docs/EVAL-HELDOUT.md](docs/EVAL-HELDOUT.md).
 
 ## Why we built it
 
@@ -38,7 +36,7 @@ We measured the gap. For 1,340 (world, flagged document) runs in each of four ki
 
 In the demo all 6 quarantined memories really change: `f_http_client` stored the typosquat `reqeusts` and heals to `requests`. If an advisory turns out to be a false alarm, `uv run quarantine unflag doc_7` retracts it before healing starts and re-derives quarantine from whatever is still flagged.
 
-How we attacked it: ten independent attacker agents across nine areas (engine edge cases, crash consistency, MCP input, web security, page truthfulness, hostile fixtures, claims audit, fresh clone, specification blind spots), each finding checked by three skeptics. They found real defects (a reserved-id collision that lost data, torn writes that left a flagged source with nothing red, outvoted votes followed as provenance, a page headline that was false with two advisories, and an error in our own evaluation); each is fixed with a test in `tests/test_attack_regressions.py` and the related test files.
+Regression cases for reserved IDs, interrupted writes, voting provenance, multiple advisories, and evaluation behavior are recorded in [tests/test_attack_regressions.py](tests/test_attack_regressions.py) and the related tests. Run `uv run pytest -q` to check the current checkout; a passing suite is not evidence that all possible attacks have been covered.
 
 ## What the demo shows
 
@@ -73,10 +71,13 @@ You need Git, Python 3.12 or later, [uv](https://docs.astral.sh/uv/), and a runn
 ### Get the code
 
 ```bash
-git clone https://github.com/Ps23102004/graphhacks-quarantine.git
+git clone --branch improve https://github.com/Ps23102004/graphhacks-quarantine.git
 cd graphhacks-quarantine
+git rev-parse HEAD
 uv sync --all-extras                      # --all-extras installs the optional MCP SDK the MCP tests need
 ```
+
+For the Saturday backup test, check out `freeze-sat` after cloning and record `git rev-parse HEAD` again. Follow that tag's README for the frozen run. The commands above select the development branch because the default branch may not yet contain this version.
 
 ### Start FalkorDB
 
@@ -89,6 +90,16 @@ docker run -d --name quarantine-falkordb \
 ```
 
 If you already created this container, start it with `docker start quarantine-falkordb`. The default database connection is `localhost:6379`; `FALKORDB_HOST` and `FALKORDB_PORT` override it.
+
+### Run the tests
+
+With FalkorDB running:
+
+```bash
+uv run pytest -q
+```
+
+Record the output and any setup changes. The commands here have not been independently rerun as part of this documentation edit.
 
 ### Open the viewer
 
@@ -144,12 +155,12 @@ Nodes represent documents, memory episodes, facts, plan steps, artifacts, agents
 
 ### Find affected memories
 
-This query follows recorded dependencies back to a flagged document and marks connected memories (the real statement, `queries.FLAG_AND_CLOSE`, runs it in the same write as the flag):
+This excerpt follows recorded dependencies back to a flagged document and marks connected memories. The implementation, `queries.FLAG_AND_CLOSE`, includes the flag in the same write. The output alias below is renamed for readability:
 
 ```cypher
 MATCH (d:Doc {id: $doc})<-[:EXTRACTED_FROM|CONSOLIDATED_FROM|INFLUENCED_BY*1..]-(m:Memory)
 SET m.quarantined = true, m.quarantine_tick = $tick, m.quarantine_doc = coalesce(m.quarantine_doc, $doc)
-RETURN count(DISTINCT m) AS precise, collect(DISTINCT m.id) AS ids
+RETURN count(DISTINCT m) AS quarantined_count, collect(DISTINCT m.id) AS ids
 ```
 
 ### Explain an affected artifact
@@ -233,9 +244,9 @@ With FalkorDB running:
 
 ```bash
 git rev-parse HEAD
-uv run pytest -q                                           # all tests pass; counts change, see docs/TESTING.md
+uv run pytest -q                                           # record the actual result for this commit
 scripts/validate.sh                                        # throwaway FalkorDB on :6390; expect "0 failed"
-uv run python scripts/counterfactual_eval.py --worlds 20   # replay evaluation; see docs/COUNTERFACTUAL.md
+uv run python scripts/counterfactual_eval.py --worlds 150  # reproduce the documented scenario count
 ```
 
 Record the commit SHA alongside your results so another person can reproduce the same version. See [docs/VALIDATION.md](docs/VALIDATION.md) for recorded results and open items, [docs/TESTING.md](docs/TESTING.md) for testing details, and [docs/DEMO-SCRIPT.md](docs/DEMO-SCRIPT.md) for the walkthrough.
@@ -246,12 +257,13 @@ Not run: an AI-driven security scan (the tool we have needs a paid LLM key; band
 
 - **Flagging is external.** A person or another system must identify the suspicious source.
 - **Tracking is only as complete as the recorded inputs.** Untracked context, summaries, or tool results can carry influence the graph cannot see. When the truth is an agent's whole context but only per-write reads were recorded, the closure missed 7% of truly affected memories.
-- **Reading is not proof of contamination.** Dependency-based quarantine includes outputs that did not adopt the bad instruction (about 63% of flags on random worlds).
+- **Reading is not proof of contamination.** Dependency-based quarantine includes outputs that did not adopt the bad instruction (about 63% in the synthetic declared-read scenario).
 - **Healing counts episodes, not independent documents.** Several planted documents nobody has flagged yet can outvote real ones, and unflagged sources can still be wrong; agreeing episodes may share the same underlying source.
 - **No depth bound.** The closure and receipt are unbounded (a 10-hop cap was removed after a held-out chain world showed it hid poisoned memories). The graph is acyclic by construction because reads only point backwards in time.
 - **Recovery is scripted.** Repeated attacks, arbitrary LLM decisions, and production-scale workloads need further evaluation. At 25 nodes a recursive SQL query does the same work; the case for a graph is the shape of the problem (provenance is edges, the closure and receipt are one query each, the schema is the audit trail), not speed.
 - **Concurrent runs.** Two `session2` processes started at the same moment can take each other's live lease (every run uses the session name `s2`); the lease protects the `--kill-planner` demo and restarts, not parallel runs. Healing is independent of the order advisories arrive: a rebuilt fact always votes over the original fact's full clean support (`tests/test_attack_regressions.py`).
 - **Tenant isolation is by graph name** on one FalkorDB instance, not by credential.
+- **No live deployment is demonstrated here.** Local demo and browser checks do not establish production readiness.
 - **External effects remain external.** Memory repair cannot reverse actions already taken outside the graph.
 
 The next useful test is a real agent workflow with independently assessed contamination, compared against restarting that workflow from a trusted checkpoint.
