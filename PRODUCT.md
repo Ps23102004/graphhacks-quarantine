@@ -1,11 +1,11 @@
-# PRODUCT.md — Quarantine
+# PRODUCT.md: Quarantine
 
-Assumptions inferred from the team's brief and the 2026-10-17 conversation; confirm or correct.
+Working assumptions for the page design, written on 2026-10-17 from the team brief. Correct them if they are wrong.
 
-- **What it is:** shared graph memory for a crew of AI agents that can forget one bad source without wiping clean work. Before every write the harness records what the agent read as edges in FalkorDB; when a source is flagged as prompt-injected, one traversal quarantines every memory whose recorded reads reach it, a path is the receipt, facts heal from clean sources, and repair runs in dependency order with leases.
-- **Who looks at it:** hackathon judges (Graph Hacks 2026, Track 02) opening the web app on a laptop, and viewers of a 3-minute screen-recorded video. Most are engineers; few are graph-database experts.
-- **What they must understand in 90 seconds:** "6 of 25, not 25 or 19", why a memory is red (the path), and that the crew repairs itself.
-- **Mode:** Operate (a live inspection tool) with one authored moment (the red wave).
-- **Brand commitments (from the founder):** originally a "hive mind" look; shipped as a printed provenance ledger (see DESIGN.md): chips and ribbons, a red ink spill, a yellow highlighter receipt; Apple-like restraint and system type; not boring, not plain lines.
-- **Truth constraints:** agents are scripted (say so); every number on screen comes from the graph or the server, never hard-coded; demo data is synthetic and labelled as such in the README.
-- **Platforms:** desktop browser first (1440 to 1920 wide), usable at 375 wide; light newsprint ground, so it reads in a bright room and in a screen recording.
+- **What it is:** shared graph memory for a crew of AI agents. It can forget one bad source without wiping clean work. Before every write, the harness records what the agent read as edges in FalkorDB. When a source is flagged as a prompt injection, one query quarantines every memory whose recorded reads lead back to it. A path is the receipt. Facts are rebuilt from clean sources, and rework runs in dependency order with leases. The agents in the demo are scripted.
+- **Who looks at it:** Graph Hacks 2026 judges (Track 02) opening the page on a laptop, and people watching a video of at most 3 minutes. Most are engineers. Few are graph-database experts.
+- **What they must get in 90 seconds:** 6 of 25 memories are quarantined, not 25 or 19. Why a memory is red (the path). The crew repairs itself.
+- **Mode:** a live inspection tool with one staged moment, the red ink spreading.
+- **Look (Parth's brief):** first a "hive mind" look. What shipped is a printed provenance ledger (see DESIGN.md): chips and ribbons, red ink for contamination, a yellow highlighter for the receipt. Restrained, Apple-like type. Not plain lines.
+- **Truth rules:** the page says the agents are scripted. Every chip, ribbon and number on the page is read from FalkorDB through the server, never hard-coded. The README says the demo actions are scripted.
+- **Platforms:** desktop browser first. `scripts/check_browser.js` checks the layout at 1920, 960 and 375 wide. Light newsprint background, so it reads in a bright room and in a screen recording.

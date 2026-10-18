@@ -146,7 +146,7 @@ FORM: left-to-right layered flow (Sankey-like ribbons), canvas; labels are alway
 <header class="bar">
   <div class="brand">
     <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect x="2" y="2" width="30" height="30" rx="8" fill="#17140f"/><circle cx="17" cy="17" r="8" fill="#d02818"/><circle cx="21.5" cy="12.5" r="3.2" fill="#d02818"/><circle cx="12" cy="22.5" r="2.4" fill="#d02818"/></svg>
-    <div class="words"><h1>Quarantine</h1><p>Forget one poisoned source, keep the clean work · FalkorDB</p></div>
+    <div class="words"><h1>Quarantine</h1><p>Quarantine what a flagged source reached, keep the rest · FalkorDB</p></div>
   </div>
   <div class="status" role="status"><i class="live" id="live"></i><span id="banner">connecting…</span></div>
 </header>
@@ -158,7 +158,7 @@ FORM: left-to-right layered flow (Sankey-like ribbons), canvas; labels are alway
       <p id="hud-line">Connecting to the graph…</p>
     </div>
     <div class="scroller" id="scroller">
-      <canvas id="stage" role="img" aria-label="Provenance ledger: five columns (sources, episodes, facts, plan steps, files) joined by ribbons that show what each memory was written after reading. A text list of every memory follows the inspector."></canvas>
+      <canvas id="stage" role="img" aria-label="Provenance ledger: five columns (sources, episodes, facts, plan steps, files) joined by ribbons that show what each memory was written after reading. A text list of every memory is at the end of the inspector."></canvas>
       <div class="empty" id="empty" hidden><div>No memory in this graph yet.<br><br>Run <code>uv run quarantine session1</code></div></div>
     </div>
     <div class="caption">Read left to right: a ribbon joins what was read to the memory written after reading it.</div>
@@ -166,7 +166,7 @@ FORM: left-to-right layered flow (Sankey-like ribbons), canvas; labels are alway
 
   <aside class="inspector" aria-label="Inspector">
     <section>
-      <h2 id="forget-h">Three ways to forget a poisoned source</h2>
+      <h2 id="forget-h">Three ways to forget a flagged source</h2>
       <div class="policies" role="group" aria-labelledby="forget-h">
         <button class="policy precise active" data-view="precise" aria-pressed="true">
           <span class="name">Graph quarantine</span>
@@ -176,13 +176,13 @@ FORM: left-to-right layered flow (Sankey-like ribbons), canvas; labels are alway
         </button>
         <button class="policy" data-view="agent" aria-pressed="false">
           <span class="name">Wipe every agent it touched</span>
-          <span class="how">reset the compromised agents</span>
+          <span class="how">reset every agent whose memory it reached</span>
           <span class="n"><span id="c-agent">–</span><small id="t-agent"></small></span>
           <span class="track"><span class="fill" id="f-agent"></span></span>
         </button>
         <button class="policy" data-view="time" aria-pressed="false">
           <span class="name">Roll back after the bad source</span>
-          <span class="how">forget everything written since</span>
+          <span class="how">forget everything written since it arrived</span>
           <span class="n"><span id="c-time">–</span><small id="t-time"></small></span>
           <span class="track"><span class="fill" id="f-time"></span></span>
         </button>
@@ -192,7 +192,7 @@ FORM: left-to-right layered flow (Sankey-like ribbons), canvas; labels are alway
 
     <section>
       <h2>Why is it red?</h2>
-      <div class="card" id="detail" aria-live="polite">Select a chip in the ledger, or a memory in the list below.</div>
+      <div class="card" id="detail" aria-live="polite">Select a chip in the chart, or a memory in the Quarantined list below.</div>
     </section>
 
     <section>
@@ -205,16 +205,16 @@ FORM: left-to-right layered flow (Sankey-like ribbons), canvas; labels are alway
       <h2>Key</h2>
       <div class="legend" id="legend">
         <span><i style="background:#fffdf8"></i>clean memory (stripe = agent)</span>
-        <span><i style="background:var(--red);border-color:var(--red)"></i>quarantined</span>
-        <span><i style="background:#dcefe3;border-color:var(--green)"></i>healed replacement</span>
+        <span><i style="background:var(--red);border-color:var(--red)"></i>quarantined (!)</span>
+        <span><i style="background:#dcefe3;border-color:var(--green)"></i>healed replacement (+)</span>
         <span><i style="background:#fffdf8;border-color:var(--green);border-style:dashed"></i>placeholder: needs regeneration (?)</span>
-        <span><i style="background:repeating-linear-gradient(135deg,#f3d9b4 0 3px,#fffdf8 3px 6px);border-color:var(--orange)"></i>clean work a naive wipe loses</span>
+        <span><i style="background:repeating-linear-gradient(135deg,#f3d9b4 0 3px,#fffdf8 3px 6px);border-color:var(--orange)"></i>clean work a naive wipe loses (×)</span>
         <span><i style="background:var(--hl);border-color:var(--ink)"></i>receipt path</span>
         <span><i style="background:#ebe5d8;border-style:dashed"></i>source document</span>
       </div>
       <div class="legend" id="agents" style="margin-top:10px"></div>
     </section>
-    <p class="foot">Agents in this demo are scripted. Every chip, ribbon and number is read live from FalkorDB.</p>
+    <p class="foot">The agents in this demo are scripted. Every chip, ribbon and number comes from FalkorDB, re-read every second.</p>
     <ul class="sr-only" id="sr-cells" aria-label="All memories"></ul>
   </aside>
 </main>
@@ -427,12 +427,12 @@ function updateHud() {
   if (state.stale.length) { $("hud-n").textContent = "–"; $("hud-of").textContent = ""; hud.classList.remove("hot");
     $("hud-line").innerHTML = `${list(state.stale)} ${state.stale.length === 1 ? "is quarantined but reaches" : "are quarantined but reach"} no flagged source: a retraction was interrupted (run <b>quarantine session2</b>), so no count is shown.`; return; }
   const rt = d.nodes.filter(n => n.twin_of && n.red).length, also = rt ? ` Also quarantined: <b>${rt}</b> healed replacement${rt === 1 ? "" : "s"} that a later advisory reached.` : "";
-  if (!flagged.length) { $("hud-n").textContent = state.total; $("hud-of").textContent = "memories"; $("hud-line").innerHTML = `written by <b>${agents} agent${agents === 1 ? "" : "s"}</b> across <b>${d.docs.length} sources</b>. Every read is a ribbon; no source is flagged.`; hud.classList.remove("hot"); return; }
+  if (!flagged.length) { $("hud-n").textContent = state.total; $("hud-of").textContent = "memories"; $("hud-line").innerHTML = `written by <b>${agents} agent${agents === 1 ? "" : "s"}</b> across <b>${d.docs.length} sources</b>. Each recorded read is a ribbon; no source is flagged.`; hud.classList.remove("hot"); return; }
   if (!c) { const n = redOriginals(); $("hud-n").textContent = n; $("hud-of").textContent = `of ${state.total} memories`; hud.classList.toggle("hot", n > 0);
     $("hud-line").innerHTML = `quarantined by <b>${flagged.length} advisor${flagged.length === 1 ? "y" : "ies"}</b>: ${list(flagged)}.` + also; return; }
   const n = Math.min(redOriginals(), c.precise);
   $("hud-n").textContent = n; $("hud-of").textContent = `of ${state.total} memories`; hud.classList.toggle("hot", n > 0);
-  $("hud-line").innerHTML = `reached by <b>${esc(d.flagged)}</b>. A rollback would have lost <b>${c.time_based}</b>; wiping the agents, <b>${c.per_agent}</b>.` + also;
+  $("hud-line").innerHTML = `reached by <b>${esc(d.flagged)}</b>. A rollback would throw out <b>${c.time_based}</b>; wiping the agents, <b>${c.per_agent}</b>.` + also;
 }
 function updateBanner(data) {
   const plural = (k, one, many) => `${k} ${k === 1 ? one : many}`;
@@ -443,7 +443,7 @@ function updateBanner(data) {
                  redTw && `${plural(redTw, "replacement", "replacements")} quarantined`].filter(Boolean).join(" · ");
   $("banner").innerHTML =
     !data.nodes.length ? "Empty graph · run <b>quarantine session1</b>"
-    : !data.flagged ? "<b>Memory</b> · no source is flagged; every read is recorded as an edge"
+    : !data.flagged ? "<b>Memory</b> · no source is flagged; each recorded read is an edge"
     : `<b>${flaggedIds(data).length > 1 ? "Advisories" : "Advisory"}</b> · ${list(flaggedIds(data))} flagged` +
       (twins ? ` · ${twins}` : "");
   $("live").classList.remove("down");
@@ -496,7 +496,7 @@ function updateNote() {                       // recomputed on every render, fro
     : state.stale.length ? "A retraction was interrupted, so there is nothing to compare yet."
     : n > 1 ? `The comparison covers one advisory at a time; ${n} sources are flagged, so the counters stay blank.`
     : !state.counters ? "Flag a source first to compare." :
-    `${v === "agent" ? "Wiping every compromised agent" : "Rolling back to before the bad source"} throws away ${lost} clean memories (hatched ×) along with the poisoned ones. The graph keeps them.`;
+    `${v === "agent" ? "Wiping every compromised agent" : "Rolling back to before the bad source"} throws away ${lost} clean memories (hatched ×) along with the quarantined ones. Graph quarantine keeps them.`;
 }
 document.querySelectorAll(".policy").forEach(b => b.addEventListener("click", () =>
   setView(state.view === b.dataset.view && b.dataset.view !== "precise" ? "precise" : b.dataset.view)));
@@ -504,7 +504,7 @@ document.querySelectorAll(".policy").forEach(b => b.addEventListener("click", ()
 // ---------------------------------------------------------------- selection: the receipt
 function clearSelection(silent) {
   state.request++; state.selected = null; arcs.forEach(a => { a.path = false; });
-  $("detail").textContent = "Select a chip in the ledger, or a memory in the list below."; if (!silent) updateLedger();
+  $("detail").textContent = "Select a chip in the chart, or a memory in the Quarantined list below."; if (!silent) updateLedger();
 }
 async function select(id) {
   const n = meta.get(id); if (!n) return;

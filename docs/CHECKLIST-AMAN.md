@@ -1,24 +1,37 @@
 # Aman: README, blog and submission checklist (Sat evening to Sun 11:30 EDT)
 
-You own every word a judge reads and the submission itself. Rule for every sentence: **if you cannot point to a command or a file that proves it, cut it.** "Precise" is not used; say "marks every memory whose recorded reads lead back to the source; misses influence that was never recorded (7% in our generated crews); about 63% of what it flags would not have changed" (see `docs/COUNTERFACTUAL.md`).
+## Status Sun 2026-10-18
+
+Aman had not answered this checklist by Sunday morning. What exists:
+- README: Aman rewrote it on Oct 17 (commits 21c94f2 and 591bbd2). Parth merged that rewrite with the current engine, numbers and limits (e92cd46 and later commits).
+- Blog draft `docs/BLOG.md` and submission text `docs/SUBMISSION.md`: written by Parth with Claude on Oct 18 (commit b31ba1e). The blog draft is 934 words by `wc -w`, a little over the 900 target.
+- Fresh clone: Parth ran one from GitHub with Claude on Oct 18 (221 tests passed). Nobody has run one on Aman's laptop.
+- Video: not recorded yet. The README still says `VIDEO_LINK_GOES_HERE`.
+- The repo is still private. It must be public before submitting.
+
+The plan as written on Saturday follows.
+
+---
+
+You own every word a judge reads, and the submission itself. Rule for every sentence: **if you cannot point to a command or a file that proves it, cut it.** Do not use "precise". Say: "marks every memory whose recorded reads lead back to the source; misses influence that was never recorded (7% in our generated crews); about 63% of what it flags would not have changed" (see `docs/COUNTERFACTUAL.md`).
 
 ## Tonight (Sat)
 - [ ] Get access: accept the GitHub collaborator invite; `git clone https://github.com/Ps23102004/graphhacks-quarantine.git && cd graphhacks-quarantine && git checkout freeze-sat`.
-- [ ] Fresh-clone run on YOUR laptop, README Quickstart only, word for word (Docker, `uv sync --all-extras`, `uv run pytest -q`, the three demo commands). Note every step that needed a change.
-- [ ] README final pass (Claude already wrote sections 1 to 8 and "What quarantined means"; Parth reviewed). Check, line by line:
-  - [ ] Every number (6 / 25 / 19, 4-hop receipt, rounds [1, 2, 2, 0], counterfactual table) matches what you saw or `docs/COUNTERFACTUAL.md`.
-  - [ ] "FalkorDB is source-available (SSPL)". Never "open source" for FalkorDB.
-  - [ ] Honest limits section stays: scripted agents, declared read sets, healing counts episodes not documents, no live deployment, 25 nodes.
-  - [ ] AI-use disclosure is accurate (Claude and OpenAI models helped; the team ran and validated everything).
-  - [ ] Team names and roles correct; license MIT for our code.
-- [ ] Rules compliance check against the Graph Hacks rules page: Track 02 fit, new work inside the hackathon window, repo visibility at submit time (public or judges' access), team locked at submit, video length limit, required links.
+- [ ] Fresh-clone run on YOUR laptop, README "Run it locally" steps only, word for word (Docker, `uv sync --all-extras`, `uv run pytest -q`, the three demo commands). Note every step that needed a change.
+- [ ] README final pass. Check, line by line:
+  - [ ] Every number (6 / 25 / 19, the 4-hop receipt, rounds [1, 2, 2, 0], the counterfactual table) matches what you saw or `docs/COUNTERFACTUAL.md`.
+  - [ ] "FalkorDB is source-available (SSPL)". Never call FalkorDB "open source".
+  - [ ] The limits section stays: scripted agents, declared read sets, healing counts episodes not documents, no live deployment, 25 nodes.
+  - [ ] The AI-use disclosure matches what happened (Claude and OpenAI models helped; say only what the team actually ran).
+  - [ ] Team names and roles are correct; the license for our code is MIT.
+- [ ] Rules check against the Graph Hacks rules page: Track 02 fit, new work inside the hackathon window, repo visibility at submit time, team locked at submit, video length limit, required links.
 
 ## Blog (Sat night)
-- [ ] 600 to 900 words, one image (`docs/media/hive-receipt.png` shows the receipt path; re-captured from the current page on 2026-10-17; never use an image that says "precise"). Structure: the problem (one poisoned source contaminates shared agent memory); naive fixes and their cost (25 and 19 of 25); what the graph does (6, with a path as the receipt); how we tested it (unseen random crews, counterfactual replay, ten attackers, what they found and what we fixed); honest limits; what's next.
+- [ ] 600 to 900 words, one image. `docs/media/hive-receipt.png` shows the receipt path; it was captured from the page on 2026-10-17. Never use an image that says "precise". Structure: the problem (one poisoned source contaminates shared agent memory); naive fixes and their cost (25 and 19 of 25); what the graph does (6, with a path as the receipt); how we tested it (unseen random crews, counterfactual replay, ten attackers, what they found and what we fixed); honest limits; what's next.
 - [ ] Every claim in the blog appears in the README or a doc. No new numbers.
 
 ## Sunday
-- [ ] 09:00 to 10:00: Parth sends the video link; check it is 3:00 or less, unlisted, plays logged out.
-- [ ] 10:00 to 11:30: submission form: repo link, video link, blog link, track 02, team members, short description (use the README's first paragraph), AI-use disclosure.
-- [ ] Before pressing submit: repo visibility correct for judges; README renders on GitHub; the tag or commit you submit is the one Aashna validated.
+- [ ] 09:00 to 10:00: Parth sends the video link. Check it is 3:00 or less, unlisted, and plays logged out.
+- [ ] 10:00 to 11:30: submission form: repo link, video link, blog link, Track 02, team members, short description (from `docs/SUBMISSION.md`), AI-use disclosure.
+- [ ] Before pressing submit: the repo is public; the README renders on GitHub; the submitted commit is the one that passed the checks.
 - [ ] Screenshot the confirmation page and send it to the team.

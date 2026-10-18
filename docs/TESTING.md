@@ -1,11 +1,11 @@
-# TESTING — how to know Quarantine works
+# Testing: how to know Quarantine works
 
-Several layers, from fastest to most convincing. Anyone on the team (or a judge) can run all of them.
+There are several layers, from fastest to most convincing. Anyone on the team, or a judge, can run all of them.
 
 ## 0. Prerequisites
 
-- Docker running, `uv` installed (https://docs.astral.sh/uv/), Python 3.12+.
-- FalkorDB 6.0.2 pinned by digest. FalkorDB is source-available (SSPL), not open source.
+- Docker running, `uv` installed (https://docs.astral.sh/uv/), Python 3.12 or newer (`requires-python = ">=3.12"` in `pyproject.toml`).
+- FalkorDB 6.0.2, pinned by digest. FalkorDB is source-available (SSPL), not open source.
 
 ```bash
 docker run -d --name quarantine-falkordb -p 127.0.0.1:6379:6379 -p 127.0.0.1:3000:3000 \
@@ -13,35 +13,53 @@ docker run -d --name quarantine-falkordb -p 127.0.0.1:6379:6379 -p 127.0.0.1:300
 uv sync --all-extras                      # --all-extras installs the optional MCP SDK the MCP tests need
 ```
 
-## 1. Unit and integration tests (about 1 to 2 min)
+## 1. Unit and integration tests
 
 ```bash
 uv run pytest -q          # expect: all tests pass, 0 failed
 ```
 
-The number of tests changes as tests are added, so no doc states it: read the count from pytest's summary line.
+The number of tests changes as tests are added, so no doc states it. Read the count from pytest's summary line.
 
-Tests use their own graphs (none is named `quarantine`) and delete them afterwards. They never touch the demo graph named `quarantine`.
+The tests use their own graphs and delete them afterwards. None of them is named `quarantine`, so they never touch the demo graph.
 
-## 2. Working-tree validation (a few minutes): close to what a stranger would see
+## 2. Working-tree validation: close to what a stranger would see
 
 ```bash
 scripts/validate.sh       # expect: "validation: N passed, 0 failed" (N changes as checks are added)
 ```
 
-Copies the working tree, uncommitted edits included (`.git` and `.venv` excluded), into a temp dir, starts a throwaway FalkorDB on :6390, installs from the lockfile, runs pytest, then runs the real CLI and checks the exact lines the video says (6 vs 25 vs 19, the receipt, the heal, the kill-Planner takeover, the control closure for doc_5, the page JSON and its Host check). Because it copies the working tree, it is not a fresh clone: run it on a clean tree (`git status` empty) to validate a commit, and note that it cannot catch a needed file that was never committed.
+What it does:
 
-## 3. Mutation check (slow: one pytest run per mutation): do the tests actually catch breakage?
+- copies the working tree, uncommitted edits included, into a temp dir (`.git`, `.venv`, `.pytest_cache`, `dist` and `build` are left out);
+- starts a throwaway FalkorDB on port 6390 and installs from the lockfile (`uv sync --frozen --all-extras`);
+- runs pytest;
+- runs the real CLI and checks the exact lines the demo shows: 6 vs 25 vs 19, the six memories, the 4-hop receipt, the heal to `requests`, the kill-Planner takeover, rounds `[1, 2, 2, 0]`, and the control closure for `doc_5`;
+- builds the wheel, lists and calls the MCP tools, and checks `docker compose config`;
+- checks the page JSON, and that the page refuses a foreign `Host` header and a `POST`.
+
+Because it copies the working tree, it is not a fresh clone. To validate a commit, run it on a clean tree (`git status` empty). It cannot catch a needed file that was never committed.
+
+## 3. Mutation check: do the tests catch breakage
 
 ```bash
-uv run python scripts/mutation_check.py     # expect: "0 unexpected survivor(s)"
+uv run python scripts/mutation_check.py     # expect: "0 unexpected survivor(s) of N mutations"
 ```
 
-Breaks one thing at a time in a throwaway clone of the committed HEAD (the `MUTATIONS` list in `scripts/mutation_check.py`: closure edge types and depth, heal threshold and tie rule, episodes healable, blockers, lease expiry and holder, claim ownership, COMPLETE session and replacement checks, rework guard and idempotence, baselines, a fixture read set, page counters, twin detection, receipts). pytest must go red each time. Two documented equivalent mutants survive and are excluded from the count (the heal query's `>= 2` check and its tie check, both already guarded by the `healable` flag).
+This is slow: one pytest run per mutation. It breaks one thing at a time in a throwaway clone of the committed HEAD, against its own FalkorDB on port 6391. pytest must go red each time. The `MUTATIONS` list in `scripts/mutation_check.py` covers:
 
-## 4. Browser regressions (optional, installed Playwright CLI)
+- closure edge types and hop bounds, in both `FLAG_AND_CLOSE` and `TAINT_CLOSURE`;
+- the heal threshold and tie rule, and episodes becoming healable;
+- rework blockers, the rework guard (quarantined, missing and empty reads), dead reads in derived rework, and the author and session fences;
+- lease expiry and live holder, claim ownership, and the `COMPLETE` session and replacement checks;
+- both baselines (bounds, healed twins, an off-by-one tick);
+- one fixture read set, the receipt's hop bound, and the page's twin detection.
 
-Start the page against a graph already seeded with `quarantine session1`. With Playwright CLI and Chrome already installed:
+A mutant whose name says "equivalent mutant" changes a guard that another check already covers. It may survive and is not counted as a failure. The current list has three: the heal query's own `>= 2` check, its own tie check (both covered by the `healable` flag), and the receipt's recorded advisory (every flagged document is tried anyway).
+
+## 4. Browser regressions (optional, needs the Playwright CLI)
+
+Start the page against a graph already seeded with `quarantine session1`. With the Playwright CLI and Chrome installed:
 
 ```bash
 playwright-cli -s=quarantine-ui-check open http://localhost:8765 --browser chrome
@@ -49,14 +67,25 @@ playwright-cli -s=quarantine-ui-check run-code --filename scripts/check_browser.
 playwright-cli -s=quarantine-ui-check close
 ```
 
-Expect every check to report `passed: true`. This runs the real ledger page (no chart library), substitutes only `/graph` and `/receipt` responses, and never writes to FalkorDB. It covers every cell staying visible at 1920, 960 and 375 px, no horizontal scroll on a phone, the quarantine counter climbing with the red wave, non-colour markers (`!`, `+`, `×`), the receipt highlighting four ribbons and reading as a sentence, the two naive-wipe views painting 13 and 19 clean casualties, healed twins fitting, keyboard selection, reset cleanup, and a receipt arriving after reset. It supplements the live CLI run; it does not prove graph queries or process recovery. The Python suite does not require Playwright.
+Expect every check to report `passed: true`. The script loads the real ledger page (no chart library) and replaces only the `/graph` and `/receipt` responses, so it never writes to FalkorDB. Among other things it checks:
+
+- every cell stays visible at 1920 and 960 px, and at 375 px there is no horizontal scroll;
+- the quarantine counter climbs to 6 with the red wave;
+- non-colour markers: `!` on quarantined memories and the flagged source, `+` on healed twins;
+- the receipt highlights four arcs and reads as a sentence;
+- the time-based view paints 13 clean casualties and the per-agent view 19;
+- a cell can be selected from the keyboard;
+- reset clears the receipt, the highlight, twins and markers, and a receipt that arrives after reset is ignored;
+- two advisories, partial unflag, placeholder twins and an empty graph.
+
+It supplements the live CLI run. It does not prove the graph queries or process recovery. The Python suite does not need Playwright.
 
 ## What each claim is tested by
 
-| claim (what the video says) | test | independent of the fixture's tuning? |
+| claim (what the video says) | test | independent of the fixture's tuning |
 |---|---|---|
 | Fixture is well formed; read sets only point backwards in time | `test_fixture_loads_and_is_consistent` | yes (audit queries) |
-| Flagging doc_7 quarantines 6; per-agent wipe would hit 25; time-based 19 | `test_closure_is_precise_and_baselines_are_not` | numbers come from the fixture's `expected:` block |
+| Flagging doc_7 quarantines 6; per-agent wipe would hit 25; time-based 19 | `test_closure_is_precise_and_baselines_are_not` | no: the numbers come from the fixture's `expected:` block |
 | The receipt is a 4-hop shortestPath through the Planner | `test_receipt_is_a_shortest_path_through_the_planner` | yes (path asserted hop by hop) |
 | Clean support counts and rework blockers | `test_support_counts_and_rework_ordering` | partly |
 | Session 2 heals the package fact, then reworks in dependency order, rounds [1, 2, 2, 0] | `test_session2_heals_then_reworks_in_dependency_order` | partly |
@@ -74,25 +103,26 @@ Expect every check to report `passed: true`. This runs the real ledger page (no 
 | A dead process cannot close a task; only the author can claim; a retried rework does not duplicate | `test_zombie_complete_cannot_close_a_task_and_rework_is_idempotent` | yes |
 | Two advisories and unscripted docs do not crash the CLI or page; receipts go to the doc a memory reaches | `test_two_advisories_and_unscripted_docs_do_not_crash_the_cli_or_page` | yes |
 
+All are in `tests/test_quarantine.py` except the two page tests, which are in `tests/test_web.py`.
+
 ## Manual checks (the human part: do these before recording)
 
-1. `uv run python web/server.py`, open http://localhost:8765, then `uv run quarantine session1 --slow 0.4`: chips appear in five columns. `flag doc_7`: red ink spills along the ribbons and six chips turn red one by one, counters read 6 / 25 / 19. Click `a_requirements`: a yellow highlighter path runs back to doc_7. `session2`: green twins appear under their originals.
-2. Projector test: counters readable from 3 m. Quarantined memories have `!` labels; healed twins have `+` labels; flagged documents have `!` labels. Check these cues on the actual recording setup; browser emulation is not a physical projector test.
-3. Reset between takes: `uv run quarantine session1` rebuilds the graph from the fixture. Confirm twins, status markers, selected receipt and yellow highlighter path all clear. A delayed receipt response must not restore the old path.
-4. Say the numbers from the terminal, never from memory.
+1. Run `uv run python web/server.py`, open http://localhost:8765, then run `uv run quarantine session1 --slow 0.4`. Chips appear in five columns. Run `uv run quarantine flag doc_7`: red ink spreads along the ribbons, six chips turn red one by one, and the counters read 6 / 25 / 19. Click `a_requirements`: a yellow highlighter path runs back to doc_7. Run `uv run quarantine session2`: green twins appear under their originals.
+2. Projector test: the counters must be readable from 3 m. Quarantined memories and flagged documents have `!` labels; healed twins have `+` labels. Check these cues on the actual recording setup. Browser emulation is not a physical projector test.
+3. Reset between takes: `uv run quarantine session1` rebuilds the graph from the fixture. Confirm that twins, status markers, the selected receipt and the yellow path all clear. A delayed receipt response must not bring the old path back.
+4. Read the numbers from the terminal, never from memory.
 
 ## Known limits (say them in the README, do not hide them)
 
-- Agents are scripted: outputs are fixture text, read sets are real captured edges. No LLM on the hero path.
-- Read sets are the per-write lists in `fixture.yaml`, not an agent's whole accumulated context. The independent review reported that counting accumulated context would give a closure of 9, not 6. Say "read set of the write", not "everything the agent ever saw".
-- Each memory, its authorship and its read-set edges are written in one statement (`loader._memory`); `s1.complete` marks the end of Session 1, and `flag` refuses a graph without it.
-- The kill-Planner beat is a real `kill -9` of a separate process; the "new Planner" is the CLI process itself in session s2b.
+- Agents are scripted: their outputs are fixture text, and their read sets are real captured edges. No LLM is on the demo path.
+- Read sets are the per-write lists in `fixture.yaml`, not an agent's whole accumulated context. If each step and artifact also counted everything its author read or wrote before, the demo closure would be 9 memories, not 6 (the independent review reported this; `worldgen._make_cumulative` on the fixture gives the same 9). Say "read set of the write", not "everything the agent ever saw".
+- Each memory, its authorship and its read-set edges are written in one statement (`loader._memory`). At the end of Session 1 the `s1` Session node gets `complete = true`, and `flag` refuses a graph without it.
+- The kill-Planner beat is a real `kill -9` of a separate process. The "new Planner" is the CLI process itself, in session `s2b`.
 - Healing is a majority vote over clean episodes, not semantic reasoning.
-- One graph per crew. The closure and receipt are unbounded (the graph is a DAG; a 10-hop cap was removed, see `docs/EVAL-HELDOUT.md`).
-- FalkorDB 6.0.2 limits we hit (see `spikes/day1-results.txt`): no `EXISTS {}`, `shortestPath` only in WITH/RETURN, no `CREATE (n $props)`.
-
+- One graph per crew. The closure and receipt have no hop bound (the graph is a DAG; a 10-hop cap was removed, see `docs/EVAL-HELDOUT.md`).
+- FalkorDB 6.0.2 limits we hit: no `EXISTS {}`, and `shortestPath` only in `WITH` or `RETURN` (both in `spikes/day1-results.txt`); no `CREATE (n $props)` (the server answers "Encountered unhandled type in inlined properties").
 
 ## Ten worlds and ten environments
 
-- `uv run python scripts/ten_worlds.py` (about 40 s): drives the real CLI (`session1`, `flag`, `unflag`, `session2`, `status`) on ten different worlds (the demo, the support crew, six generated crews of different shapes, a wide fan-out, a dissent-heavy world). For every document: the red set must equal the independent oracle, `session2` must reach a fixpoint with every task done and the three audits at 0, `unflag` must return to zero red; pairs of documents must give the oracle's union.
-- `scripts/env_matrix.sh` (about 25 minutes, mostly the mutation check): fresh clones of the committed HEAD in ten environments, three Python versions (3.12, 3.13, 3.14), each with its own throwaway FalkorDB: pytest on all three versions, the ten worlds on all three, the counterfactual and held-out evaluations, the demo path, and the mutation check. Prints one PASS or FAIL line per environment and where its log is.
+- `uv run python scripts/ten_worlds.py` drives the real CLI (`session1`, `flag`, `unflag`, `session2`, `status`) on ten worlds: the demo, the support crew, five generated crews of different shapes, a 25-step chain, a wide fan-out and a dissent-heavy world. For every document, the red set must equal the independent oracle, `session2` must reach a fixpoint with every task done and the three audits at 0, and `unflag` must return to zero red. Pairs of documents must give the oracle's union.
+- `scripts/env_matrix.sh` runs fresh clones of the committed HEAD in ten environments across Python 3.12, 3.13 and 3.14, each with its own throwaway FalkorDB: pytest on all three versions, the ten worlds on all three, the counterfactual evaluation (30 worlds), the held-out evaluation (40 worlds, 10 pipeline worlds), the demo path and the mutation check. It prints one PASS or FAIL line per environment, with the log path for each failure. The mutation check takes most of the time.

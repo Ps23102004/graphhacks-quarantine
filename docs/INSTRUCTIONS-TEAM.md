@@ -1,89 +1,79 @@
-# Instructions & Work Distribution: Team Parth Singh
-**Project: QUARANTINE (Graph Hacks 2026, Track 02: Agent Memory & Coordination)**
-**Updated:** Friday Oct 16, 2026 | **Submission Target:** Sunday Oct 18, 12:00 EDT
+# Instructions and work split: Team Parth Singh
+**Project: QUARANTINE (Graph Hacks 2026, Track 02: Agent Memory and Coordination)**
+**Written:** Friday Oct 16, 2026 | **Submission target:** Sunday Oct 18, 12:00 EDT
+
+**Status Sun 2026-10-18:** Aashna and Aman had not reported back on these tasks. Parth ran a fresh GitHub clone with Claude on Oct 18 (221 tests, ten worlds, compose check, demo path, junk MCP input). The blog draft (`docs/BLOG.md`) and submission text (`docs/SUBMISSION.md`) were written by Parth with Claude. The video is not recorded yet. See `docs/TEAM.md` for the full status.
 
 ---
 
-## 1. What Are We Building & How It Works (For the Whole Team)
+## 1. What we are building and how it works
 
-QUARANTINE is a self-healing shared memory layer for multi-agent systems built directly on FalkorDB.
-When multi-agent crews (`Research`, `Planner`, `Coder`) collaborate across sessions, an ingested prompt injection or bad source contaminates downstream agent work.
+QUARANTINE is a prototype for tracing and repairing shared agent memory in FalkorDB. A crew of agents (`research`, `planner`, `coder`) writes memories across two sessions. If one source turns out to be a prompt injection or otherwise bad, work built on it can carry the damage downstream. When the source is flagged, the graph marks every memory whose recorded reads lead back to it.
 
-### How Our Agents Make Decisions:
-1. **Research Agent (`research`):**
-   - **What it does:** Reads source docs, extracts `Episode` nodes, and consolidates them into `Fact` nodes.
-   - **Decision policy:** Plurality consensus. To heal a quarantined `Fact`, it requires a strict plurality of $\ge 2$ agreeing clean source episodes. If a bad document introduces a fake version or renamed library, but 3 clean episodes say otherwise, Research supersedes the tainted fact with a clean twin (`SUPERSEDES` edge) and leaves orphaned poison nodes quarantined as auditable history.
-2. **Planner Agent (`planner`):**
-   - **What it does:** Generates `PlanStep` nodes in logical sequence.
-   - **Decision policy:** Causal readiness gate. Before claiming rework on a step, it queries FalkorDB for active `BLOCKED_BY` dependencies. If an upstream fact is poisoned and has no clean replacement head, Planner refuses to execute and remains in `blocked` state.
-3. **Coder Agent (`coder`):**
-   - **What it does:** Generates `Artifact` code/config files based on PlanSteps.
-   - **Decision policy:** Causal isolation guard. Coder will fail if an emitted write references an unreplaced tainted memory. It only unblocks when Planner has verified clean dependencies.
+The agents are scripted: their outputs and read sets come from `fixture.yaml`. The graph writes, the closure, the healing, the task blocking and the leases are real. In Session 2 they behave like this:
+
+1. **Research (`research`):**
+   - **Writes:** `Episode` nodes extracted from source documents, consolidated into `Fact` nodes.
+   - **Healing rule:** a quarantined fact is rebuilt only when at least 2 clean episodes agree and their claim has more votes than any other claim (strict plurality). In the demo, 3 clean episodes say `requests` against the poisoned `reqeusts`, so `f_http_client_v2` supersedes `f_http_client` (`SUPERSEDES` edge). The quarantined originals stay in the graph as history.
+2. **Planner (`planner`):**
+   - **Writes:** `PlanStep` nodes.
+   - **Readiness rule:** a rework task waits while it is `BLOCKED_BY` a quarantined memory that has no clean replacement. The planner claims it only when the task is ready.
+3. **Coder (`coder`):**
+   - **Writes:** `Artifact` nodes (files) based on plan steps.
+   - **Write guard:** a replacement write is refused if its read set cites a missing or quarantined memory (`loader.rework`). In the demo the coder's task waits on `step_3` until the planner has written `step_3_v2`.
 
 ---
 
-## 2. Aashna's Work Package (Graph Engineering & Infrastructure)
+## 2. Aashna's work package (testing and infrastructure)
 
-**Primary Goals:** Verify fresh deployment, test Docker compose, and run S13–S16 spikes.
+**Goals:** verify a fresh setup, test Docker Compose, and check the MCP server.
 
-### Concrete Tasks:
-1. **Clone & Clean Run on Your Machine:**
+### Tasks
+1. **Clone and run on your machine:**
    ```bash
-   git clone <repo-url> && cd graphhacks-quarantine
-   docker run -d --name quarantine-falkordb -p 6379:6379 -p 3000:3000 \
+   git clone https://github.com/Ps23102004/graphhacks-quarantine.git && cd graphhacks-quarantine
+   docker run -d --name quarantine-falkordb -p 127.0.0.1:6379:6379 -p 127.0.0.1:3000:3000 \
      falkordb/falkordb:6.0.2@sha256:107455e862a824e45e8e9f5a7fbfdf5e00a08b14e13eae2577c72fd9e3f59ba6
    uv sync --all-extras
-   uv run pytest -q  # must end with 0 failed (the count changes; see docs/TESTING.md)
+   uv run pytest -q  # must end with 0 failed (221 tests at b31ba1e; see docs/TESTING.md)
    ```
-2. **Verify Docker Compose Deployment:**
-   - Test `deploy/docker-compose.yml`:
-     ```bash
-     docker compose -f deploy/docker-compose.yml up -d
-     ```
-     Or run `bash scripts/validate_compose.sh` for automated test with container recreate and persistence check.
-   - Verify `http://localhost:8765` opens and responds with the live web viewer.
-3. **FalkorDB Spike Check (S13 & S15):**
-   - Check index performance on FalkorDB 6.0.2:
-     ```cypher
-     CREATE INDEX FOR (m:Memory) ON (m.id)
-     CREATE INDEX FOR (d:Doc) ON (d.id)
-     ```
-   - Verify that Cypher queries in `quarantine/queries.py` properly use the index without syntax regressions.
-4. **FastMCP Server Verification:**
-   - Run `quarantine/mcp_server.py` and test tool calls (`inspect_quarantined_memories` and `trace_provenance_receipt`) to confirm an external agent can audit Quarantine memory via MCP.
+2. **Verify the Docker Compose setup:**
+   - Run `bash scripts/validate_compose.sh`. It builds the stack on port 8777, checks the page responds, recreates the containers and checks the data survived. Expect `Compose validation complete: ALL PASS`.
+   - Or by hand: `docker compose -f deploy/docker-compose.yml up -d`, then open http://localhost:8765 and check the page loads.
+3. **MCP server check:**
+   - `uv run python scripts/mcp_inspect.py list` starts `quarantine/mcp_server.py` over stdio and lists the six tools.
+   - `uv run python scripts/mcp_inspect.py call inspect_quarantined_memories` and `uv run python scripts/mcp_inspect.py call trace_provenance_receipt '{"memory_id": "a_requirements"}'` show that an external agent can audit the graph through MCP (run the demo `flag doc_7` first).
 
 ---
 
-## 3. Aman's Work Package (Documentation, Compliance & Video Scripting)
+## 3. Aman's work package (documentation, compliance and video script)
 
-**Primary Goals:** Pitch polish, hackathon compliance check, and drafting the side-prize blog post.
+**Goals:** README polish, the rules check, and the blog post.
 
-### Concrete Tasks:
-1. **Hackathon Compliance Review:**
-   - Ensure the repository is ready for public release with MIT `LICENSE`.
-   - Audit code for any leaked API keys, tokens, or local absolute paths.
-   - Confirm terminology: FalkorDB is **source-available (SSPL)**, not "open source".
-2. **Review & Polish `README.md`:**
-   - Ensure the Mermaid schema, the "6 vs 25 vs 19" hook, and the quickstart commands are clear to someone seeing the project for the first time.
-   - Include the AI Disclosure section already added to the README.
-3. **Video Rehearsal (`docs/DEMO-SCRIPT.md`):**
-   - Walk through the script; the video is 3:00 or less.
-   - Ensure the voiceover emphasizes:
-     - *Pain:* "Don't fire the company over one phish; don't wipe 25 memories when only 6 are sick."
-     - *Why a graph:* provenance is edges, and the closure and receipt are one query each; at 25 nodes a recursive SQL query or a Python set does the same work, so the case is the shape of the problem, not speed (README section 6, item 5).
-     - *Stunt:* The real `kill -9` Planner failover demonstrating graph-native lease mechanics.
-4. **Draft the AirPods Side-Prize Blog Post:**
-   - Title: *"We Poisoned Our Agents' Memory On Purpose: Self-Healing Multi-Agent Architecture with FalkorDB"*
-   - Structure:
-     1. Why resetting agents destroys clean work.
-     2. Storing read sets as `INFLUENCED_BY` graph edges.
-     3. Backward traversal reachability and `shortestPath` receipts.
-     4. Plurality healing from clean support.
+### Tasks
+1. **Rules and release check:**
+   - The repo has an MIT `LICENSE` and must be public before submitting.
+   - Search the code for leaked API keys, tokens or local absolute paths.
+   - Terminology: FalkorDB is **source-available (SSPL)**, not "open source".
+2. **Review the `README.md`:**
+   - The Mermaid schema, the 6 vs 25 vs 19 comparison and the quickstart commands should be clear to someone seeing the project for the first time.
+   - Keep the "AI assistance" section.
+3. **Video rehearsal (`docs/DEMO-SCRIPT.md`):**
+   - Walk through the script; the video must be 3:00 or less.
+   - Points the voiceover should make:
+     - *Pain:* "Don't wipe 25 memories when the bad source reached 6."
+     - *Why a graph:* provenance is edges, and the closure and the receipt are one query each. At 25 nodes a recursive SQL query or a Python set does the same work, so the case is the shape of the problem, not speed (README, "Limits to keep in mind").
+     - *Stunt:* a real `kill -9` of the planner process, then another process takes over its expired lease.
+4. **Blog post:** drafted by Parth with Claude in `docs/BLOG.md` ("Forgetting one bad source without wiping the clean work"). It covers:
+   1. Why resetting agents or rolling back destroys clean work.
+   2. Recording each write's reads as edges.
+   3. The receipt: the path from a quarantined memory back to the source.
+   4. Healing facts from clean support, how we tested it, and the limits.
 
 ---
 
-## 4. Parth's Work Package (Recording, Frontend Integration & Final Submission)
+## 4. Parth's work package (recording and submission)
 
-1. Run the live demo recording with screen split: Terminal on the left (`quarantine session1 --slow 0.4`, `flag doc_7`, `session2 --kill-planner`), web UI on the right (`http://localhost:8765`).
-2. Cut video to 3:00 or less, add captions, upload unlisted to YouTube.
-3. Fill and submit the WeMakeDevs project submission form before Sunday 12:00 EDT.
+1. Record the demo with a split screen: terminal on the left (`quarantine session1 --slow 0.4`, `flag doc_7`, `session2 --kill-planner`), the page on the right (http://localhost:8765).
+2. Cut the video to 3:00 or less, add captions, and upload it unlisted to YouTube.
+3. Fill in and submit the WeMakeDevs submission form before Sunday 12:00 EDT.
